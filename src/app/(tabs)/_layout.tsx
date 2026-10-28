@@ -6,46 +6,20 @@ import { moduleColors, useTheme } from '@/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
-interface TabConfig {
-  name: 'index' | 'spiritual' | 'health' | 'english';
+const TABS: {
+  name: string;
   title: string;
   icon: IconName;
   iconActive: IconName;
   accent: string;
-}
-
-const TABS: TabConfig[] = [
-  {
-    name: 'index',
-    title: 'Finance',
-    icon: 'wallet-outline',
-    iconActive: 'wallet',
-    accent: moduleColors.finance,
-  },
-  {
-    name: 'spiritual',
-    title: 'Spiritual',
-    icon: 'moon-outline',
-    iconActive: 'moon',
-    accent: moduleColors.spiritual,
-  },
-  {
-    name: 'health',
-    title: 'Health',
-    icon: 'heart-outline',
-    iconActive: 'heart',
-    accent: moduleColors.health,
-  },
-  {
-    name: 'english',
-    title: 'English',
-    icon: 'book-outline',
-    iconActive: 'book',
-    accent: moduleColors.english,
-  },
+}[] = [
+  { name: 'index', title: 'Finance', icon: 'wallet-outline', iconActive: 'wallet', accent: moduleColors.finance },
+  { name: 'spiritual', title: 'Spiritual', icon: 'moon-outline', iconActive: 'moon', accent: moduleColors.spiritual },
+  { name: 'health', title: 'Health', icon: 'heart-outline', iconActive: 'heart', accent: moduleColors.health },
+  { name: 'english', title: 'English', icon: 'book-outline', iconActive: 'book', accent: moduleColors.english },
 ];
 
-export default function TabsLayout() {
+export default function TabLayout() {
   const { colors } = useTheme();
 
   return (
@@ -57,10 +31,6 @@ export default function TabsLayout() {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
         },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-        },
       }}
     >
       {TABS.map((tab) => (
@@ -70,11 +40,11 @@ export default function TabsLayout() {
           options={{
             title: tab.title,
             tabBarActiveTintColor: tab.accent,
-            tabBarIcon: (props: { focused: boolean; color: string; size: number }) => (
+            tabBarIcon: ({ focused, color, size }) => (
               <Ionicons
-                name={props.focused ? tab.iconActive : tab.icon}
-                size={props.size}
-                color={props.color}
+                name={focused ? tab.iconActive : tab.icon}
+                size={size}
+                color={String(color)}
               />
             ),
           }}

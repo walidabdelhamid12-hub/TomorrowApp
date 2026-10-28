@@ -1,11 +1,11 @@
 import React from 'react';
 import {
-    ActivityIndicator,
-    Pressable,
-    StyleProp,
-    StyleSheet,
-    View,
-    ViewStyle,
+  ActivityIndicator,
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  View,
+  ViewStyle,
 } from 'react-native';
 
 import { useTheme } from '@/theme';
@@ -29,9 +29,7 @@ interface AppButtonProps {
   accessibilityLabel?: string;
 }
 
-/**
- * Themed button with variants, loading state, and press feedback.
- */
+/** Themed button with variants, loading state, and press feedback. */
 export function AppButton({
   title,
   onPress,
@@ -49,7 +47,6 @@ export function AppButton({
   const isDisabled = disabled || loading;
   const base = accentColor ?? colors.primary;
 
-  // Resolve container + text colors for each variant.
   const palette = {
     primary: { bg: base, border: 'transparent', text: colors.onPrimary },
     secondary: { bg: colors.surfaceAlt, border: 'transparent', text: colors.text },
@@ -70,7 +67,7 @@ export function AppButton({
         {
           minHeight: sizes.buttonHeight,
           borderRadius: radius.md,
-          paddingHorizontal: spacing.xl,
+          paddingHorizontal: spacing.md,
           backgroundColor: palette.bg,
           borderColor: palette.border,
           borderWidth: variant === 'outline' ? 1.5 : 0,
@@ -85,8 +82,17 @@ export function AppButton({
         <ActivityIndicator color={palette.text} />
       ) : (
         <View style={styles.content}>
-          {leftIcon ? <View style={{ marginEnd: spacing.sm }}>{leftIcon}</View> : null}
-          <AppText variant="button" color={palette.text}>
+          {leftIcon ? (
+            <View style={{ marginEnd: spacing.sm }}>{leftIcon}</View>
+          ) : null}
+          <AppText
+            variant="button"
+            color={palette.text}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+            style={styles.title}
+          >
             {title}
           </AppText>
         </View>
@@ -104,6 +110,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    maxWidth: '100%',
+  },
+  title: {
+    flexShrink: 1,
   },
   pressed: {
     opacity: 0.85,
