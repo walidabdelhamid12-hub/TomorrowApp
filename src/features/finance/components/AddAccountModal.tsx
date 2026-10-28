@@ -2,21 +2,19 @@ import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
 import {
-    AppButton,
-    AppInput,
-    AppText,
-    ChipOption,
-    ChipSelect,
+  AppButton,
+  AppInput,
+  AppText,
+  ChipOption,
+  ChipSelect,
 } from '@/components/ui';
+import { AmountInput } from '@/features/finance/components/AmountInput';
+import { CurrencyChips } from '@/features/finance/components/CurrencyChips';
 import { FormModal } from '@/features/finance/components/FormModal';
-import {
-    CURRENCIES,
-    getCurrencyLabel,
-} from '@/features/finance/constants/currencies';
+import { getCurrencyLabel } from '@/features/finance/constants/currencies';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
-import { parseAmount } from '@/features/finance/utils/money';
 import { moduleColors } from '@/theme';
 import { upperLatin } from '@/utils/input';
 
@@ -31,14 +29,15 @@ const TYPE_OPTIONS: ChipOption<AccountType>[] = [
 interface AddAccountModalProps {
   visible: boolean;
   onClose: () => void;
-  /** Pass an account to edit it, or null/undefined to create one. */
   account?: Account | null;
+  onSave?: (data: any) => void; // تم إضافتها هنا لتوافق TypeScript
 }
 
 export function AddAccountModal({
   visible,
   onClose,
   account,
+  onSave,
 }: AddAccountModalProps) {
   const baseCurrency = useCurrencyStore((s) => s.baseCurrency);
   const addAccount = useLedgerStore((s) => s.addAccount);
@@ -58,7 +57,7 @@ export function AddAccountModal({
       setName(account.name);
       setType(account.type);
       setCurrencyCode(account.currencyCode);
-      setBalance(String(account.initialBalance));
+      setBalance(account.initialBalance === 0 ? '' : String(account.initialBalance));
     } else {
       setName('');
       setType('cash');
@@ -73,22 +72,29 @@ export function AddAccountModal({
       setError('Enter an account name.');
       return;
     }
-    const initialBalance = balance.trim() === '' ? 0 : parseAmount(balance);
-    if (initialBalance === null) {
+    const initialBalance = balance.trim() === '' ? 0 : Number(balance);
+    if (!Number.isFinite(initialBalance)) {
       setError('Starting balance is not a valid number.');
       return;
     }
 
+    const payload = {
+      name: cleanName,
+      type,
+      currencyCode,
+      initialBalance,
+    };
+
     if (account) {
-      updateAccount(account.id, {
-        name: cleanName,
-        type,
-        currencyCode,
-        initialBalance,
-      });
+      updateAccount(account.id, payload);
     } else {
-      addAccount({ name: cleanName, type, currencyCode, initialBalance });
+      addAccount(payload);
     }
+
+    if (onSave) {
+      onSave(payload);
+    }
+
     onClose();
   };
 
@@ -132,24 +138,19 @@ export function AddAccountModal({
         onChange={setType}
       />
 
-      <ChipSelect<string>
+      <CurrencyChips
         label="CURRENCY"
-        options={CURRENCIES.map((c) => ({
-          value: c.code,
-          label: getCurrencyLabel(c.code),
-          color: moduleColors.finance,
-        }))}
         value={currencyCode}
         onChange={setCurrencyCode}
       />
 
-      <AppInput
+      <AmountInput
         label="Starting balance"
         value={balance}
         onChangeText={setBalance}
-        keyboardType="numbers-and-punctuation"
-        placeholder="0"
         hint="Money already in the account before you start tracking."
+        allowNegative
+        sheetTitle="Starting balance"
         leftElement={
           <AppText color="textSecondary">{getCurrencyLabel(currencyCode)}</AppText>
         }

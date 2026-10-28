@@ -1,0 +1,279 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AddAccountModal } from '../../features/finance/components/AddAccountModal';
+
+export default function FinanceScreen() {
+  const [activeTab, setActiveTab] = useState('Account'); // Account, Asset, Rates
+  const [isAddAccountModalVisible, setIsAddAccountModalVisible] = useState(false);
+
+  return (
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      
+      {/* رأس الصفحة والشهر */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Finance</Text>
+        <TouchableOpacity style={styles.settingsIcon}>
+          <Ionicons name="settings-outline" size={22} color="#555" />
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.monthText}>October 2026</Text>
+
+      {/* كارد المجموع الإجمالي (TOTAL) */}
+      <View style={styles.totalCard}>
+        <Text style={styles.totalLabel}>TOTAL ( 🇪🇬 EGP )</Text>
+        <Text style={styles.totalAmount}>73,958.39 EGP</Text>
+        <Text style={styles.subInfo}>Accounts 1,110.00 · Assets 72,848.39</Text>
+        <Text style={styles.ratesInfo}>Rates (live) · 2026-10-28</Text>
+        
+        <View style={styles.monthlyStatsRow}>
+          <View>
+            <Text style={styles.statLabel}>INCOME THIS MONTH</Text>
+            <Text style={styles.incomeText}>+0.00</Text>
+          </View>
+          <View>
+            <Text style={styles.statLabel}>EXPENSES THIS MONTH</Text>
+            <Text style={styles.expenseText}>-0.00</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* زر إضافة معاملة */}
+      <TouchableOpacity style={styles.addTransactionBtn}>
+        <Text style={styles.addTransactionText}>+ Add transaction</Text>
+      </TouchableOpacity>
+
+      {/* التبويبات الرئيسية (Account, Asset, Rates) */}
+      <View style={styles.tabsRow}>
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 'Account' && styles.activeTabButton]}
+          onPress={() => {
+            setActiveTab('Account');
+            setIsAddAccountModalVisible(true); // فتح مودال إضافة حساب
+          }}
+        >
+          <Text style={[styles.tabText, activeTab === 'Account' && styles.activeTabText]}>Account</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 'Asset' && styles.activeTabButton]}
+          onPress={() => setActiveTab('Asset')}
+        >
+          <Text style={[styles.tabText, activeTab === 'Asset' && styles.activeTabText]}>Asset</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 'Rates' && styles.activeTabButton]}
+          onPress={() => setActiveTab('Rates')}
+        >
+          <Text style={[styles.tabText, activeTab === 'Rates' && styles.activeTabText]}>Rates</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* قسم الحسابات (Accounts) */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Accounts</Text>
+      </View>
+
+      <View style={styles.accountCard}>
+        <View style={styles.accountRow}>
+          <View style={styles.accountLeft}>
+            <View style={styles.greenDot} />
+            <View>
+              <Text style={styles.accountName}>NBE</Text>
+              <Text style={styles.accountType}>bank</Text>
+            </View>
+          </View>
+          <Text style={styles.accountBalance}>110.00 🇪🇬 EGP</Text>
+        </View>
+      </View>
+
+      <View style={styles.accountCard}>
+        <View style={styles.accountRow}>
+          <View style={styles.accountLeft}>
+            <View style={styles.greenDot} />
+            <View>
+              <Text style={styles.accountName}>كاش</Text>
+              <Text style={styles.accountType}>cash</Text>
+            </View>
+          </View>
+          <Text style={styles.accountBalance}>1,000.00 🇪🇬 EGP</Text>
+        </View>
+      </View>
+
+      {/* نافذة إضافة حساب (Modal) */}
+      <AddAccountModal 
+        visible={isAddAccountModalVisible} 
+        onClose={() => setIsAddAccountModalVisible(false)}
+        onSave={(data: { accountName: string; amount: string; selectedType: string; selectedCurrency: string }) => {
+          console.log('Saved Account:', data);
+          setIsAddAccountModalVisible(false);
+        }}
+      />
+
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 16,
+    paddingTop: 40,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#111',
+  },
+  settingsIcon: {
+    padding: 8,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 20,
+  },
+  monthText: {
+    fontSize: 15,
+    color: '#666',
+    marginBottom: 12,
+  },
+  totalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#eee',
+    marginBottom: 14,
+  },
+  totalLabel: {
+    fontSize: 12,
+    color: '#555',
+    fontWeight: '600',
+  },
+  totalAmount: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#059669',
+    marginVertical: 4,
+  },
+  subInfo: {
+    fontSize: 13,
+    color: '#666',
+  },
+  ratesInfo: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 12,
+  },
+  monthlyStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    paddingTop: 10,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: '#777',
+    fontWeight: 'bold',
+  },
+  incomeText: {
+    fontSize: 14,
+    color: '#059669',
+    fontWeight: 'bold',
+  },
+  expenseText: {
+    fontSize: 14,
+    color: '#dc2626',
+    fontWeight: 'bold',
+  },
+  addTransactionBtn: {
+    backgroundColor: '#059669',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  addTransactionText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  tabsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  tabButton: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#059669',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  activeTabButton: {
+    backgroundColor: '#fff',
+  },
+  tabText: {
+    color: '#059669',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  activeTabText: {
+    color: '#059669',
+  },
+  sectionHeader: {
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111',
+  },
+  accountCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  accountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  accountLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  greenDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#059669',
+    marginRight: 12,
+  },
+  accountName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#111',
+  },
+  accountType: {
+    fontSize: 12,
+    color: '#888',
+  },
+  accountBalance: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#111',
+  },
+});

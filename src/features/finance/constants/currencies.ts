@@ -15,7 +15,9 @@ export const CURRENCIES: CurrencyInfo[] = [
   { code: 'USD', name: 'US Dollar', flag: '🇺🇸', decimals: 2 },
   { code: 'EUR', name: 'Euro', flag: '🇪🇺', decimals: 2 },
   { code: 'GBP', name: 'British Pound', flag: '🇬🇧', decimals: 2 },
-  { code: 'JPY', name: 'Japanese Yen', flag: '🇯🇵', decimals: 0 },
+  { code: 'JOD', name: 'Jordanian Dinar', flag: '🇯🇴', decimals: 3 },
+  { code: 'QAR', name: 'Qatari Riyal', flag: '🇶🇦', decimals: 2 },
+  { code: 'KWD', name: 'Kuwaiti Dinar', flag: '🇰🇼', decimals: 3 },
 ];
 
 export const DEFAULT_BASE_CURRENCY = 'EGP';
@@ -32,7 +34,9 @@ export const DEFAULT_RATES_TO_EGP: Record<string, number> = {
   SAR: 13.3,
   AED: 13.6,
   OMR: 130,
-  JPY: 0.33,
+  JOD: 70,
+  QAR: 13.7,
+  KWD: 160,
 };
 
 export function getCurrencyDecimals(code: string): number {

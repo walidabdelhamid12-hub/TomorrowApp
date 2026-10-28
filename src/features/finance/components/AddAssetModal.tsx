@@ -1,236 +1,159 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
-    AppButton,
-    AppInput,
-    AppText,
-    ChipOption,
-    ChipSelect,
-    DateField,
+  AppButton,
+  AppInput,
+  AppText,
+  ChipOption,
+  ChipSelect,
 } from '@/components/ui';
+import { AmountInput } from '@/features/finance/components/AmountInput';
+import { CurrencyChips } from '@/features/finance/components/CurrencyChips';
 import { FormModal } from '@/features/finance/components/FormModal';
 import {
-    CURRENCIES,
-    getCurrencyLabel,
+  CURRENCIES,
+  getCurrencyLabel,
 } from '@/features/finance/constants/currencies';
-import { GOLD_COLORS } from '@/features/finance/constants/metals';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import type {
-    AssetCategory,
-    GoldKarat,
+  AssetCategory,
+  GoldKarat,
+  NewAssetInput,
 } from '@/features/finance/types/finance';
 import { todayISO } from '@/features/finance/utils/finance';
-import { parseAmount } from '@/features/finance/utils/money';
 import { moduleColors } from '@/theme';
-import { isValidISODate } from '@/utils/input';
 
 const KARATS: GoldKarat[] = [24, 22, 21, 18, 14];
-
-type Direction = 'add' | 'withdraw';
+const KARAT_OPTIONS: ChipOption<string>[] = KARATS.map((karat) => ({
+  value: String(karat),
+  label: `${karat}K`,
+}));
 
 interface AddAssetModalProps {
   visible: boolean;
   onClose: () => void;
+  onSave?: (data: any) => void; // تم إضافتها لتتوافق مع استدعاء الشاشة الرئيسية
 }
 
-/** Creates a new asset, or records a dated amount on an existing one. */
-export function AddAssetModal({ visible, onClose }: AddAssetModalProps) {
+/** A foreign-currency default that is never the user's own base currency. */
+const defaultForeign = (base: string): string => (base === 'USD' ? 'EUR' : 'USD');
+
+export function AddAssetModal({ visible, onClose, onSave }: AddAssetModalProps) {
   const baseCurrency = useCurrencyStore((s) => s.baseCurrency);
-  const assets = useFinanceStore((s) => s.assets);
   const addAsset = useFinanceStore((s) => s.addAsset);
   const addAssetEntry = useFinanceStore((s) => s.addAssetEntry);
 
-  const foreignCurrencies = useMemo(
-    () => CURRENCIES.filter((c) => c.code !== baseCurrency),
-    [baseCurrency]
-  );
-
-  const kindOptions: ChipOption<AssetCategory>[] = [
-    {
-      value: 'local_currency',
-      label: `Local ${getCurrencyLabel(baseCurrency)}`,
-    },
-    { value: 'foreign_currency', label: 'Foreign currency' },
-    { value: 'gold', label: 'Gold', color: GOLD_COLORS.main },
-  ];
-
-  const [target, setTarget] = useState('new');
   const [name, setName] = useState('');
-  const [kind, setKind] = useState<AssetCategory>('local_currency');
-  const [currencyCode, setCurrencyCode] = useState('USD');
-  const [karat, setKarat] = useState<GoldKarat>(21);
-  const [direction, setDirection] = useState<Direction>('add');
+  const [category, setCategory] = useState<AssetCategory>('local_currency');
+  const [foreignCode, setForeignCode] = useState(defaultForeign(baseCurrency));
+  const [karat, setKarat] = useState('24');
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(todayISO());
   const [error, setError] = useState<string | undefined>();
 
   useEffect(() => {
     if (!visible) return;
-    setError(undefined);
-    setTarget('new');
     setName('');
-    setKind('local_currency');
-    setCurrencyCode(
-      foreignCurrencies.find((c) => c.code === 'USD')?.code ??
-        foreignCurrencies[0]?.code ??
-        'USD'
-    );
-    setKarat(21);
-    setDirection('add');
+    setCategory('local_currency');
+    setForeignCode(defaultForeign(baseCurrency));
+    setKarat('24');
     setAmount('');
-    setDate(todayISO());
-  }, [visible, foreignCurrencies]);
+    setError(undefined);
+  }, [visible, baseCurrency]);
 
-  const existing = assets.find((a) => a.id === target);
-  const isNew = !existing;
+  const categoryOptions: ChipOption<AssetCategory>[] = [
+    { value: 'local_currency', label: `Local · ${baseCurrency}` },
+    { value: 'foreign_currency', label: 'Foreign currency' },
+    { value: 'gold', label: 'Gold' },
+  ];
 
-  const unit = existing
-    ? existing.category === 'gold'
-      ? 'g'
-      : existing.currencyCode
-    : kind === 'gold'
-      ? 'g'
-      : kind === 'local_currency'
-        ? baseCurrency
-        : currencyCode;
-  const unitLabel = unit === 'g' ? 'g' : getCurrencyLabel(unit);
-
-  const isGoldTarget = existing ? existing.category === 'gold' : kind === 'gold';
-  const tint = isGoldTarget ? GOLD_COLORS.main : moduleColors.finance;
+  const isGold = category === 'gold';
+  const unitLabel = isGold
+    ? 'g'
+    : getCurrencyLabel(category === 'local_currency' ? baseCurrency : foreignCode);
 
   const submit = () => {
-    const value = parseAmount(amount);
-    if (value === null || value <= 0) {
-      setError('Enter an amount greater than zero.');
-      return;
-    }
-    if (!isValidISODate(date)) {
-      setError('Date must be a real date in the format YYYY-MM-DD.');
-      return;
-    }
-
-    if (existing) {
-      const id = addAssetEntry(existing.id, {
-        date,
-        amount: direction === 'withdraw' ? -value : value,
-      });
-      if (id === null) {
-        setError('Could not record the amount.');
-        return;
-      }
-      onClose();
-      return;
-    }
-
-    if (!name.trim()) {
+    const cleanName = name.trim();
+    if (!cleanName) {
       setError('Enter an asset name.');
       return;
     }
+    const quantity = amount.trim() === '' ? 0 : Number(amount);
+    if (!Number.isFinite(quantity) || quantity < 0) {
+      setError('Amount is not a valid number.');
+      return;
+    }
 
-    let assetId: string;
-    if (kind === 'gold') {
-      assetId = addAsset({ name: name.trim(), category: 'gold', karat });
-    } else if (kind === 'local_currency') {
-      assetId = addAsset({
-        name: name.trim(),
-        category: 'local_currency',
-        currencyCode: baseCurrency,
-      });
+    let input: NewAssetInput;
+    if (category === 'gold') {
+      input = { category: 'gold', name: cleanName, karat: Number(karat) as GoldKarat };
     } else {
-      assetId = addAsset({
-        name: name.trim(),
-        category: 'foreign_currency',
-        currencyCode,
+      input = {
+        category,
+        name: cleanName,
+        currencyCode: category === 'local_currency' ? baseCurrency : foreignCode,
+      };
+    }
+
+    const id = addAsset(input);
+    // The opening amount is saved as the asset's first dated entry.
+    if (quantity > 0) {
+      addAssetEntry(id, {
+        date: todayISO(),
+        amount: quantity,
+        note: 'Opening balance',
       });
     }
-    addAssetEntry(assetId, { date, amount: value });
+
+    if (onSave) {
+      onSave({ input, quantity });
+    }
+
     onClose();
   };
 
   return (
-    <FormModal visible={visible} title="Assets" onClose={onClose}>
-      <ChipSelect<string>
-        label="ADD TO"
-        options={[
-          { value: 'new', label: '+ New asset', color: moduleColors.finance },
-          ...assets.map((a) => ({
-            value: a.id,
-            label: a.name,
-            color: a.category === 'gold' ? GOLD_COLORS.main : moduleColors.finance,
-          })),
-        ]}
-        value={existing ? existing.id : 'new'}
-        onChange={setTarget}
+    <FormModal visible={visible} title="Add asset" onClose={onClose}>
+      <AppInput
+        label="Asset name"
+        value={name}
+        onChangeText={setName}
+        placeholder="e.g. Dollar savings, Gold ring"
       />
 
-      {isNew ? (
-        <>
-          <AppInput
-            label="Asset name"
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Dollar savings, Gold bars"
-          />
+      <ChipSelect<AssetCategory>
+        label="TYPE"
+        options={categoryOptions}
+        value={category}
+        onChange={setCategory}
+      />
 
-          <ChipSelect<AssetCategory>
-            label="TYPE"
-            options={kindOptions}
-            value={kind}
-            onChange={setKind}
-          />
-
-          {kind === 'foreign_currency' ? (
-            <ChipSelect<string>
-              label="CURRENCY"
-              options={foreignCurrencies.map((c) => ({
-                value: c.code,
-                label: getCurrencyLabel(c.code),
-                color: moduleColors.finance,
-              }))}
-              value={currencyCode}
-              onChange={setCurrencyCode}
-            />
-          ) : null}
-
-          {kind === 'gold' ? (
-            <ChipSelect<string>
-              label="KARAT"
-              options={KARATS.map((k) => ({
-                value: String(k),
-                label: `${k}K`,
-                color: GOLD_COLORS.main,
-              }))}
-              value={String(karat)}
-              onChange={(v) => {
-                const found = KARATS.find((k) => String(k) === v);
-                if (found) setKarat(found);
-              }}
-            />
-          ) : null}
-        </>
-      ) : (
-        <ChipSelect<Direction>
-          label="ACTION"
-          options={[
-            { value: 'add', label: 'Add', color: tint },
-            { value: 'withdraw', label: 'Withdraw', color: '#DC2626' },
-          ]}
-          value={direction}
-          onChange={setDirection}
+      {category === 'foreign_currency' ? (
+        <CurrencyChips
+          label="CURRENCY"
+          value={foreignCode}
+          onChange={setForeignCode}
+          options={CURRENCIES.filter((c) => c.code !== baseCurrency)}
         />
-      )}
+      ) : null}
 
-      <AppInput
-        label={unit === 'g' ? 'Weight (grams)' : 'Amount'}
+      {isGold ? (
+        <ChipSelect<string>
+          label="KARAT"
+          options={KARAT_OPTIONS}
+          value={karat}
+          onChange={setKarat}
+        />
+      ) : null}
+
+      <AmountInput
+        label={isGold ? 'Weight (grams)' : 'Amount'}
         value={amount}
         onChangeText={setAmount}
-        keyboardType="decimal-pad"
-        placeholder="0"
+        hint="Optional. Saved as the opening balance; you can add more entries later."
+        sheetTitle={isGold ? 'Weight in grams' : 'Amount'}
         leftElement={<AppText color="textSecondary">{unitLabel}</AppText>}
       />
-
-      <DateField value={date} onChange={setDate} />
 
       {error ? (
         <AppText variant="caption" color="danger">
@@ -239,8 +162,8 @@ export function AddAssetModal({ visible, onClose }: AddAssetModalProps) {
       ) : null}
 
       <AppButton
-        title={isNew ? 'Create asset' : 'Save'}
-        accentColor={tint}
+        title="Create asset"
+        accentColor={moduleColors.finance}
         onPress={submit}
       />
     </FormModal>
