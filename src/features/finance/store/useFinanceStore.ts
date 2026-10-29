@@ -1,41 +1,43 @@
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type {
-    Asset,
-    AssetEntry,
-    AssetEntryPatch,
-    AssetPatch,
-    Cheque,
-    ChequePatch,
-    ChequeStatus,
-    CurrencyCode,
-    Debt,
-    DebtPatch,
-    DebtPayment,
-    DebtPaymentPatch,
-    EntityId,
-    FinanceData,
-    ISODate,
-    Loan,
-    LoanPatch,
-    LoanPayment,
-    LoanPaymentPatch,
-    NewAssetEntryInput,
-    NewAssetInput,
-    NewChequeInput,
-    NewDebtInput,
-    NewDebtPaymentInput,
-    NewLoanInput,
-    NewLoanPaymentInput,
+  Asset,
+  AssetEntry,
+  AssetEntryPatch,
+  AssetPatch,
+  Cheque,
+  ChequePatch,
+  ChequeStatus,
+  CurrencyCode,
+  Debt,
+  DebtPatch,
+  DebtPayment,
+  DebtPaymentPatch,
+  EntityId,
+  FinanceData,
+  ISODate,
+  Loan,
+  LoanPatch,
+  LoanPayment,
+  LoanPaymentPatch,
+  NewAssetEntryInput,
+  NewAssetInput,
+  NewChequeInput,
+  NewDebtInput,
+  NewDebtPaymentInput,
+  NewLoanInput,
+  NewLoanPaymentInput,
 } from '@/features/finance/types/finance';
+
 import {
-    definedOnly,
-    generateId,
-    roundMoney,
-    todayISO,
+  definedOnly,
+  generateId,
+  roundMoney,
+  todayISO,
 } from '@/features/finance/utils/finance';
 
 /* -------------------------------------------------------------------------- */
@@ -45,45 +47,66 @@ import {
 interface FinanceActions {
   setBaseCurrency: (code: CurrencyCode) => void;
 
-  // Assets
   addAsset: (input: NewAssetInput) => EntityId;
   updateAsset: (id: EntityId, patch: AssetPatch) => void;
   deleteAsset: (id: EntityId) => void;
-  addAssetEntry: (assetId: EntityId, input: NewAssetEntryInput) => EntityId | null;
-  updateAssetEntry: (assetId: EntityId, entryId: EntityId, patch: AssetEntryPatch) => void;
+  addAssetEntry: (
+    assetId: EntityId,
+    input: NewAssetEntryInput
+  ) => EntityId | null;
+  updateAssetEntry: (
+    assetId: EntityId,
+    entryId: EntityId,
+    patch: AssetEntryPatch
+  ) => void;
   deleteAssetEntry: (assetId: EntityId, entryId: EntityId) => void;
 
-  // Debts (receivable / payable)
   addDebt: (input: NewDebtInput) => EntityId;
   updateDebt: (id: EntityId, patch: DebtPatch) => void;
   deleteDebt: (id: EntityId) => void;
-  addDebtPayment: (debtId: EntityId, input: NewDebtPaymentInput) => EntityId | null;
-  updateDebtPayment: (debtId: EntityId, paymentId: EntityId, patch: DebtPaymentPatch) => void;
+  addDebtPayment: (
+    debtId: EntityId,
+    input: NewDebtPaymentInput
+  ) => EntityId | null;
+  updateDebtPayment: (
+    debtId: EntityId,
+    paymentId: EntityId,
+    patch: DebtPaymentPatch
+  ) => void;
   deleteDebtPayment: (debtId: EntityId, paymentId: EntityId) => void;
 
-  // Loans
   addLoan: (input: NewLoanInput) => EntityId;
   updateLoan: (id: EntityId, patch: LoanPatch) => void;
   deleteLoan: (id: EntityId) => void;
-  addLoanPayment: (loanId: EntityId, input: NewLoanPaymentInput) => EntityId | null;
-  updateLoanPayment: (loanId: EntityId, paymentId: EntityId, patch: LoanPaymentPatch) => void;
+  addLoanPayment: (
+    loanId: EntityId,
+    input: NewLoanPaymentInput
+  ) => EntityId | null;
+  updateLoanPayment: (
+    loanId: EntityId,
+    paymentId: EntityId,
+    patch: LoanPaymentPatch
+  ) => void;
   deleteLoanPayment: (loanId: EntityId, paymentId: EntityId) => void;
 
-  // Cheques
   addCheque: (input: NewChequeInput) => EntityId;
   updateCheque: (id: EntityId, patch: ChequePatch) => void;
   deleteCheque: (id: EntityId) => void;
-  /** Sets the status; paidDate is set (or defaulted to today) only for 'paid'. */
-  setChequeStatus: (id: EntityId, status: ChequeStatus, paidDate?: ISODate) => void;
+  setChequeStatus: (
+    id: EntityId,
+    status: ChequeStatus,
+    paidDate?: ISODate
+  ) => void;
 
-  /** Wipes all finance data (keeps nothing). */
   resetFinanceData: () => void;
 }
 
 export type FinanceStore = FinanceData & FinanceActions;
 
+const STORAGE_VERSION = 2;
+
 const initialData: FinanceData = {
-  baseCurrency: 'OMR',
+  baseCurrency: 'USD',
   assets: [],
   debts: [],
   loans: [],
@@ -96,7 +119,58 @@ const initialData: FinanceData = {
 
 const now = (): string => new Date().toISOString();
 
-/** Applies `fn` to the item with `id` and bumps its updatedAt. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+/**
+ * Preserve existing arrays during migration while rejecting entries that
+ * cannot even represent a record with an ID. Detailed entity validation
+ * remains the responsibility of the finance domain types and operations.
+ */
+function normalizeRecords<T>(
+  value: unknown
+): T[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (item): item is T =>
+      isRecord(item) &&
+      typeof item.id === 'string' &&
+      item.id.length > 0
+  );
+}
+
+/**
+ * Migrate persisted data without resetting valid finance records.
+ * Zustand merges the migrated data with the current store, preserving actions.
+ */
+function migrateFinanceData(
+  persistedState: unknown
+): FinanceData {
+  const saved = isRecord(persistedState) ? persistedState : {};
+
+  const baseCurrency =
+    typeof saved.baseCurrency === 'string' &&
+    saved.baseCurrency.trim().length > 0
+      ? saved.baseCurrency.trim().toUpperCase()
+      : initialData.baseCurrency;
+
+  return {
+    baseCurrency: baseCurrency as CurrencyCode,
+    assets: normalizeRecords<Asset>(saved.assets),
+    debts: normalizeRecords<Debt>(saved.debts),
+    loans: normalizeRecords<Loan>(saved.loans),
+    cheques: normalizeRecords<Cheque>(saved.cheques),
+  };
+}
+
 function patchParent<T extends { id: EntityId; updatedAt: string }>(
   list: T[],
   id: EntityId,
@@ -107,29 +181,51 @@ function patchParent<T extends { id: EntityId; updatedAt: string }>(
   );
 }
 
-/** Rounds the money fields that are present in a partial object. */
-function withRounded<T extends object>(obj: T, fields: (keyof T)[]): T {
+function withRounded<T extends object>(
+  obj: T,
+  fields: (keyof T)[]
+): T {
   const next = { ...obj };
+
   fields.forEach((field) => {
     const value = next[field];
+
     if (typeof value === 'number') {
       (next as Record<keyof T, unknown>)[field] = roundMoney(value);
     }
   });
+
   return next;
 }
 
-/** Category-aware patch: ignores fields that don't apply to the asset type. */
+/**
+ * Applies only the fields that belong to the asset's category.
+ * Silver assets have no currencyCode or karat.
+ */
 function applyAssetPatch(asset: Asset, patch: AssetPatch): Asset {
   const next: Asset = { ...asset };
-  if (patch.name !== undefined) next.name = patch.name;
-  if (patch.notes !== undefined) next.notes = patch.notes;
 
-  if (next.category === 'gold') {
-    if (patch.karat !== undefined) next.karat = patch.karat;
-  } else if (patch.currencyCode !== undefined) {
-    next.currencyCode = patch.currencyCode;
+  if (patch.name !== undefined) {
+    next.name = patch.name;
   }
+
+  if (patch.notes !== undefined) {
+    next.notes = patch.notes;
+  }
+
+  if (
+    next.category === 'local_currency' ||
+    next.category === 'foreign_currency'
+  ) {
+    if (patch.currencyCode !== undefined) {
+      next.currencyCode = patch.currencyCode;
+    }
+  } else if (next.category === 'gold') {
+    if (patch.karat !== undefined) {
+      next.karat = patch.karat;
+    }
+  }
+
   return next;
 }
 
@@ -144,70 +240,86 @@ export const useFinanceStore = create<FinanceStore>()(
 
       setBaseCurrency: (code) => set({ baseCurrency: code }),
 
-      /* ------------------------------- Assets ------------------------------ */
-
+      /* Assets */
       addAsset: (input) => {
         const timestamp = now();
-        const asset = {
+
+        const asset: Asset = {
           ...input,
           id: generateId('ast'),
           entries: [],
           createdAt: timestamp,
           updatedAt: timestamp,
         } as Asset;
-        set((s) => ({ assets: [asset, ...s.assets] }));
+
+        set((state) => ({
+          assets: [asset, ...state.assets],
+        }));
+
         return asset.id;
       },
 
       updateAsset: (id, patch) =>
-        set((s) => ({
-          assets: patchParent(s.assets, id, (a) => applyAssetPatch(a, patch)),
+        set((state) => ({
+          assets: patchParent(state.assets, id, (asset) =>
+            applyAssetPatch(asset, patch)
+          ),
         })),
 
       deleteAsset: (id) =>
-        set((s) => ({ assets: s.assets.filter((a) => a.id !== id) })),
+        set((state) => ({
+          assets: state.assets.filter((asset) => asset.id !== id),
+        })),
 
       addAssetEntry: (assetId, input) => {
-        if (!get().assets.some((a) => a.id === assetId)) return null;
+        if (!get().assets.some((asset) => asset.id === assetId)) {
+          return null;
+        }
+
         const entry: AssetEntry = {
           ...input,
           amount: roundMoney(input.amount),
           id: generateId('ent'),
           createdAt: now(),
         };
-        set((s) => ({
-          assets: patchParent(s.assets, assetId, (a) => ({
-            ...a,
-            entries: [...a.entries, entry],
+
+        set((state) => ({
+          assets: patchParent(state.assets, assetId, (asset) => ({
+            ...asset,
+            entries: [...asset.entries, entry],
           })),
         }));
+
         return entry.id;
       },
 
       updateAssetEntry: (assetId, entryId, patch) =>
-        set((s) => ({
-          assets: patchParent(s.assets, assetId, (a) => ({
-            ...a,
-            entries: a.entries.map((e) =>
-              e.id === entryId
-                ? { ...e, ...withRounded(definedOnly(patch), ['amount']) }
-                : e
+        set((state) => ({
+          assets: patchParent(state.assets, assetId, (asset) => ({
+            ...asset,
+            entries: asset.entries.map((entry) =>
+              entry.id === entryId
+                ? {
+                    ...entry,
+                    ...withRounded(definedOnly(patch), ['amount']),
+                  }
+                : entry
             ),
           })),
         })),
 
       deleteAssetEntry: (assetId, entryId) =>
-        set((s) => ({
-          assets: patchParent(s.assets, assetId, (a) => ({
-            ...a,
-            entries: a.entries.filter((e) => e.id !== entryId),
+        set((state) => ({
+          assets: patchParent(state.assets, assetId, (asset) => ({
+            ...asset,
+            entries: asset.entries.filter((entry) => entry.id !== entryId),
           })),
         })),
 
-      /* -------------------------------- Debts ------------------------------ */
-
+      /* Debts */
       addDebt: (input) => {
         const timestamp = now();
+
         const debt: Debt = {
           ...input,
           amount: roundMoney(input.amount),
@@ -216,61 +328,77 @@ export const useFinanceStore = create<FinanceStore>()(
           createdAt: timestamp,
           updatedAt: timestamp,
         };
-        set((s) => ({ debts: [debt, ...s.debts] }));
+
+        set((state) => ({
+          debts: [debt, ...state.debts],
+        }));
+
         return debt.id;
       },
 
       updateDebt: (id, patch) =>
-        set((s) => ({
-          debts: patchParent(s.debts, id, (d) => ({
-            ...d,
+        set((state) => ({
+          debts: patchParent(state.debts, id, (debt) => ({
+            ...debt,
             ...withRounded(definedOnly(patch), ['amount']),
           })),
         })),
 
       deleteDebt: (id) =>
-        set((s) => ({ debts: s.debts.filter((d) => d.id !== id) })),
+        set((state) => ({
+          debts: state.debts.filter((debt) => debt.id !== id),
+        })),
 
       addDebtPayment: (debtId, input) => {
-        if (!get().debts.some((d) => d.id === debtId)) return null;
+        if (!get().debts.some((debt) => debt.id === debtId)) {
+          return null;
+        }
+
         const payment: DebtPayment = {
           ...input,
           amount: roundMoney(input.amount),
           id: generateId('dpy'),
         };
-        set((s) => ({
-          debts: patchParent(s.debts, debtId, (d) => ({
-            ...d,
-            payments: [...d.payments, payment],
+
+        set((state) => ({
+          debts: patchParent(state.debts, debtId, (debt) => ({
+            ...debt,
+            payments: [...debt.payments, payment],
           })),
         }));
+
         return payment.id;
       },
 
       updateDebtPayment: (debtId, paymentId, patch) =>
-        set((s) => ({
-          debts: patchParent(s.debts, debtId, (d) => ({
-            ...d,
-            payments: d.payments.map((p) =>
-              p.id === paymentId
-                ? { ...p, ...withRounded(definedOnly(patch), ['amount']) }
-                : p
+        set((state) => ({
+          debts: patchParent(state.debts, debtId, (debt) => ({
+            ...debt,
+            payments: debt.payments.map((payment) =>
+              payment.id === paymentId
+                ? {
+                    ...payment,
+                    ...withRounded(definedOnly(patch), ['amount']),
+                  }
+                : payment
             ),
           })),
         })),
 
       deleteDebtPayment: (debtId, paymentId) =>
-        set((s) => ({
-          debts: patchParent(s.debts, debtId, (d) => ({
-            ...d,
-            payments: d.payments.filter((p) => p.id !== paymentId),
+        set((state) => ({
+          debts: patchParent(state.debts, debtId, (debt) => ({
+            ...debt,
+            payments: debt.payments.filter(
+              (payment) => payment.id !== paymentId
+            ),
           })),
         })),
 
-      /* -------------------------------- Loans ------------------------------ */
-
+      /* Loans */
       addLoan: (input) => {
         const timestamp = now();
+
         const loan: Loan = {
           ...input,
           monthlyInstallment: roundMoney(input.monthlyInstallment),
@@ -279,62 +407,78 @@ export const useFinanceStore = create<FinanceStore>()(
           createdAt: timestamp,
           updatedAt: timestamp,
         };
-        set((s) => ({ loans: [loan, ...s.loans] }));
+
+        set((state) => ({
+          loans: [loan, ...state.loans],
+        }));
+
         return loan.id;
       },
 
       updateLoan: (id, patch) =>
-        set((s) => ({
-          loans: patchParent(s.loans, id, (l) => ({
-            ...l,
+        set((state) => ({
+          loans: patchParent(state.loans, id, (loan) => ({
+            ...loan,
             ...withRounded(definedOnly(patch), ['monthlyInstallment']),
           })),
         })),
 
       deleteLoan: (id) =>
-        set((s) => ({ loans: s.loans.filter((l) => l.id !== id) })),
+        set((state) => ({
+          loans: state.loans.filter((loan) => loan.id !== id),
+        })),
 
       addLoanPayment: (loanId, input) => {
-        if (!get().loans.some((l) => l.id === loanId)) return null;
+        if (!get().loans.some((loan) => loan.id === loanId)) {
+          return null;
+        }
+
         const payment: LoanPayment = {
           ...input,
           amount: roundMoney(input.amount),
           id: generateId('lpy'),
         };
-        set((s) => ({
-          loans: patchParent(s.loans, loanId, (l) => ({
-            ...l,
-            payments: [...l.payments, payment],
+
+        set((state) => ({
+          loans: patchParent(state.loans, loanId, (loan) => ({
+            ...loan,
+            payments: [...loan.payments, payment],
           })),
         }));
+
         return payment.id;
       },
 
       updateLoanPayment: (loanId, paymentId, patch) =>
-        set((s) => ({
-          loans: patchParent(s.loans, loanId, (l) => ({
-            ...l,
-            payments: l.payments.map((p) =>
-              p.id === paymentId
-                ? { ...p, ...withRounded(definedOnly(patch), ['amount']) }
-                : p
+        set((state) => ({
+          loans: patchParent(state.loans, loanId, (loan) => ({
+            ...loan,
+            payments: loan.payments.map((payment) =>
+              payment.id === paymentId
+                ? {
+                    ...payment,
+                    ...withRounded(definedOnly(patch), ['amount']),
+                  }
+                : payment
             ),
           })),
         })),
 
       deleteLoanPayment: (loanId, paymentId) =>
-        set((s) => ({
-          loans: patchParent(s.loans, loanId, (l) => ({
-            ...l,
-            payments: l.payments.filter((p) => p.id !== paymentId),
+        set((state) => ({
+          loans: patchParent(state.loans, loanId, (loan) => ({
+            ...loan,
+            payments: loan.payments.filter(
+              (payment) => payment.id !== paymentId
+            ),
           })),
         })),
 
-      /* ------------------------------- Cheques ----------------------------- */
-
+      /* Cheques */
       addCheque: (input) => {
         const timestamp = now();
         const status = input.status ?? 'pending';
+
         const cheque: Cheque = {
           ...input,
           amount: roundMoney(input.amount),
@@ -344,39 +488,45 @@ export const useFinanceStore = create<FinanceStore>()(
           createdAt: timestamp,
           updatedAt: timestamp,
         };
-        set((s) => ({ cheques: [cheque, ...s.cheques] }));
+
+        set((state) => ({
+          cheques: [cheque, ...state.cheques],
+        }));
+
         return cheque.id;
       },
 
       updateCheque: (id, patch) =>
-        set((s) => ({
-          cheques: patchParent(s.cheques, id, (c) => ({
-            ...c,
+        set((state) => ({
+          cheques: patchParent(state.cheques, id, (cheque) => ({
+            ...cheque,
             ...withRounded(definedOnly(patch), ['amount']),
           })),
         })),
 
       deleteCheque: (id) =>
-        set((s) => ({ cheques: s.cheques.filter((c) => c.id !== id) })),
+        set((state) => ({
+          cheques: state.cheques.filter((cheque) => cheque.id !== id),
+        })),
 
       setChequeStatus: (id, status, paidDate) =>
-        set((s) => ({
-          cheques: patchParent(s.cheques, id, (c) => ({
-            ...c,
+        set((state) => ({
+          cheques: patchParent(state.cheques, id, (cheque) => ({
+            ...cheque,
             status,
-            paidDate: status === 'paid' ? (paidDate ?? todayISO()) : undefined,
+            paidDate:
+              status === 'paid' ? paidDate ?? todayISO() : undefined,
           })),
         })),
 
-      /* -------------------------------- Reset ------------------------------ */
-
+      /* Reset */
       resetFinanceData: () => set({ ...initialData }),
     }),
     {
       name: 'tomorrow:finance',
-      version: 1,
+      version: STORAGE_VERSION,
       storage: createJSONStorage(() => AsyncStorage),
-      // Persist data only, never the action functions.
+
       partialize: (state): FinanceData => ({
         baseCurrency: state.baseCurrency,
         assets: state.assets,
@@ -384,10 +534,22 @@ export const useFinanceStore = create<FinanceStore>()(
         loans: state.loans,
         cheques: state.cheques,
       }),
-      // Bump `version` and handle old shapes here when the schema changes.
-      migrate: (persistedState) => persistedState as FinanceData,
+
+      migrate: (persistedState, _persistedVersion): FinanceData =>
+        migrateFinanceData(persistedState),
+
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...migrateFinanceData(persistedState),
+      }),
+
       onRehydrateStorage: () => (_state, error) => {
-        if (error) console.warn('[finance] failed to restore saved data', error);
+        if (error) {
+          console.warn(
+            '[finance] Failed to restore saved finance data:',
+            error
+          );
+        }
       },
     }
   )
@@ -397,10 +559,6 @@ export const useFinanceStore = create<FinanceStore>()(
 /* Hydration hook                                                             */
 /* -------------------------------------------------------------------------- */
 
-/**
- * AsyncStorage is async, so the store starts empty and fills in a moment later.
- * Use this to show a loader (or avoid an empty-state flash) until data is ready.
- */
 export function useFinanceHydrated(): boolean {
   const [hydrated, setHydrated] = useState(() =>
     useFinanceStore.persist.hasHydrated()
@@ -410,7 +568,9 @@ export function useFinanceHydrated(): boolean {
     const unsubscribe = useFinanceStore.persist.onFinishHydration(() =>
       setHydrated(true)
     );
+
     setHydrated(useFinanceStore.persist.hasHydrated());
+
     return unsubscribe;
   }, []);
 

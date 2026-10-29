@@ -1,94 +1,432 @@
+
+import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
+import type {
+  AssetCategory,
+  GoldKarat,
+} from '@/features/finance/types/finance';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+
+export type AddAssetFormData = {
+  assetName: string;
+  amount: string;
+  selectedType: AssetCategory;
+  selectedCurrency: string;
+  karat: GoldKarat;
+};
 
 interface AddAssetModalProps {
   visible: boolean;
   onClose: () => void;
-  onSave: (data: any) => void;
+  onSave: (data: AddAssetFormData) => void;
 }
 
-export const AddAssetModal: React.FC<AddAssetModalProps> = ({ visible, onClose, onSave }) => {
+const ASSET_TYPE_OPTIONS: {
+  value: AssetCategory;
+  label: string;
+  subtitle: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  color: string;
+  background: string;
+}[] = [
+  {
+    value: 'local_currency',
+    label: 'Local currency',
+    subtitle: 'Base currency',
+    icon: 'cash-outline',
+    color: '#059669',
+    background: '#D1FAE5',
+  },
+  {
+    value: 'foreign_currency',
+    label: 'Foreign currency',
+    subtitle: 'USD, OMR, EUR...',
+    icon: 'globe-outline',
+    color: '#2563EB',
+    background: '#DBEAFE',
+  },
+  {
+    value: 'gold',
+    label: 'Gold',
+    subtitle: 'Weight in grams',
+    icon: 'diamond-outline',
+    color: '#D97706',
+    background: '#FEF3C7',
+  },
+  {
+    value: 'silver',
+    label: 'Silver',
+    subtitle: 'Weight in grams',
+    icon: 'layers-outline',
+    color: '#64748B',
+    background: '#E2E8F0',
+  },
+];
+
+const CURRENCY_OPTIONS = [
+  { code: 'OMR', flag: '🇴🇲', symbol: 'ر.ع.' },
+  { code: 'SAR', flag: '🇸🇦', symbol: 'ر.س' },
+  { code: 'AED', flag: '🇦🇪', symbol: 'د.إ' },
+  { code: 'USD', flag: '🇺🇸', symbol: '$' },
+  { code: 'EUR', flag: '🇪🇺', symbol: '€' },
+  { code: 'GBP', flag: '🇬🇧', symbol: '£' },
+  { code: 'JOD', flag: '🇯🇴', symbol: 'د.أ' },
+  { code: 'QAR', flag: '🇶🇦', symbol: 'ر.ق' },
+  { code: 'KWD', flag: '🇰🇼', symbol: 'د.ك' },
+];
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  EGP: 'E£',
+  OMR: 'ر.ع.',
+  SAR: 'ر.س',
+  AED: 'د.إ',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JOD: 'د.أ',
+  QAR: 'ر.ق',
+  KWD: 'د.ك',
+};
+
+export const AddAssetModal: React.FC<AddAssetModalProps> = ({
+  visible,
+  onClose,
+  onSave,
+}) => {
+  const baseCurrency = useCurrencyStore(
+    (state) => state.baseCurrency,
+  );
+
   const [assetName, setAssetName] = useState('');
   const [amount, setAmount] = useState('0');
-  const [selectedType, setSelectedType] = useState('Local');
-  const [selectedCurrency, setSelectedCurrency] = useState('EGP');
+  const [selectedType, setSelectedType] =
+    useState<AssetCategory>('local_currency');
+  const [selectedCurrency, setSelectedCurrency] =
+    useState(baseCurrency);
+  const [karat, setKarat] = useState<GoldKarat>(24);
+
+  useEffect(() => {
+    if (!visible) return;
+
+    setAssetName('');
+    setAmount('0');
+    setSelectedType('local_currency');
+    setSelectedCurrency(baseCurrency);
+    setKarat(24);
+  }, [visible, baseCurrency]);
+
+  // Keep the local asset currency synchronized with the app's base currency.
+  useEffect(() => {
+    if (selectedType === 'local_currency') {
+      setSelectedCurrency(baseCurrency);
+    }
+  }, [baseCurrency, selectedType]);
+
+  const selectedCurrencyOption = CURRENCY_OPTIONS.find(
+    (currency) => currency.code === selectedCurrency,
+  );
+
+  const handleSelectType = (type: AssetCategory) => {
+    setSelectedType(type);
+
+    if (type === 'local_currency') {
+      setSelectedCurrency(baseCurrency);
+    } else if (
+      type === 'foreign_currency' &&
+      (selectedCurrency === baseCurrency ||
+        selectedCurrency === 'EGP')
+    ) {
+      setSelectedCurrency('USD');
+    }
+  };
+
+  const handleSave = () => {
+    const parsedAmount = Number(amount);
+
+    if (!assetName.trim()) {
+      Alert.alert(
+        'Asset name required',
+        'Enter a name for this asset.',
+      );
+      return;
+    }
+
+    if (
+      !amount.trim() ||
+      !Number.isFinite(parsedAmount) ||
+      parsedAmount < 0
+    ) {
+      Alert.alert(
+        'Invalid amount',
+        'Enter a valid non-negative amount.',
+      );
+      return;
+    }
+
+    onSave({
+      assetName: assetName.trim(),
+      amount,
+      selectedType,
+      selectedCurrency:
+        selectedType === 'local_currency'
+          ? baseCurrency
+          : selectedCurrency,
+      karat,
+    });
+  };
+
+  const isMetal =
+    selectedType === 'gold' || selectedType === 'silver';
+
+  const amountSymbol = isMetal
+    ? 'g'
+    : selectedType === 'local_currency'
+      ? CURRENCY_SYMBOLS[baseCurrency] ?? baseCurrency
+      : selectedCurrencyOption?.symbol ?? selectedCurrency;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          
           <View style={styles.headerRow}>
             <Text style={styles.modalTitle}>Assets</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#333" />
+
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeButton}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <Ionicons name="close" size={22} color="#333" />
             </TouchableOpacity>
           </View>
 
-          <ScrollView 
+          <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             <Text style={styles.label}>ADD TO</Text>
+
             <View style={styles.addToRow}>
-              <TouchableOpacity style={styles.addToChipActive}>
-                <Text style={styles.addToTextActive}>+ New asset</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.addToChip}>
-                <Text style={styles.addToText}>NBE</Text>
-              </TouchableOpacity>
+              <View style={styles.addToChipActive}>
+                <Text style={styles.addToTextActive}>
+                  + New asset
+                </Text>
+              </View>
             </View>
 
-            <Text style={styles.label}>Asset name</Text>
+            <Text style={styles.label}>ASSET NAME</Text>
+
             <TextInput
               style={styles.input}
-              placeholder="e.g. Dollar savings, Silver bars"
+              placeholder="e.g. Dollar savings, Gold bars"
               placeholderTextColor="#999"
               value={assetName}
               onChangeText={setAssetName}
             />
 
-            <Text style={styles.label}>TYPE</Text>
-            <View style={styles.typesRow}>
-              {['Local 🇪🇬 EGP', 'Foreign currency', 'Gold', 'Silver'].map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[styles.typeChip, selectedType === type && styles.typeChipActive]}
-                  onPress={() => setSelectedType(type)}
-                >
-                  <Text style={[styles.typeText, selectedType === type && styles.typeTextActive]}>
-                    {type}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <Text style={styles.label}>ASSET TYPE</Text>
+
+            <View style={styles.assetTypesGrid}>
+              {ASSET_TYPE_OPTIONS.map((type) => {
+                const active = selectedType === type.value;
+
+                return (
+                  <TouchableOpacity
+                    key={type.value}
+                    style={[
+                      styles.assetTypeCard,
+                      active && {
+                        borderColor: type.color,
+                        backgroundColor: type.background,
+                      },
+                    ]}
+                    onPress={() => handleSelectType(type.value)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <View
+                      style={[
+                        styles.assetIconCircle,
+                        { backgroundColor: type.background },
+                      ]}
+                    >
+                      <Ionicons
+                        name={type.icon}
+                        size={21}
+                        color={type.color}
+                      />
+                    </View>
+
+                    <Text
+                      style={[
+                        styles.assetTypeTitle,
+                        active && { color: type.color },
+                      ]}
+                    >
+                      {type.label}
+                    </Text>
+
+                    <Text style={styles.assetTypeSubtitle}>
+                      {type.value === 'local_currency'
+                        ? baseCurrency
+                        : type.subtitle}
+                    </Text>
+
+                    {active && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={15}
+                        color={type.color}
+                        style={styles.selectedCheck}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
-            <Text style={styles.label}>Amount</Text>
+            {selectedType === 'foreign_currency' && (
+              <>
+                <Text style={styles.label}>CURRENCY</Text>
+
+                <View style={styles.currenciesGrid}>
+                  {CURRENCY_OPTIONS.map((currency) => {
+                    const active =
+                      selectedCurrency === currency.code;
+
+                    return (
+                      <TouchableOpacity
+                        key={currency.code}
+                        style={[
+                          styles.currencyCard,
+                          active && styles.currencyCardActive,
+                        ]}
+                        onPress={() =>
+                          setSelectedCurrency(currency.code)
+                        }
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                      >
+                        <Text style={styles.currencyFlag}>
+                          {currency.flag}
+                        </Text>
+
+                        <Text
+                          style={[
+                            styles.currencyCode,
+                            active && styles.currencyCodeActive,
+                          ]}
+                        >
+                          {currency.code}
+                        </Text>
+
+                        <Text
+                          style={[
+                            styles.currencySymbol,
+                            active && styles.currencySymbolActive,
+                          ]}
+                        >
+                          {currency.symbol}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
+            {selectedType === 'gold' && (
+              <>
+                <Text style={styles.label}>GOLD KARAT</Text>
+
+                <View style={styles.karatRow}>
+                  {([24, 22, 21, 18, 14] as GoldKarat[]).map(
+                    (value) => {
+                      const active = karat === value;
+
+                      return (
+                        <TouchableOpacity
+                          key={value}
+                          style={[
+                            styles.karatChip,
+                            active && styles.karatChipActive,
+                          ]}
+                          onPress={() => setKarat(value)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                        >
+                          <Text
+                            style={[
+                              styles.karatText,
+                              active && styles.karatTextActive,
+                            ]}
+                          >
+                            {value}K
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    },
+                  )}
+                </View>
+
+                <Text style={styles.helperText}>
+                  For gold, enter the weight in grams.
+                </Text>
+              </>
+            )}
+
+            {selectedType === 'silver' && (
+              <Text style={styles.helperText}>
+                For silver, enter the weight in grams.
+              </Text>
+            )}
+
+            <Text style={styles.label}>AMOUNT</Text>
+
             <View style={styles.balanceContainer}>
               <View style={styles.balanceInputRow}>
-                <Text style={styles.currencyLabelSymbol}>{selectedCurrency}</Text>
+                <Text style={styles.currencyLabelSymbol}>
+                  {amountSymbol}
+                </Text>
+
                 <TextInput
                   style={styles.balanceInput}
-                  keyboardType="numeric"
+                  keyboardType="decimal-pad"
                   value={amount}
                   onChangeText={setAmount}
+                  placeholder="0"
+                  placeholderTextColor="#999"
                 />
               </View>
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.saveButton}
-              onPress={() => {
-                onSave({ assetName, amount, selectedType, selectedCurrency });
-                onClose();
-              }}
+              onPress={handleSave}
+              accessibilityRole="button"
             >
-              <Text style={styles.saveButtonText}>Create asset</Text>
+              <Text style={styles.saveButtonText}>
+                Create asset
+              </Text>
             </TouchableOpacity>
-
           </ScrollView>
-
         </View>
       </View>
     </Modal>
@@ -103,20 +441,20 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '85%',
-    paddingTop: 16,
-    paddingHorizontal: 16,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    maxHeight: '82%',
+    paddingTop: 14,
+    paddingHorizontal: 14,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: 'bold',
     color: '#111',
   },
@@ -124,80 +462,165 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   scrollContent: {
-    paddingBottom: 30,
+    paddingBottom: 24,
   },
   label: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#666',
-    marginTop: 12,
-    marginBottom: 6,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+    marginTop: 13,
+    marginBottom: 7,
     letterSpacing: 0.5,
   },
   addToRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  addToChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    gap: 6,
   },
   addToChipActive: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 15,
     backgroundColor: '#059669',
   },
-  addToText: {
-    fontSize: 14,
-    color: '#333',
-  },
   addToTextActive: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#fff',
     fontWeight: '600',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
+    borderColor: '#e5e7eb',
+    borderRadius: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
     backgroundColor: '#fafafa',
     color: '#111',
   },
-  typesRow: {
-    flexDirection: `row`,
+  assetTypesGrid: {
+    flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  typeChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    marginBottom: 6,
+  assetTypeCard: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    minHeight: 94,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    backgroundColor: '#fafafa',
+    gap: 4,
   },
-  typeChipActive: {
-    backgroundColor: '#4338ca',
+  assetIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 1,
   },
-  typeText: {
+  assetTypeTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+    textAlign: 'center',
+  },
+  assetTypeSubtitle: {
+    fontSize: 10,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+  selectedCheck: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+  },
+  currenciesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 7,
+    columnGap: 5,
+  },
+  currencyCard: {
+    width: '18.5%',
+    minHeight: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    paddingVertical: 6,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fafafa',
+    gap: 2,
+  },
+  currencyCardActive: {
+    borderColor: '#059669',
+    backgroundColor: '#ecfdf5',
+  },
+  currencyFlag: {
     fontSize: 14,
-    color: '#333',
   },
-  typeTextActive: {
-    color: '#fff',
+  currencyCode: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  currencyCodeActive: {
+    color: '#047857',
+  },
+  currencySymbol: {
+    fontSize: 9,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+  currencySymbolActive: {
+    color: '#047857',
+  },
+  karatRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  karatChip: {
+    minWidth: 40,
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f8fafc',
+  },
+  karatChipActive: {
+    borderColor: '#b45309',
+    backgroundColor: '#fef3c7',
+  },
+  karatText: {
+    fontSize: 12,
+    color: '#475569',
     fontWeight: '600',
+  },
+  karatTextActive: {
+    color: '#92400e',
+  },
+  helperText: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 6,
   },
   balanceContainer: {
     borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 12,
+    borderColor: '#e5e7eb',
+    borderRadius: 11,
     backgroundColor: '#fafafa',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
   },
   balanceInputRow: {
@@ -205,27 +628,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   currencyLabelSymbol: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#111',
-    marginRight: 10,
+    marginRight: 9,
   },
   balanceInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     color: '#111',
     padding: 0,
   },
   saveButton: {
     backgroundColor: '#059669',
-    borderRadius: 14,
-    paddingVertical: 14,
+    borderRadius: 12,
+    paddingVertical: 12,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 16,
   },
   saveButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
   },
 });

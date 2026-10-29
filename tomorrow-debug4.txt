@@ -1,0 +1,39 @@
+﻿TomorrowApp debug report - 2026-10-29T20:42:32
+
+===== 1) package.json (name + versions) =====
+name: tomorrowapp
+expo: ~58.0.21
+expo-router: ~58.0.28
+react-native: 0.88.0
+react: 19.3.0
+zustand: ^5.0.16
+typescript: ~6.0.3
+@react-native-async-storage/async-storage: 2.2.0
+
+===== 2) المسارات الحقيقية =====
+src/app/(tabs)/index.tsx -> موجود
+TotalCard -> src\features\finance\components\TotalCard.tsx
+AccountsSection -> src\features\finance\components\AccountsSection.tsx
+TransactionsSection -> src\features\finance\components\TransactionsSection.tsx
+useFinanceSummary -> src\features\finance\hooks\useFinanceSummary.ts
+useLedgerStore -> src\features\finance\store\useLedgerStore.ts
+useFinanceStore -> src\features\finance\store\useFinanceStore.ts
+useCurrencyStore -> src\features\finance\store\useCurrencyStore.ts
+AddAccountModal -> src\features\finance\components\AddAccountModal.tsx
+AddAssetModal -> src\features\finance\components\AddAssetModal.tsx
+AddTransactionModal -> src\features\finance\components\AddTransactionModal.tsx
+AssetRow -> src\features\finance\components\AssetRow.tsx
+RatesModal -> src\features\finance\components\RatesModal.tsx
+FormModal -> src\features\finance\components\FormModal.tsx
+valuation -> src\features\finance\utils\valuation.ts
+money -> src\features\finance\utils\money.ts
+finance -> src\features\finance\types\finance.ts
+finance -> src\features\finance\utils\finance.ts
+ledger -> src\features\finance\types\ledger.ts
+ledger -> src\features\finance\utils\ledger.ts
+liveRates -> src\services\liveRates.ts
+useAutoRefreshRates -> src\features\finance\hooks\useAutoRefreshRates.ts
+FinanceHomeScreen -> NOT FOUND
+FinanceModals -> src\features\finance\components\FinanceModals.tsx
+
+===== 3) أماكن الاستخدام =====

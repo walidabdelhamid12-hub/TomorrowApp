@@ -1,3 +1,4 @@
+
 import { RATE_ANCHOR } from '@/features/finance/constants/currencies';
 import type { Asset } from '@/features/finance/types/finance';
 import { getAssetBalance, roundMoney } from '@/features/finance/utils/finance';
@@ -10,25 +11,59 @@ export function getGoldValueEGP(
   karat: number,
   gold24PerGram: number | null
 ): number | null {
-  if (gold24PerGram === null || gold24PerGram <= 0) return null;
+  if (gold24PerGram === null || gold24PerGram <= 0) {
+    return null;
+  }
+
   return roundMoney(grams * (karat / 24) * gold24PerGram);
 }
 
-/** Value of an asset in the base currency, or null when a rate/price is missing. */
+/** Silver value in EGP from grams and the silver price per gram. */
+export function getSilverValueEGP(
+  grams: number,
+  silverPerGram: number | null
+): number | null {
+  if (silverPerGram === null || silverPerGram <= 0) {
+    return null;
+  }
+
+  return roundMoney(grams * silverPerGram);
+}
+
+/** Convert an asset's value to the selected base currency. */
 export function getAssetValueInBase(
   asset: Asset,
   baseCurrency: string,
   rates: RateMap,
-  gold24PerGram: number | null
+  gold24PerGram: number | null,
+  silverPerGram: number | null = null
 ): number | null {
   const balance = getAssetBalance(asset);
 
   if (asset.category === 'gold') {
-    const egp = getGoldValueEGP(balance, asset.karat, gold24PerGram);
+    const egp = getGoldValueEGP(
+      balance,
+      asset.karat,
+      gold24PerGram
+    );
+
     return egp === null
       ? null
       : convertAmount(egp, RATE_ANCHOR, baseCurrency, rates);
   }
 
-  return convertAmount(balance, asset.currencyCode, baseCurrency, rates);
+  if (asset.category === 'silver') {
+    const egp = getSilverValueEGP(balance, silverPerGram);
+
+    return egp === null
+      ? null
+      : convertAmount(egp, RATE_ANCHOR, baseCurrency, rates);
+  }
+
+  return convertAmount(
+    balance,
+    asset.currencyCode,
+    baseCurrency,
+    rates
+  );
 }

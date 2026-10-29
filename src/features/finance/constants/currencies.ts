@@ -1,3 +1,4 @@
+
 export interface CurrencyInfo {
   code: string;
   name: string;
@@ -22,10 +23,14 @@ export const CURRENCIES: CurrencyInfo[] = [
 
 export const DEFAULT_BASE_CURRENCY = 'EGP';
 
-/** All rates are stored as "value of 1 unit in EGP". EGP itself is always 1. */
+/** All exchange rates are stored as the value of 1 unit in EGP. */
 export const RATE_ANCHOR = 'EGP';
 
-/** PLACEHOLDER rates, not market data. Replaced by live rates or your edits. */
+/**
+ * Placeholder rates for development only.
+ * These are NOT live market rates.
+ * Replace them with verified live rates or user-entered rates.
+ */
 export const DEFAULT_RATES_TO_EGP: Record<string, number> = {
   EGP: 1,
   USD: 50,
@@ -39,16 +44,34 @@ export const DEFAULT_RATES_TO_EGP: Record<string, number> = {
   KWD: 160,
 };
 
+/** Returns true if the currency code exists in the supported list. */
+export function isSupportedCurrency(code: string): boolean {
+  const normalizedCode = code.trim().toUpperCase();
+  return CURRENCIES.some((currency) => currency.code === normalizedCode);
+}
+
 export function getCurrencyDecimals(code: string): number {
-  return CURRENCIES.find((c) => c.code === code)?.decimals ?? 2;
+  const normalizedCode = code.trim().toUpperCase();
+
+  return (
+    CURRENCIES.find((currency) => currency.code === normalizedCode)
+      ?.decimals ?? 2
+  );
 }
 
 export function getCurrencyFlag(code: string): string {
-  return CURRENCIES.find((c) => c.code === code)?.flag ?? '';
+  const normalizedCode = code.trim().toUpperCase();
+
+  return (
+    CURRENCIES.find((currency) => currency.code === normalizedCode)?.flag ??
+    ''
+  );
 }
 
-/** "🇪🇬 EGP" (just the code when there is no flag). */
+/** Returns a display label such as "🇪🇬 EGP". */
 export function getCurrencyLabel(code: string): string {
-  const flag = getCurrencyFlag(code);
-  return flag ? `${flag} ${code}` : code;
+  const normalizedCode = code.trim().toUpperCase();
+  const flag = getCurrencyFlag(normalizedCode);
+
+  return flag ? `${flag} ${normalizedCode}` : normalizedCode;
 }

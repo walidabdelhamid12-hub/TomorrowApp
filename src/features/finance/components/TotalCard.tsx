@@ -1,6 +1,17 @@
-import { StyleSheet, View } from 'react-native';
+
+import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { AppText, Card } from '@/components/ui';
+import { CURRENCIES } from '@/features/finance/constants/currencies';
+import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { useTheme } from '@/theme';
 
@@ -9,7 +20,6 @@ interface TotalCardProps {
   total: number;
   accountsTotal: number;
   assetsTotal: number;
-  /** Items that couldn't be converted (a count or a list, depending on the summary hook). */
   missing?: unknown;
   income: number;
   expense: number;
@@ -46,8 +56,21 @@ export function TotalCard({
   income,
   expense,
 }: TotalCardProps) {
-  const { spacing } = useTheme();
+  const { spacing, colors } = useTheme();
+
+  const setBaseCurrency = useCurrencyStore(
+    (state) => state.setBaseCurrency
+  );
+
+  const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
   const missingCount = countOf(missing);
+
+  const selectedCurrency = CURRENCIES.find(
+    (currency) => currency.code === baseCurrency
+  );
+
+  const currencyFlag = selectedCurrency?.flag ?? '🌐';
+
   const money = (n: number) => `${formatAmount(n)} ${baseCurrency}`;
 
   return (
@@ -56,9 +79,31 @@ export function TotalCard({
         <AppText variant="caption" color="textSecondary">
           TOTAL BALANCE
         </AppText>
-        <AppText variant="h1" style={{ marginTop: spacing.xs }}>
-          {money(total)}
-        </AppText>
+
+        <View style={[styles.balanceRow, { marginTop: spacing.xs }]}>
+          <View style={styles.balanceAmount}>
+            <AppText variant="h1">{formatAmount(total)}</AppText>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Base currency ${baseCurrency}. Change currency`}
+            accessibilityHint="Opens the base currency list"
+            style={[
+              styles.currencyButton,
+              { borderColor: colors.border },
+            ]}
+            onPress={() => setCurrencyPickerOpen(true)}
+          >
+            <AppText style={styles.currencyFlag}>{currencyFlag}</AppText>
+            <AppText style={styles.currencyCode}>{baseCurrency}</AppText>
+            <Ionicons
+              name="chevron-down"
+              size={16}
+              color={colors.text}
+            />
+          </Pressable>
+        </View>
 
         <View style={[styles.row, { marginTop: spacing.md }]}>
           <Stat label="Accounts" value={money(accountsTotal)} />
@@ -80,6 +125,76 @@ export function TotalCard({
           </AppText>
         ) : null}
       </Card>
+
+      <Modal
+        visible={currencyPickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCurrencyPickerOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.currencyModal}>
+            <View style={styles.modalHeader}>
+              <AppText variant="h3">Choose base currency</AppText>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close currency picker"
+                onPress={() => setCurrencyPickerOpen(false)}
+                hitSlop={10}
+              >
+                <Ionicons name="close" size={24} color="#333333" />
+              </Pressable>
+            </View>
+
+            <AppText
+              color="textSecondary"
+              style={styles.modalDescription}
+            >
+              Totals will be displayed in the selected currency.
+            </AppText>
+
+            <ScrollView style={styles.currencyList}>
+              {CURRENCIES.map((currency) => {
+                const selected = currency.code === baseCurrency;
+
+                return (
+                  <Pressable
+                    key={currency.code}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    style={[
+                      styles.currencyOption,
+                      selected && styles.selectedCurrencyOption,
+                    ]}
+                    onPress={() => {
+                      setBaseCurrency(currency.code);
+                      setCurrencyPickerOpen(false);
+                    }}
+                  >
+                    <View style={styles.currencyOptionInfo}>
+                      <AppText style={styles.optionFlag}>
+                        {currency.flag}
+                      </AppText>
+                      <AppText>
+                        {currency.name} ({currency.code})
+                      </AppText>
+                    </View>
+
+                    {selected && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={21}
+                        color={colors.primary}
+                      />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -88,4 +203,76 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row' },
   stat: { flex: 1 },
   statValue: { fontWeight: '600', marginTop: 2 },
+  balanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  balanceAmount: {
+    flex: 1,
+  },
+  currencyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  currencyFlag: {
+    fontSize: 18,
+  },
+  currencyCode: {
+    fontWeight: '700',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  currencyModal: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    maxHeight: '75%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalDescription: {
+    marginBottom: 12,
+  },
+  currencyList: {
+    flexGrow: 0,
+  },
+  currencyOption: {
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#DDDDDD',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  currencyOptionInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  optionFlag: {
+    fontSize: 18,
+  },
+  selectedCurrencyOption: {
+    backgroundColor: '#F0F5FF',
+    borderRadius: 8,
+  },
 });
