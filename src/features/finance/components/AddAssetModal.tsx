@@ -1,44 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface AddAssetModalProps {
   visible: boolean;
   onClose: () => void;
-  onSave: (data: { assetName: string; amount: string; selectedType: string; selectedCurrency: string }) => void;
+  onSave: (data: any) => void;
 }
 
 export const AddAssetModal: React.FC<AddAssetModalProps> = ({ visible, onClose, onSave }) => {
-  const [assetName, setAssetName] = useState<string>('');
-  const [amount, setAmount] = useState<string>('0');
-  const [selectedType, setSelectedType] = useState<string>('Local');
-  const [selectedCurrency, setSelectedCurrency] = useState<string>('EGP');
-
-  // حالة لإظهار لوحة الأرقام فقط عند الضغط على خانة المبلغ
-  const [isCalculatorVisible, setIsCalculatorVisible] = useState<boolean>(false);
-
-  const handleNumPress = (num: string) => {
-    if (amount === '0') {
-      setAmount(num);
-    } else {
-      setAmount(amount + num);
-    }
-  };
-
-  const handleDelete = () => {
-    if (amount.length > 1) {
-      setAmount(amount.slice(0, -1));
-    } else {
-      setAmount('0');
-    }
-  };
+  const [assetName, setAssetName] = useState('');
+  const [amount, setAmount] = useState('0');
+  const [selectedType, setSelectedType] = useState('Local');
+  const [selectedCurrency, setSelectedCurrency] = useState('EGP');
 
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+      <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           
-          {/* رأس النافذة */}
           <View style={styles.headerRow}>
             <Text style={styles.modalTitle}>Assets</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -46,45 +26,36 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ visible, onClose, 
             </TouchableOpacity>
           </View>
 
-          {/* محتوى النموذج */}
           <ScrollView 
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
           >
-            {/* إضافة إلى */}
             <Text style={styles.label}>ADD TO</Text>
             <View style={styles.addToRow}>
-              <TouchableOpacity style={styles.addToChipActive} onPress={() => setIsCalculatorVisible(false)}>
+              <TouchableOpacity style={styles.addToChipActive}>
                 <Text style={styles.addToTextActive}>+ New asset</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.addToChip} onPress={() => setIsCalculatorVisible(false)}>
+              <TouchableOpacity style={styles.addToChip}>
                 <Text style={styles.addToText}>NBE</Text>
               </TouchableOpacity>
             </View>
 
-            {/* اسم الأصل */}
             <Text style={styles.label}>Asset name</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g. Dollar savings, Gold ring"
+              placeholder="e.g. Dollar savings, Silver bars"
               placeholderTextColor="#999"
               value={assetName}
               onChangeText={setAssetName}
-              onFocus={() => setIsCalculatorVisible(false)} // إخفاء لوحة الأرقام عند الكتابة في الاسم
             />
 
-            {/* نوع الأصل */}
             <Text style={styles.label}>TYPE</Text>
             <View style={styles.typesRow}>
               {['Local 🇪🇬 EGP', 'Foreign currency', 'Gold', 'Silver'].map((type) => (
                 <TouchableOpacity
                   key={type}
                   style={[styles.typeChip, selectedType === type && styles.typeChipActive]}
-                  onPress={() => {
-                    setSelectedType(type);
-                    setIsCalculatorVisible(false);
-                  }}
+                  onPress={() => setSelectedType(type)}
                 >
                   <Text style={[styles.typeText, selectedType === type && styles.typeTextActive]}>
                     {type}
@@ -93,18 +64,19 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ visible, onClose, 
               ))}
             </View>
 
-            {/* حقل المبلغ - تظهر لوحة الأرقام عند الضغط عليه فقط */}
             <Text style={styles.label}>Amount</Text>
-            <TouchableOpacity 
-              style={[styles.balanceContainer, isCalculatorVisible && styles.balanceContainerActive]}
-              activeOpacity={0.8}
-              onPress={() => setIsCalculatorVisible(true)}
-            >
-              <Text style={styles.currencySymbolText}>{selectedCurrency} {amount}</Text>
-            </TouchableOpacity>
-            <Text style={styles.helperText}>Optional. Saved as the opening balance.</Text>
+            <View style={styles.balanceContainer}>
+              <View style={styles.balanceInputRow}>
+                <Text style={styles.currencyLabelSymbol}>{selectedCurrency}</Text>
+                <TextInput
+                  style={styles.balanceInput}
+                  keyboardType="numeric"
+                  value={amount}
+                  onChangeText={setAmount}
+                />
+              </View>
+            </View>
 
-            {/* زر الحفظ */}
             <TouchableOpacity 
               style={styles.saveButton}
               onPress={() => {
@@ -114,51 +86,11 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ visible, onClose, 
             >
               <Text style={styles.saveButtonText}>Create asset</Text>
             </TouchableOpacity>
+
           </ScrollView>
 
-          {/* لوحة المفاتيح المخصصة للأرقام تظهر فقط عند النقر على حقل المبلغ */}
-          {isCalculatorVisible && (
-            <View style={styles.calculatorContainer}>
-              <View style={styles.calcHeaderRow}>
-                <Text style={styles.calcTitle}>Enter Amount</Text>
-                <TouchableOpacity onPress={() => setIsCalculatorVisible(false)}>
-                  <Text style={styles.doneButtonText}>Done ✓</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.calcRow}>
-                {['1', '2', '3', '4'].map((n) => (
-                  <TouchableOpacity key={n} style={styles.calcButton} onPress={() => handleNumPress(n)}>
-                    <Text style={styles.calcButtonText}>{n}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={styles.calcRow}>
-                {['5', '6', '7', '8'].map((n) => (
-                  <TouchableOpacity key={n} style={styles.calcButton} onPress={() => handleNumPress(n)}>
-                    <Text style={styles.calcButtonText}>{n}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={styles.calcRow}>
-                <TouchableOpacity style={styles.calcButton} onPress={() => handleNumPress('9')}>
-                  <Text style={styles.calcButtonText}>9</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.calcButton} onPress={() => handleNumPress('0')}>
-                  <Text style={styles.calcButtonText}>0</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.calcButton} onPress={() => handleNumPress('.')}>
-                  <Text style={styles.calcButtonText}>.</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.calcButtonDelete} onPress={handleDelete}>
-                  <Ionicons name="backspace-outline" size={22} color="#333" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 };
@@ -173,7 +105,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '90%',
+    maxHeight: '85%',
     paddingTop: 16,
     paddingHorizontal: 16,
   },
@@ -181,7 +113,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   modalTitle: {
     fontSize: 20,
@@ -192,14 +124,14 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 30,
   },
   label: {
     fontSize: 12,
     fontWeight: '600',
     color: '#666',
-    marginTop: 10,
-    marginBottom: 4,
+    marginTop: 12,
+    marginBottom: 6,
     letterSpacing: 0.5,
   },
   addToRow: {
@@ -232,28 +164,28 @@ const styles = StyleSheet.create({
     borderColor: '#eee',
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     fontSize: 16,
     backgroundColor: '#fafafa',
     color: '#111',
   },
   typesRow: {
-    flexDirection: 'row',
+    flexDirection: `row`,
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
   },
   typeChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: '#f0f0f0',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   typeChipActive: {
     backgroundColor: '#4338ca',
   },
   typeText: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#333',
   },
   typeTextActive: {
@@ -262,88 +194,34 @@ const styles = StyleSheet.create({
   },
   balanceContainer: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#eee',
     borderRadius: 12,
     backgroundColor: '#fafafa',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
-  balanceContainerActive: {
-    borderColor: '#059669',
-    backgroundColor: '#f0fdf4',
+  balanceInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  currencySymbolText: {
+  currencyLabelSymbol: {
     fontSize: 16,
     fontWeight: '600',
     color: '#111',
+    marginRight: 10,
   },
-  helperText: {
-    fontSize: 11,
-    color: '#888',
-    marginTop: 2,
-    marginBottom: 4,
-  },
-  calculatorContainer: {
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    paddingVertical: 10,
-    backgroundColor: '#fff',
-    paddingBottom: 15,
-  },
-  calcHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  calcTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
-  },
-  doneButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#059669',
-  },
-  calcRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  calcButton: {
+  balanceInput: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    paddingVertical: 10,
-    marginHorizontal: 3,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-  },
-  calcButtonDelete: {
-    flex: 1,
-    backgroundColor: '#e2e8f0',
-    paddingVertical: 10,
-    marginHorizontal: 3,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calcButtonText: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#1f2937',
+    color: '#111',
+    padding: 0,
   },
   saveButton: {
     backgroundColor: '#059669',
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 10,
+    marginTop: 20,
   },
   saveButtonText: {
     color: '#fff',

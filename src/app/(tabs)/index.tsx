@@ -36,6 +36,7 @@ export default function FinanceRoute() {
   const summary = useFinanceSummary();
   const assets = useFinanceStore((s) => s.assets);
   const deleteAsset = useFinanceStore((s) => s.deleteAsset);
+  const addAsset = useFinanceStore((s) => s.addAsset);
 
   const [txOpen, setTxOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -174,7 +175,7 @@ export default function FinanceRoute() {
       <AddAccountModal
         visible={accountOpen}
         onClose={() => setAccountOpen(false)}
-        onSave={(data) => {
+        onSave={(data: any) => {
           setAccountOpen(false);
         }}
       />
@@ -182,7 +183,13 @@ export default function FinanceRoute() {
       <AddAssetModal 
         visible={assetOpen} 
         onClose={() => setAssetOpen(false)} 
-        onSave={(data) => {
+        onSave={(data: any) => {
+          addAsset({
+            name: data.assetName,
+            balance: Number(data.amount) || 0,
+            type: data.selectedType,
+            currency: data.selectedCurrency || 'OMR',
+          } as any);
           setAssetOpen(false);
         }}
       />
