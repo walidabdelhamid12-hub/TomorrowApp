@@ -173,13 +173,18 @@ export default function FinanceRoute() {
 
       <AddAccountModal
         visible={accountOpen}
-        account={editingAccount}
         onClose={() => setAccountOpen(false)}
+        onSave={(data) => {
+          setAccountOpen(false);
+        }}
       />
 
       <AddAssetModal 
         visible={assetOpen} 
         onClose={() => setAssetOpen(false)} 
+        onSave={(data) => {
+          setAssetOpen(false);
+        }}
       />
 
       <RatesModal visible={ratesOpen} onClose={() => setRatesOpen(false)} />

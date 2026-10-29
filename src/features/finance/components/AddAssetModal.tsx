@@ -1,171 +1,353 @@
-import { useEffect, useState } from 'react';
-
-import {
-  AppButton,
-  AppInput,
-  AppText,
-  ChipOption,
-  ChipSelect,
-} from '@/components/ui';
-import { AmountInput } from '@/features/finance/components/AmountInput';
-import { CurrencyChips } from '@/features/finance/components/CurrencyChips';
-import { FormModal } from '@/features/finance/components/FormModal';
-import {
-  CURRENCIES,
-  getCurrencyLabel,
-} from '@/features/finance/constants/currencies';
-import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
-import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
-import type {
-  AssetCategory,
-  GoldKarat,
-  NewAssetInput,
-} from '@/features/finance/types/finance';
-import { todayISO } from '@/features/finance/utils/finance';
-import { moduleColors } from '@/theme';
-
-const KARATS: GoldKarat[] = [24, 22, 21, 18, 14];
-const KARAT_OPTIONS: ChipOption<string>[] = KARATS.map((karat) => ({
-  value: String(karat),
-  label: `${karat}K`,
-}));
+import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface AddAssetModalProps {
   visible: boolean;
   onClose: () => void;
-  onSave?: (data: any) => void; // تم إضافتها لتتوافق مع استدعاء الشاشة الرئيسية
+  onSave: (data: { assetName: string; amount: string; selectedType: string; selectedCurrency: string }) => void;
 }
 
-/** A foreign-currency default that is never the user's own base currency. */
-const defaultForeign = (base: string): string => (base === 'USD' ? 'EUR' : 'USD');
+export const AddAssetModal: React.FC<AddAssetModalProps> = ({ visible, onClose, onSave }) => {
+  const [assetName, setAssetName] = useState<string>('');
+  const [amount, setAmount] = useState<string>('0');
+  const [selectedType, setSelectedType] = useState<string>('Local');
+  const [selectedCurrency, setSelectedCurrency] = useState<string>('EGP');
 
-export function AddAssetModal({ visible, onClose, onSave }: AddAssetModalProps) {
-  const baseCurrency = useCurrencyStore((s) => s.baseCurrency);
-  const addAsset = useFinanceStore((s) => s.addAsset);
-  const addAssetEntry = useFinanceStore((s) => s.addAssetEntry);
+  // حالة لإظهار لوحة الأرقام فقط عند الضغط على خانة المبلغ
+  const [isCalculatorVisible, setIsCalculatorVisible] = useState<boolean>(false);
 
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState<AssetCategory>('local_currency');
-  const [foreignCode, setForeignCode] = useState(defaultForeign(baseCurrency));
-  const [karat, setKarat] = useState('24');
-  const [amount, setAmount] = useState('');
-  const [error, setError] = useState<string | undefined>();
-
-  useEffect(() => {
-    if (!visible) return;
-    setName('');
-    setCategory('local_currency');
-    setForeignCode(defaultForeign(baseCurrency));
-    setKarat('24');
-    setAmount('');
-    setError(undefined);
-  }, [visible, baseCurrency]);
-
-  const categoryOptions: ChipOption<AssetCategory>[] = [
-    { value: 'local_currency', label: `Local · ${baseCurrency}` },
-    { value: 'foreign_currency', label: 'Foreign currency' },
-    { value: 'gold', label: 'Gold' },
-  ];
-
-  const isGold = category === 'gold';
-  const unitLabel = isGold
-    ? 'g'
-    : getCurrencyLabel(category === 'local_currency' ? baseCurrency : foreignCode);
-
-  const submit = () => {
-    const cleanName = name.trim();
-    if (!cleanName) {
-      setError('Enter an asset name.');
-      return;
-    }
-    const quantity = amount.trim() === '' ? 0 : Number(amount);
-    if (!Number.isFinite(quantity) || quantity < 0) {
-      setError('Amount is not a valid number.');
-      return;
-    }
-
-    let input: NewAssetInput;
-    if (category === 'gold') {
-      input = { category: 'gold', name: cleanName, karat: Number(karat) as GoldKarat };
+  const handleNumPress = (num: string) => {
+    if (amount === '0') {
+      setAmount(num);
     } else {
-      input = {
-        category,
-        name: cleanName,
-        currencyCode: category === 'local_currency' ? baseCurrency : foreignCode,
-      };
+      setAmount(amount + num);
     }
+  };
 
-    const id = addAsset(input);
-    // The opening amount is saved as the asset's first dated entry.
-    if (quantity > 0) {
-      addAssetEntry(id, {
-        date: todayISO(),
-        amount: quantity,
-        note: 'Opening balance',
-      });
+  const handleDelete = () => {
+    if (amount.length > 1) {
+      setAmount(amount.slice(0, -1));
+    } else {
+      setAmount('0');
     }
-
-    if (onSave) {
-      onSave({ input, quantity });
-    }
-
-    onClose();
   };
 
   return (
-    <FormModal visible={visible} title="Add asset" onClose={onClose}>
-      <AppInput
-        label="Asset name"
-        value={name}
-        onChangeText={setName}
-        placeholder="e.g. Dollar savings, Gold ring"
-      />
+    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          
+          {/* رأس النافذة */}
+          <View style={styles.headerRow}>
+            <Text style={styles.modalTitle}>Assets</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+          </View>
 
-      <ChipSelect<AssetCategory>
-        label="TYPE"
-        options={categoryOptions}
-        value={category}
-        onChange={setCategory}
-      />
+          {/* محتوى النموذج */}
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* إضافة إلى */}
+            <Text style={styles.label}>ADD TO</Text>
+            <View style={styles.addToRow}>
+              <TouchableOpacity style={styles.addToChipActive} onPress={() => setIsCalculatorVisible(false)}>
+                <Text style={styles.addToTextActive}>+ New asset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addToChip} onPress={() => setIsCalculatorVisible(false)}>
+                <Text style={styles.addToText}>NBE</Text>
+              </TouchableOpacity>
+            </View>
 
-      {category === 'foreign_currency' ? (
-        <CurrencyChips
-          label="CURRENCY"
-          value={foreignCode}
-          onChange={setForeignCode}
-          options={CURRENCIES.filter((c) => c.code !== baseCurrency)}
-        />
-      ) : null}
+            {/* اسم الأصل */}
+            <Text style={styles.label}>Asset name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. Dollar savings, Gold ring"
+              placeholderTextColor="#999"
+              value={assetName}
+              onChangeText={setAssetName}
+              onFocus={() => setIsCalculatorVisible(false)} // إخفاء لوحة الأرقام عند الكتابة في الاسم
+            />
 
-      {isGold ? (
-        <ChipSelect<string>
-          label="KARAT"
-          options={KARAT_OPTIONS}
-          value={karat}
-          onChange={setKarat}
-        />
-      ) : null}
+            {/* نوع الأصل */}
+            <Text style={styles.label}>TYPE</Text>
+            <View style={styles.typesRow}>
+              {['Local 🇪🇬 EGP', 'Foreign currency', 'Gold', 'Silver'].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[styles.typeChip, selectedType === type && styles.typeChipActive]}
+                  onPress={() => {
+                    setSelectedType(type);
+                    setIsCalculatorVisible(false);
+                  }}
+                >
+                  <Text style={[styles.typeText, selectedType === type && styles.typeTextActive]}>
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-      <AmountInput
-        label={isGold ? 'Weight (grams)' : 'Amount'}
-        value={amount}
-        onChangeText={setAmount}
-        hint="Optional. Saved as the opening balance; you can add more entries later."
-        sheetTitle={isGold ? 'Weight in grams' : 'Amount'}
-        leftElement={<AppText color="textSecondary">{unitLabel}</AppText>}
-      />
+            {/* حقل المبلغ - تظهر لوحة الأرقام عند الضغط عليه فقط */}
+            <Text style={styles.label}>Amount</Text>
+            <TouchableOpacity 
+              style={[styles.balanceContainer, isCalculatorVisible && styles.balanceContainerActive]}
+              activeOpacity={0.8}
+              onPress={() => setIsCalculatorVisible(true)}
+            >
+              <Text style={styles.currencySymbolText}>{selectedCurrency} {amount}</Text>
+            </TouchableOpacity>
+            <Text style={styles.helperText}>Optional. Saved as the opening balance.</Text>
 
-      {error ? (
-        <AppText variant="caption" color="danger">
-          {error}
-        </AppText>
-      ) : null}
+            {/* زر الحفظ */}
+            <TouchableOpacity 
+              style={styles.saveButton}
+              onPress={() => {
+                onSave({ assetName, amount, selectedType, selectedCurrency });
+                onClose();
+              }}
+            >
+              <Text style={styles.saveButtonText}>Create asset</Text>
+            </TouchableOpacity>
+          </ScrollView>
 
-      <AppButton
-        title="Create asset"
-        accentColor={moduleColors.finance}
-        onPress={submit}
-      />
-    </FormModal>
+          {/* لوحة المفاتيح المخصصة للأرقام تظهر فقط عند النقر على حقل المبلغ */}
+          {isCalculatorVisible && (
+            <View style={styles.calculatorContainer}>
+              <View style={styles.calcHeaderRow}>
+                <Text style={styles.calcTitle}>Enter Amount</Text>
+                <TouchableOpacity onPress={() => setIsCalculatorVisible(false)}>
+                  <Text style={styles.doneButtonText}>Done ✓</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.calcRow}>
+                {['1', '2', '3', '4'].map((n) => (
+                  <TouchableOpacity key={n} style={styles.calcButton} onPress={() => handleNumPress(n)}>
+                    <Text style={styles.calcButtonText}>{n}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.calcRow}>
+                {['5', '6', '7', '8'].map((n) => (
+                  <TouchableOpacity key={n} style={styles.calcButton} onPress={() => handleNumPress(n)}>
+                    <Text style={styles.calcButtonText}>{n}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.calcRow}>
+                <TouchableOpacity style={styles.calcButton} onPress={() => handleNumPress('9')}>
+                  <Text style={styles.calcButtonText}>9</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.calcButton} onPress={() => handleNumPress('0')}>
+                  <Text style={styles.calcButtonText}>0</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.calcButton} onPress={() => handleNumPress('.')}>
+                  <Text style={styles.calcButtonText}>.</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.calcButtonDelete} onPress={handleDelete}>
+                  <Ionicons name="backspace-outline" size={22} color="#333" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
-}
+};
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    paddingTop: 16,
+    paddingHorizontal: 16,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 10,
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  addToRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  addToChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+  },
+  addToChipActive: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#059669',
+  },
+  addToText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  addToTextActive: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 16,
+    backgroundColor: '#fafafa',
+    color: '#111',
+  },
+  typesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  typeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    marginBottom: 4,
+  },
+  typeChipActive: {
+    backgroundColor: '#4338ca',
+  },
+  typeText: {
+    fontSize: 13,
+    color: '#333',
+  },
+  typeTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  balanceContainer: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    backgroundColor: '#fafafa',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  balanceContainerActive: {
+    borderColor: '#059669',
+    backgroundColor: '#f0fdf4',
+  },
+  currencySymbolText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111',
+  },
+  helperText: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  calculatorContainer: {
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    paddingBottom: 15,
+  },
+  calcHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  calcTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#555',
+  },
+  doneButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#059669',
+  },
+  calcRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  calcButton: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+    paddingVertical: 10,
+    marginHorizontal: 3,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  calcButtonDelete: {
+    flex: 1,
+    backgroundColor: '#e2e8f0',
+    paddingVertical: 10,
+    marginHorizontal: 3,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calcButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1f2937',
+  },
+  saveButton: {
+    backgroundColor: '#059669',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+});
