@@ -50,6 +50,7 @@ interface FinanceActions {
   addAsset: (input: NewAssetInput) => EntityId;
   updateAsset: (id: EntityId, patch: AssetPatch) => void;
   deleteAsset: (id: EntityId) => void;
+  clearAssets: () => void;
   addAssetEntry: (
     assetId: EntityId,
     input: NewAssetEntryInput
@@ -271,6 +272,8 @@ export const useFinanceStore = create<FinanceStore>()(
           assets: state.assets.filter((asset) => asset.id !== id),
         })),
 
+      clearAssets: () => set({ assets: [] }),
+
       addAssetEntry: (assetId, input) => {
         if (!get().assets.some((asset) => asset.id === assetId)) {
           return null;
@@ -401,6 +404,10 @@ export const useFinanceStore = create<FinanceStore>()(
 
         const loan: Loan = {
           ...input,
+          principalAmount:
+            input.principalAmount === undefined
+              ? undefined
+              : roundMoney(input.principalAmount),
           monthlyInstallment: roundMoney(input.monthlyInstallment),
           id: generateId('lon'),
           payments: [],
@@ -419,7 +426,10 @@ export const useFinanceStore = create<FinanceStore>()(
         set((state) => ({
           loans: patchParent(state.loans, id, (loan) => ({
             ...loan,
-            ...withRounded(definedOnly(patch), ['monthlyInstallment']),
+            ...withRounded(definedOnly(patch), [
+              'principalAmount',
+              'monthlyInstallment',
+            ]),
           })),
         })),
 

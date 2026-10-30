@@ -1,4 +1,3 @@
-
 /**
  * Finance module domain types.
  *
@@ -159,6 +158,10 @@ export interface Loan extends Timestamps {
   id: EntityId;
   name: string;
   lenderName: string;
+
+  /** Original loan principal. Optional for compatibility with old saved loans. */
+  principalAmount?: number;
+
   currencyCode: CurrencyCode;
   monthlyInstallment: number;
   numberOfInstallments: number;

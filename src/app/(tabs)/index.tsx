@@ -64,6 +64,7 @@ export default function FinanceRoute() {
   const deleteAsset = useFinanceStore((state) => state.deleteAsset);
   const addAsset = useFinanceStore((state) => state.addAsset);
   const addAssetEntry = useFinanceStore((state) => state.addAssetEntry);
+  const clearAssets = useFinanceStore((state) => state.clearAssets);
 
   const baseCurrency = useCurrencyStore((state) => state.baseCurrency);
   const silverPerGram = useCurrencyStore(
@@ -72,6 +73,9 @@ export default function FinanceRoute() {
 
   const addAccount = useLedgerStore((state) => state.addAccount);
   const updateAccount = useLedgerStore((state) => state.updateAccount);
+  const clearAccountsAndTransactions = useLedgerStore(
+    (state) => state.clearAccountsAndTransactions,
+  );
 
   const [txOpen, setTxOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -130,6 +134,29 @@ export default function FinanceRoute() {
     );
   };
 
+  const confirmClearTestData = () => {
+    Alert.alert(
+      'Clear test data?',
+      'This will permanently delete all assets, accounts, and transactions. Categories, currencies, exchange rates, debts, loans, and cheques will be kept.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete data',
+          style: 'destructive',
+          onPress: () => {
+            clearAssets();
+            clearAccountsAndTransactions();
+
+            Alert.alert(
+              'Done',
+              'Assets, accounts, and transactions have been cleared.',
+            );
+          },
+        },
+      ],
+    );
+  };
+
   if (!ready) {
     return (
       <Screen>
@@ -153,6 +180,9 @@ export default function FinanceRoute() {
         total={summary.total}
         accountsTotal={summary.accountsTotal}
         assetsTotal={summary.assetsTotal}
+        loansRemainingTotal={summary.loansRemainingTotal}
+        receivablesTotal={summary.receivablesTotal}
+        payablesTotal={summary.payablesTotal}
         missing={summary.missing}
         income={summary.income}
         expense={summary.expense}
@@ -207,6 +237,16 @@ export default function FinanceRoute() {
       )}
 
       <TransactionsSection onEdit={openTransaction} />
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={confirmClearTestData}
+        style={styles.clearDataButton}
+      >
+        <AppText style={styles.clearDataButtonText}>
+          Clear test data
+        </AppText>
+      </Pressable>
 
       <AddTransactionModal
         visible={txOpen}
@@ -446,6 +486,19 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  clearDataButton: {
+    marginTop: 24,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DC2626',
+    alignItems: 'center',
+  },
+  clearDataButtonText: {
+    color: '#DC2626',
+    fontWeight: '600',
   },
   modalBackdrop: {
     flex: 1,

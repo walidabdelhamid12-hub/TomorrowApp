@@ -20,6 +20,9 @@ interface TotalCardProps {
   total: number;
   accountsTotal: number;
   assetsTotal: number;
+  loansRemainingTotal: number;
+  receivablesTotal: number;
+  payablesTotal: number;
   missing?: unknown;
   income: number;
   expense: number;
@@ -52,6 +55,9 @@ export function TotalCard({
   total,
   accountsTotal,
   assetsTotal,
+  loansRemainingTotal,
+  receivablesTotal,
+  payablesTotal,
   missing,
   income,
   expense,
@@ -77,7 +83,7 @@ export function TotalCard({
     <View style={{ marginTop: spacing.lg }}>
       <Card>
         <AppText variant="caption" color="textSecondary">
-          TOTAL BALANCE
+          NET WORTH
         </AppText>
 
         <View style={[styles.balanceRow, { marginTop: spacing.xs }]}>
@@ -108,6 +114,25 @@ export function TotalCard({
         <View style={[styles.row, { marginTop: spacing.md }]}>
           <Stat label="Accounts" value={money(accountsTotal)} />
           <Stat label="Assets" value={money(assetsTotal)} />
+        </View>
+
+        <View style={[styles.row, { marginTop: spacing.md }]}>
+          <Stat
+            label="Receivables"
+            value={`+${money(receivablesTotal)}`}
+          />
+          <Stat
+            label="Payables"
+            value={`-${money(payablesTotal)}`}
+          />
+        </View>
+
+        <View style={[styles.row, { marginTop: spacing.md }]}>
+          <Stat
+            label="Loans Remaining"
+            value={`-${money(loansRemainingTotal)}`}
+          />
+          <Stat label="" value="" />
         </View>
 
         <View style={[styles.row, { marginTop: spacing.md }]}>
