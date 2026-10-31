@@ -29,6 +29,8 @@ interface AssetRowProps {
   gold24PerGram: number | null;
   silverPerGram: number | null;
   first: boolean;
+  onEdit: () => void;
+  onViewEntries: () => void;
   onDelete: () => void;
 }
 
@@ -39,6 +41,7 @@ export function AssetRow({
   gold24PerGram,
   silverPerGram,
   first,
+  onEdit,
   onDelete,
 }: AssetRowProps) {
   const { colors, spacing, isDark } = useTheme();
@@ -48,12 +51,7 @@ export function AssetRow({
   const isLocalCurrency = asset.category === 'local_currency';
   const isForeignCurrency = asset.category === 'foreign_currency';
 
-  const balance = getAssetBalance(asset);
-
-  const lastDate = asset.entries.reduce<string>(
-    (latest, entry) => (entry.date > latest ? entry.date : latest),
-    '',
-  );
+  const isCurrencyAsset = isLocalCurrency || isForeignCurrency;
 
   const goldText = isDark ? GOLD_COLORS.light : GOLD_COLORS.dark;
   const silverText = isDark ? '#CBD5E1' : '#64748B';
@@ -64,35 +62,35 @@ export function AssetRow({
       ? silverText
       : 'text';
 
+  const balance = getAssetBalance(asset);
+
+  const lastDate = asset.entries.reduce(
+    (latest, entry) => (entry.date > latest ? entry.date : latest),
+    '',
+  );
+
+  const assetCurrency = isCurrencyAsset ? asset.currencyCode : undefined;
+  const assetFlag = assetCurrency ? getCurrencyFlag(assetCurrency) : '';
+
   let amountText: string;
   let subtitle: string;
   let showConverted: boolean;
-  let assetFlag = '';
 
-  if (asset.category === 'gold') {
+  if (isGold) {
     amountText = `${formatNumber(balance, 3)} g`;
     subtitle = `Gold ${asset.karat}K`;
     showConverted = true;
-  } else if (asset.category === 'silver') {
+  } else if (isSilver) {
     amountText = `${formatNumber(balance, 3)} g`;
     subtitle = 'Silver';
     showConverted = true;
-  } else if (asset.category === 'local_currency') {
-    const currency = asset.currencyCode;
-    assetFlag = getCurrencyFlag(currency);
-
-    amountText = `${formatMoney(balance, currency)} ${assetFlag} ${currency}`;
-    subtitle = `Local currency · ${assetFlag} ${getCurrencyLabel(currency)}`;
-    showConverted = currency !== baseCurrency;
-  } else if (asset.category === 'foreign_currency') {
-    const currency = asset.currencyCode;
-    assetFlag = getCurrencyFlag(currency);
-
-    amountText = `${formatMoney(balance, currency)} ${assetFlag} ${currency}`;
-    subtitle = `Foreign currency · ${assetFlag} ${getCurrencyLabel(currency)}`;
-    showConverted = currency !== baseCurrency;
+  } else if (isCurrencyAsset && assetCurrency) {
+    amountText = `${formatMoney(balance, assetCurrency)} ${assetFlag} ${assetCurrency}`;
+    subtitle = isLocalCurrency
+      ? `Local currency · ${assetFlag} ${getCurrencyLabel(assetCurrency)}`
+      : `Foreign currency · ${assetFlag} ${getCurrencyLabel(assetCurrency)}`;
+    showConverted = assetCurrency !== baseCurrency;
   } else {
-    // Fallback for an unexpected category at runtime.
     amountText = formatNumber(balance, 3);
     subtitle = asset.name;
     showConverted = false;
@@ -110,9 +108,9 @@ export function AssetRow({
 
   if (value !== null) {
     convertedText = `≈ ${formatMoney(value, baseCurrency)} ${getCurrencyFlag(baseCurrency)} ${baseCurrency}`;
-  } else if (asset.category === 'gold') {
+  } else if (isGold) {
     convertedText = 'Set gold price in Rates';
-  } else if (asset.category === 'silver') {
+  } else if (isSilver) {
     convertedText = 'Set silver price in Rates';
   } else {
     convertedText = 'No rate available';
@@ -160,11 +158,7 @@ export function AssetRow({
           ]}
         >
           {isSilver ? (
-            <Ionicons
-              name="layers-outline"
-              size={14}
-              color={SILVER_COLOR}
-            />
+            <Ionicons name="layers-outline" size={14} color={SILVER_COLOR} />
           ) : assetFlag ? (
             <Text style={styles.flag}>{assetFlag}</Text>
           ) : (
@@ -178,19 +172,11 @@ export function AssetRow({
       )}
 
       <View style={styles.flex}>
-        <AppText
-          variant="bodyStrong"
-          numberOfLines={1}
-          color={metalTextColor}
-        >
+        <AppText variant="bodyStrong" numberOfLines={1} color={metalTextColor}>
           {asset.name}
         </AppText>
 
-        <AppText
-          variant="caption"
-          color="textSecondary"
-          numberOfLines={1}
-        >
+        <AppText variant="caption" color="textSecondary" numberOfLines={1}>
           {subtitle}
           {lastDate ? ` · updated ${lastDate}` : ''}
         </AppText>
@@ -208,19 +194,35 @@ export function AssetRow({
         ) : null}
       </View>
 
-      <Pressable
-        onPress={onDelete}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel={`Delete ${asset.name}`}
-        style={{ marginStart: spacing.sm }}
-      >
-        <Ionicons
-          name="trash-outline"
-          size={14}
-          color={colors.textSecondary}
-        />
-      </Pressable>
+      <View style={[styles.actions, { marginStart: spacing.sm }]}>
+        <Pressable
+          onPress={onEdit}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit ${asset.name}`}
+          style={styles.actionButton}
+        >
+          <Ionicons
+            name="create-outline"
+            size={17}
+            color={moduleColors.finance}
+          />
+        </Pressable>
+
+        <Pressable
+          onPress={onDelete}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Delete ${asset.name}`}
+          style={styles.actionButton}
+        >
+          <Ionicons
+            name="trash-outline"
+            size={15}
+            color={colors.textSecondary}
+          />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -238,6 +240,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginStart: 6,
     flexShrink: 1,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  actionButton: {
+    padding: 2,
   },
   badge: {
     width: 30,

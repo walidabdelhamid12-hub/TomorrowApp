@@ -1,12 +1,12 @@
 import type {
-    Asset,
-    AssetEntry,
-    Cheque,
-    Debt,
-    DebtStatus,
-    ISODate,
-    Loan,
-    LoanStatus,
+  Asset,
+  AssetEntry,
+  Cheque,
+  Debt,
+  DebtStatus,
+  ISODate,
+  Loan,
+  LoanStatus,
 } from '@/features/finance/types/finance';
 
 /* ------------------------------ Basics ----------------------------------- */

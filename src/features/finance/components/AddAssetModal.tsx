@@ -1,9 +1,10 @@
-
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import type {
+  Asset,
   AssetCategory,
   GoldKarat,
 } from '@/features/finance/types/finance';
+import { getAssetBalance } from '@/features/finance/utils/finance';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
@@ -27,6 +28,7 @@ export type AddAssetFormData = {
 
 interface AddAssetModalProps {
   visible: boolean;
+  asset?: Asset | null;
   onClose: () => void;
   onSave: (data: AddAssetFormData) => void;
 }
@@ -100,12 +102,15 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 
 export const AddAssetModal: React.FC<AddAssetModalProps> = ({
   visible,
+  asset = null,
   onClose,
   onSave,
 }) => {
   const baseCurrency = useCurrencyStore(
     (state) => state.baseCurrency,
   );
+
+  const isEditing = asset !== null;
 
   const [assetName, setAssetName] = useState('');
   const [amount, setAmount] = useState('0');
@@ -118,25 +123,50 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
   useEffect(() => {
     if (!visible) return;
 
+    if (asset) {
+      setAssetName(asset.name);
+      setAmount(String(getAssetBalance(asset)));
+      setSelectedType(asset.category);
+
+      if (
+        asset.category === 'local_currency' ||
+        asset.category === 'foreign_currency'
+      ) {
+        setSelectedCurrency(asset.currencyCode);
+      } else {
+        setSelectedCurrency(baseCurrency);
+      }
+
+      if (asset.category === 'gold') {
+        setKarat(asset.karat);
+      } else {
+        setKarat(24);
+      }
+
+      return;
+    }
+
     setAssetName('');
     setAmount('0');
     setSelectedType('local_currency');
     setSelectedCurrency(baseCurrency);
     setKarat(24);
-  }, [visible, baseCurrency]);
+  }, [visible, asset, baseCurrency]);
 
   // Keep the local asset currency synchronized with the app's base currency.
   useEffect(() => {
-    if (selectedType === 'local_currency') {
+    if (!isEditing && selectedType === 'local_currency') {
       setSelectedCurrency(baseCurrency);
     }
-  }, [baseCurrency, selectedType]);
+  }, [baseCurrency, selectedType, isEditing]);
 
   const selectedCurrencyOption = CURRENCY_OPTIONS.find(
     (currency) => currency.code === selectedCurrency,
   );
 
   const handleSelectType = (type: AssetCategory) => {
+    if (isEditing) return;
+
     setSelectedType(type);
 
     if (type === 'local_currency') {
@@ -204,7 +234,9 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.headerRow}>
-            <Text style={styles.modalTitle}>Assets</Text>
+            <Text style={styles.modalTitle}>
+              {isEditing ? 'Edit asset' : 'Assets'}
+            </Text>
 
             <TouchableOpacity
               onPress={onClose}
@@ -221,12 +253,14 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.label}>ADD TO</Text>
+            <Text style={styles.label}>
+              {isEditing ? 'EDITING ASSET' : 'ADD TO'}
+            </Text>
 
             <View style={styles.addToRow}>
               <View style={styles.addToChipActive}>
                 <Text style={styles.addToTextActive}>
-                  + New asset
+                  {isEditing ? 'Edit existing asset' : '+ New asset'}
                 </Text>
               </View>
             </View>
@@ -256,10 +290,15 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
                         borderColor: type.color,
                         backgroundColor: type.background,
                       },
+                      isEditing && styles.disabledTypeCard,
                     ]}
                     onPress={() => handleSelectType(type.value)}
+                    disabled={isEditing}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
+                    accessibilityState={{
+                      selected: active,
+                      disabled: isEditing,
+                    }}
                   >
                     <View
                       style={[
@@ -398,24 +437,34 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
               </Text>
             )}
 
-            <Text style={styles.label}>AMOUNT</Text>
+            <>
+              <Text style={styles.label}>
+                {isEditing ? 'CURRENT BALANCE' : 'AMOUNT'}
+              </Text>
 
-            <View style={styles.balanceContainer}>
-              <View style={styles.balanceInputRow}>
-                <Text style={styles.currencyLabelSymbol}>
-                  {amountSymbol}
-                </Text>
+              <View style={styles.balanceContainer}>
+                <View style={styles.balanceInputRow}>
+                  <Text style={styles.currencyLabelSymbol}>
+                    {amountSymbol}
+                  </Text>
 
-                <TextInput
-                  style={styles.balanceInput}
-                  keyboardType="decimal-pad"
-                  value={amount}
-                  onChangeText={setAmount}
-                  placeholder="0"
-                  placeholderTextColor="#999"
-                />
+                  <TextInput
+                    style={styles.balanceInput}
+                    keyboardType="decimal-pad"
+                    value={amount}
+                    onChangeText={setAmount}
+                    placeholder="0"
+                    placeholderTextColor="#999"
+                  />
+                </View>
               </View>
-            </View>
+
+              {isEditing && (
+                <Text style={styles.helperText}>
+                  Enter the new total balance. Previous movements will be preserved.
+                </Text>
+              )}
+            </>
 
             <TouchableOpacity
               style={styles.saveButton}
@@ -423,7 +472,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
               accessibilityRole="button"
             >
               <Text style={styles.saveButtonText}>
-                Create asset
+                {isEditing ? 'Update asset' : 'Create asset'}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -515,6 +564,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#fafafa',
     gap: 4,
+  },
+  disabledTypeCard: {
+    opacity: 0.85,
   },
   assetIconCircle: {
     width: 36,

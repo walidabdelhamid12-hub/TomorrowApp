@@ -11,14 +11,19 @@ import { moduleColors, useTheme } from '@/theme';
 const PREVIEW_COUNT = 10;
 
 type GlyphName = keyof typeof Ionicons.glyphMap;
-const isGlyph = (name: string): name is GlyphName => name in Ionicons.glyphMap;
+const isGlyph = (name: string): name is GlyphName =>
+  name in Ionicons.glyphMap;
 
 interface TransactionsSectionProps {
   onEdit: (transaction: Transaction) => void;
+  onDelete: (transaction: Transaction) => void;
 }
 
-export function TransactionsSection({ onEdit }: TransactionsSectionProps) {
-  const { spacing } = useTheme();
+export function TransactionsSection({
+  onEdit,
+  onDelete,
+}: TransactionsSectionProps) {
+  const { colors, spacing } = useTheme();
   const transactions = useLedgerStore((s) => s.transactions);
   const categories = useLedgerStore((s) => s.categories);
   const accounts = useLedgerStore((s) => s.accounts);
@@ -28,18 +33,20 @@ export function TransactionsSection({ onEdit }: TransactionsSectionProps) {
     () =>
       [...transactions].sort(
         (a, b) =>
-          b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)
+          b.date.localeCompare(a.date) ||
+          b.createdAt.localeCompare(a.createdAt),
       ),
-    [transactions]
+    [transactions],
   );
 
   const categoryById = useMemo(
     () => new Map(categories.map((c) => [c.id, c])),
-    [categories]
+    [categories],
   );
+
   const accountById = useMemo(
     () => new Map(accounts.map((a) => [a.id, a])),
-    [accounts]
+    [accounts],
   );
 
   const visible = showAll ? sorted : sorted.slice(0, PREVIEW_COUNT);
@@ -69,13 +76,15 @@ export function TransactionsSection({ onEdit }: TransactionsSectionProps) {
             const tint = category?.color ?? moduleColors.finance;
 
             return (
-              <Pressable
+              <View
                 key={tx.id}
-                onPress={() => onEdit(tx)}
                 style={[
                   styles.row,
                   { padding: spacing.md },
-                  index > 0 && styles.divider,
+                  index > 0 && {
+                    borderTopWidth: StyleSheet.hairlineWidth,
+                    borderTopColor: colors.border,
+                  },
                 ]}
               >
                 <View style={[styles.iconCircle, { marginEnd: spacing.md }]}>
@@ -90,6 +99,7 @@ export function TransactionsSection({ onEdit }: TransactionsSectionProps) {
                   <AppText style={styles.name}>
                     {category?.name ?? 'Uncategorized'}
                   </AppText>
+
                   <AppText variant="caption" color="textSecondary">
                     {`${tx.date} · ${account?.name ?? '—'}`}
                   </AppText>
@@ -101,7 +111,37 @@ export function TransactionsSection({ onEdit }: TransactionsSectionProps) {
                 >
                   {`${isExpense ? '-' : '+'}${formatAmount(tx.amount)} ${tx.currencyCode}`}
                 </AppText>
-              </Pressable>
+
+                <View style={[styles.actions, { marginStart: spacing.sm }]}>
+                  <Pressable
+                    onPress={() => onEdit(tx)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Edit transaction"
+                    style={styles.actionButton}
+                  >
+                    <Ionicons
+                      name="create-outline"
+                      size={17}
+                      color={moduleColors.finance}
+                    />
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => onDelete(tx)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete transaction"
+                    style={styles.actionButton}
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={15}
+                      color={colors.textSecondary}
+                    />
+                  </Pressable>
+                </View>
+              </View>
             );
           })}
         </Card>
@@ -119,11 +159,13 @@ export function TransactionsSection({ onEdit }: TransactionsSectionProps) {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  row: { flexDirection: 'row', alignItems: 'center' },
-  divider: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(128,128,128,0.25)',
+  flex: {
+    flex: 1,
+    minWidth: 0,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   iconCircle: {
     width: 36,
@@ -133,6 +175,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(128,128,128,0.15)',
   },
-  name: { fontWeight: '600' },
-  amount: { fontWeight: '600' },
+  name: {
+    fontWeight: '600',
+  },
+  amount: {
+    fontWeight: '600',
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  actionButton: {
+    padding: 2,
+  },
 });

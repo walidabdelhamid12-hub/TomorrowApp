@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -5,7 +6,7 @@ import { AppText, Card } from '@/components/ui';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
-import { useTheme } from '@/theme';
+import { moduleColors, useTheme } from '@/theme';
 
 const TYPE_LABELS: Record<AccountType, string> = {
   cash: 'Cash',
@@ -18,24 +19,37 @@ const TYPE_LABELS: Record<AccountType, string> = {
 interface AccountsSectionProps {
   accounts: readonly Account[];
   onEdit: (account: Account) => void;
-  // Accepted for compatibility with the screen; balances are shown in each account's own currency.
+  onDelete: (account: Account) => void;
   baseCurrency?: string;
   rates?: unknown;
 }
 
-export function AccountsSection({ accounts, onEdit }: AccountsSectionProps) {
-  const { spacing } = useTheme();
+export function AccountsSection({
+  accounts,
+  onEdit,
+  onDelete,
+}: AccountsSectionProps) {
+  const { colors, spacing } = useTheme();
   const transactions = useLedgerStore((s) => s.transactions);
 
-  // Balance = starting balance + income - expense (computed at display time).
+  // Balance = starting balance + income - expense.
   const balances = useMemo(() => {
     const map = new Map<string, number>();
-    for (const account of accounts) map.set(account.id, account.initialBalance);
+
+    for (const account of accounts) {
+      map.set(account.id, account.initialBalance);
+    }
+
     for (const tx of transactions) {
       const current = map.get(tx.accountId);
       if (current === undefined) continue;
-      map.set(tx.accountId, current + (tx.type === 'income' ? tx.amount : -tx.amount));
+
+      map.set(
+        tx.accountId,
+        current + (tx.type === 'income' ? tx.amount : -tx.amount),
+      );
     }
+
     return map;
   }, [accounts, transactions]);
 
@@ -57,31 +71,69 @@ export function AccountsSection({ accounts, onEdit }: AccountsSectionProps) {
       ) : (
         <Card padded={false}>
           {accounts.map((account, index) => {
-            const balance = balances.get(account.id) ?? account.initialBalance;
+            const balance =
+              balances.get(account.id) ?? account.initialBalance;
             const negative = balance < 0;
+
             return (
-              <Pressable
+              <View
                 key={account.id}
-                onPress={() => onEdit(account)}
                 style={[
                   styles.row,
                   { padding: spacing.md },
-                  index > 0 && styles.divider,
+                  index > 0 && {
+                    borderTopWidth: StyleSheet.hairlineWidth,
+                    borderTopColor: colors.border,
+                  },
                 ]}
               >
                 <View style={styles.flex}>
-                  <AppText style={styles.name}>{account.name}</AppText>
+                  <AppText style={styles.name}>
+                    {account.name}
+                  </AppText>
+
                   <AppText variant="caption" color="textSecondary">
                     {`${TYPE_LABELS[account.type]} · ${account.currencyCode}`}
                   </AppText>
                 </View>
+
                 <AppText
                   {...(negative ? ({ color: 'danger' } as const) : {})}
                   style={styles.balance}
                 >
                   {`${formatAmount(balance)} ${account.currencyCode}`}
                 </AppText>
-              </Pressable>
+
+                <View style={[styles.actions, { marginStart: spacing.sm }]}>
+                  <Pressable
+                    onPress={() => onEdit(account)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${account.name}`}
+                    style={styles.actionButton}
+                  >
+                    <Ionicons
+                      name="create-outline"
+                      size={17}
+                      color={moduleColors.finance}
+                    />
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => onDelete(account)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${account.name}`}
+                    style={styles.actionButton}
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={15}
+                      color={colors.textSecondary}
+                    />
+                  </Pressable>
+                </View>
+              </View>
             );
           })}
         </Card>
@@ -91,12 +143,26 @@ export function AccountsSection({ accounts, onEdit }: AccountsSectionProps) {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  row: { flexDirection: 'row', alignItems: 'center' },
-  divider: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(128,128,128,0.25)',
+  flex: {
+    flex: 1,
+    minWidth: 0,
   },
-  name: { fontWeight: '600' },
-  balance: { fontWeight: '600' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  name: {
+    fontWeight: '600',
+  },
+  balance: {
+    fontWeight: '600',
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  actionButton: {
+    padding: 2,
+  },
 });
