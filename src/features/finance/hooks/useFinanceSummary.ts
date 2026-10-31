@@ -26,6 +26,8 @@ export function useFinanceSummary() {
 
   const accounts = useLedgerStore((s) => s.accounts);
   const transactions = useLedgerStore((s) => s.transactions);
+  const transfers = useLedgerStore((s) => s.transfers);
+
   const assets = useFinanceStore((s) => s.assets);
   const loans = useFinanceStore((s) => s.loans);
   const debts = useFinanceStore((s) => s.debts);
@@ -44,7 +46,11 @@ export function useFinanceSummary() {
     let missing = 0;
 
     for (const account of activeAccounts) {
-      const balance = getAccountBalance(account, transactions);
+      const balance = getAccountBalance(
+        account,
+        transactions,
+        transfers
+      );
 
       const converted = convertAmount(
         balance,
@@ -161,12 +167,15 @@ export function useFinanceSummary() {
     loans,
     debts,
     transactions,
+    transfers,
     baseCurrency,
     rates,
     gold24PerGram,
     silverPerGram,
   ]);
 
+  // Credit-card debt is already represented by the negative
+  // account balance, so it must not be subtracted a second time.
   const netWorth =
     totals.accountsTotal +
     totals.assetsTotal +
@@ -192,14 +201,19 @@ export function useFinanceSummary() {
         continue;
       }
 
-      if (transaction.type === 'income') {
+      if (transaction.entryType === 'refund') {
+        expense -= converted;
+      } else if (transaction.type === 'income') {
         income += converted;
       } else {
         expense += converted;
       }
     }
 
-    return { income, expense };
+    return {
+      income,
+      expense: Math.max(expense, 0),
+    };
   }, [transactions, baseCurrency, rates]);
 
   return {

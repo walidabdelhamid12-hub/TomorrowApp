@@ -1,3 +1,4 @@
+
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import type {
   Asset,
@@ -308,7 +309,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
                     >
                       <Ionicons
                         name={type.icon}
-                        size={21}
+                        size={15}
                         color={type.color}
                       />
                     </View>
@@ -331,7 +332,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
                     {active && (
                       <Ionicons
                         name="checkmark-circle"
-                        size={15}
+                        size={13}
                         color={type.color}
                         style={styles.selectedCheck}
                       />
@@ -548,33 +549,33 @@ const styles = StyleSheet.create({
   },
   assetTypesGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    flexWrap: 'nowrap',
+    gap: 6,
   },
   assetTypeCard: {
-    flexBasis: '47%',
-    flexGrow: 1,
-    minHeight: 94,
+    flex: 1,
+    minWidth: 0,
+    minHeight: 45,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 9,
-    paddingHorizontal: 6,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 12,
+    borderRadius: 9,
     backgroundColor: '#fafafa',
-    gap: 4,
+    gap: 1,
   },
   disabledTypeCard: {
     opacity: 0.85,
   },
   assetIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 23,
+    height: 23,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 1,
+    marginBottom: 0,
   },
   assetTypeTitle: {
     fontSize: 12,
@@ -589,8 +590,8 @@ const styles = StyleSheet.create({
   },
   selectedCheck: {
     position: 'absolute',
-    top: 5,
-    right: 5,
+    top: 3,
+    right: 3,
   },
   currenciesGrid: {
     flexDirection: 'row',

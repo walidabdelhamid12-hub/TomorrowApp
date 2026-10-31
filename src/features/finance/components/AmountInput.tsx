@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton, AppInput, AppText, ChipSelect } from '@/components/ui';
 import { CalculatorPad } from '@/features/finance/components/CalculatorPad';
+import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { moduleColors, useTheme } from '@/theme';
 
 type Sign = 'plus' | 'minus';
@@ -45,9 +46,17 @@ export function AmountInput({
   const [draft, setDraft] = useState(0);
   const [sign, setSign] = useState<Sign>('plus');
 
+  const parsedValue = Number(value.replace(/,/g, ''));
+  const hasValidValue = value.trim() !== '' && Number.isFinite(parsedValue);
+
+  const displayValue = hasValidValue
+    ? `${parsedValue < 0 ? '-' : ''}${formatAmount(Math.abs(parsedValue))}`
+    : value;
+
   const openSheet = () => {
     const current = Number(value.replace(/,/g, ''));
     const safe = Number.isFinite(current) ? current : 0;
+
     setSeed(Math.abs(safe));
     setDraft(Math.abs(safe));
     setSign(safe < 0 ? 'minus' : 'plus');
@@ -67,11 +76,11 @@ export function AmountInput({
         accessibilityRole="button"
         accessibilityLabel={label ? `${label}, open calculator` : 'Open calculator'}
       >
-        {/* pointerEvents none: the field only displays the value, so the phone keyboard never opens. */}
+        {/* The field only displays the value; the calculator handles input. */}
         <View pointerEvents="none">
           <AppInput
             label={label}
-            value={value}
+            value={displayValue}
             placeholder="0"
             hint={hint}
             error={error}
@@ -118,7 +127,11 @@ export function AmountInput({
             ) : null}
 
             <View style={{ marginTop: spacing.md }}>
-              <CalculatorPad initialValue={seed} onChange={setDraft} />
+              <CalculatorPad
+                key={`${open}-${seed}`}
+                initialValue={seed}
+                onChange={setDraft}
+              />
             </View>
 
             <View style={{ marginTop: spacing.lg }}>

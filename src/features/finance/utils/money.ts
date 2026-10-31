@@ -1,5 +1,3 @@
-
-import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { roundMoney } from '@/features/finance/utils/finance';
 import { normalizeDigits } from '@/utils/input';
 
@@ -38,19 +36,31 @@ export function parseAmount(text: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+/**
+ * Formats a number with thousands separators
+ * and the requested number of decimal places.
+ */
 export function formatNumber(value: number, decimals: number): string {
+  if (!Number.isFinite(value)) return '0.00';
+
   const fixed = Math.abs(value).toFixed(decimals);
   const sign = value < 0 && Number(fixed) !== 0 ? '-' : '';
   const [int, dec] = fixed.split('.');
   const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
   return `${sign}${grouped}${dec !== undefined ? `.${dec}` : ''}`;
 }
 
 /**
- * Formats an amount using the currency's configured decimal places.
+ * Formats monetary amounts with:
+ * - Thousands separators.
+ * - Exactly two decimal places for every currency.
+ *
+ * This affects display only.
+ * It does not change stored values or calculation precision.
  */
-export function formatMoney(value: number, code: string): string {
-  return formatNumber(value, getCurrencyDecimals(code));
+export function formatMoney(value: number, _code: string): string {
+  return formatNumber(value, 2);
 }
 
 /**

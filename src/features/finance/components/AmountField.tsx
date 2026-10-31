@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { palette } from '../constants/financeUi';
 import { CalculatorPad } from './CalculatorPad';
 
@@ -42,7 +43,9 @@ export function AmountField({
 
       <Pressable style={styles.field} onPress={openSheet}>
         <Text style={[styles.value, value === 0 && styles.placeholder]}>
-          {value === 0 ? placeholder : String(value)}
+          {value === 0
+            ? placeholder
+            : `${value < 0 ? '−' : ''}${formatAmount(Math.abs(value))}`}
         </Text>
         <Ionicons name="calculator-outline" size={22} color={palette.primary} />
       </Pressable>
@@ -67,7 +70,11 @@ export function AmountField({
               </Pressable>
             )}
 
-            <CalculatorPad initialValue={Math.abs(value)} onChange={setDraft} />
+            <CalculatorPad
+              key={`${open}-${Math.abs(value)}`}
+              initialValue={Math.abs(value)}
+              onChange={setDraft}
+            />
 
             <Pressable style={styles.done} onPress={commit}>
               <Text style={styles.doneText}>تم</Text>

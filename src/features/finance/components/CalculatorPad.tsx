@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui';
+import { formatAmount } from '@/features/finance/utils/amountFormat';
 import {
-    applyKey,
-    evaluateExpression,
+  applyKey,
+  evaluateExpression,
 } from '@/features/finance/utils/calculator';
 import { moduleColors, useTheme } from '@/theme';
 
@@ -48,7 +49,6 @@ export function CalculatorPad({ initialValue = 0, onChange }: CalculatorPadProps
     initialValue > 0 ? String(initialValue) : ''
   );
 
-  // Amounts are always positive; the sign comes from the transaction type.
   const toAmount = (expr: string): number | null => {
     const result = evaluateExpression(expr);
     return result !== null && result > 0 ? result : null;
@@ -90,7 +90,7 @@ export function CalculatorPad({ initialValue = 0, onChange }: CalculatorPadProps
           </AppText>
         ) : null}
         <AppText variant="h1" numberOfLines={1}>
-          {String(amount ?? 0)}
+          {formatAmount(amount ?? 0)}
         </AppText>
       </View>
 
@@ -132,7 +132,6 @@ export function CalculatorPad({ initialValue = 0, onChange }: CalculatorPadProps
 }
 
 const styles = StyleSheet.create({
-  // The keypad is always left-to-right, even when the app is RTL.
   container: { direction: 'ltr' },
   display: {
     minHeight: 72,

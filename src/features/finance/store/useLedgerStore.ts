@@ -16,8 +16,11 @@ import type {
   NewAccountInput,
   NewCategoryInput,
   NewTransactionInput,
+  NewTransferInput,
   Transaction,
   TransactionPatch,
+  Transfer,
+  TransferPatch,
 } from '@/features/finance/types/ledger';
 import {
   definedOnly,
@@ -35,16 +38,25 @@ interface LedgerActions {
   updateAccount: (id: EntityId, patch: AccountPatch) => void;
   setAccountArchived: (id: EntityId, archived: boolean) => void;
   deleteAccount: (id: EntityId) => void;
+  clearAccountsAndTransactions: () => void;
 
   // Categories
   addCategory: (input: NewCategoryInput) => EntityId;
   updateCategory: (id: EntityId, patch: CategoryPatch) => void;
-  deleteCategory: (id: EntityId) => boolean;
+  deleteCategory: (
+    id: EntityId,
+    replacementCategoryId?: EntityId
+  ) => boolean;
 
   // Transactions
   addTransaction: (input: NewTransactionInput) => EntityId | null;
   updateTransaction: (id: EntityId, patch: TransactionPatch) => boolean;
   removeTransaction: (id: EntityId) => void;
+
+  // Transfers
+  addTransfer: (input: NewTransferInput) => EntityId | null;
+  updateTransfer: (id: EntityId, patch: TransferPatch) => boolean;
+  removeTransfer: (id: EntityId) => void;
 
   resetLedger: () => void;
 }
@@ -57,6 +69,7 @@ const initialData: LedgerData = {
   accounts: [],
   categories: DEFAULT_CATEGORIES,
   transactions: [],
+  transfers: [],
 };
 
 const now = (): string => new Date().toISOString();
@@ -92,14 +105,222 @@ function migrateLedgerData(persistedState: unknown): LedgerData {
   const accounts = normalizeRecords<Account>(saved.accounts);
   const transactions = normalizeRecords<Transaction>(saved.transactions);
   const savedCategories = normalizeRecords<Category>(saved.categories);
+  const transfers = normalizeRecords<Transfer>(saved.transfers);
 
   return {
     accounts,
     transactions,
-    categories:
-      savedCategories.length > 0
-        ? savedCategories
-        : DEFAULT_CATEGORIES,
+    transfers,
+
+    // Preserve an intentionally empty category list.
+    // Defaults are used only when the saved data has no categories field.
+    categories: Array.isArray(saved.categories)
+      ? savedCategories
+      : DEFAULT_CATEGORIES,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Refund validation                                                          */
+/* -------------------------------------------------------------------------- */
+
+function getRefundedAmount(
+  transactions: Transaction[],
+  originalTransactionId: EntityId,
+  excludeTransactionId?: EntityId
+): number {
+  const total = transactions
+    .filter(
+      (transaction) =>
+        transaction.entryType === 'refund' &&
+        transaction.relatedTransactionId === originalTransactionId &&
+        transaction.id !== excludeTransactionId
+    )
+    .reduce((sum, transaction) => sum + transaction.amount, 0);
+
+  return roundMoney(total);
+}
+
+function isValidRefund(
+  input: NewTransactionInput,
+  transactions: Transaction[],
+  accounts: Account[]
+): boolean {
+  if (
+    input.entryType !== 'refund' ||
+    input.type !== 'expense' ||
+    !input.relatedTransactionId
+  ) {
+    return false;
+  }
+
+  const original = transactions.find(
+    (transaction) => transaction.id === input.relatedTransactionId
+  );
+
+  if (
+    !original ||
+    original.type !== 'expense' ||
+    original.entryType === 'refund' ||
+    original.accountId !== input.accountId ||
+    original.categoryId !== input.categoryId
+  ) {
+    return false;
+  }
+
+  const account = accounts.find(
+    (item) => item.id === input.accountId
+  );
+
+  if (!account || original.currencyCode !== account.currencyCode) {
+    return false;
+  }
+
+  const alreadyRefunded = getRefundedAmount(
+    transactions,
+    original.id
+  );
+
+  return (
+    roundMoney(alreadyRefunded + input.amount) <=
+    roundMoney(original.amount)
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Transfer validation                                                        */
+/* -------------------------------------------------------------------------- */
+
+function isValidPositiveAmount(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
+}
+
+function getTransferSourceAmount(transfer: Transfer): number {
+  return transfer.fromAmount ?? transfer.amount;
+}
+
+function getTransferSourceCurrency(transfer: Transfer): string {
+  return transfer.fromCurrencyCode ?? transfer.currencyCode;
+}
+
+function getTransferDestinationAmount(transfer: Transfer): number {
+  return transfer.toAmount ?? transfer.amount;
+}
+
+function getTransferDestinationCurrency(transfer: Transfer): string {
+  return transfer.toCurrencyCode ?? transfer.currencyCode;
+}
+
+function isValidTransferAccounts(
+  fromAccount: Account | undefined,
+  toAccount: Account | undefined,
+  type: NewTransferInput['type']
+): boolean {
+  if (!fromAccount || !toAccount) {
+    return false;
+  }
+
+  if (
+    fromAccount.id === toAccount.id ||
+    fromAccount.archived ||
+    toAccount.archived
+  ) {
+    return false;
+  }
+
+  if (type === 'credit_card_payment') {
+    return (
+      fromAccount.type !== 'credit_card' &&
+      toAccount.type === 'credit_card' &&
+      fromAccount.currencyCode === toAccount.currencyCode
+    );
+  }
+
+  return (
+    type === 'internal' &&
+    fromAccount.type !== 'credit_card' &&
+    toAccount.type !== 'credit_card'
+  );
+}
+
+function isValidTransferAmounts(
+  input: Pick<
+    NewTransferInput,
+    | 'fromAmount'
+    | 'fromCurrencyCode'
+    | 'toAmount'
+    | 'toCurrencyCode'
+    | 'exchangeRate'
+  >,
+  fromAccount: Account,
+  toAccount: Account
+): boolean {
+  const fromAmount = roundMoney(input.fromAmount);
+  const toAmount = roundMoney(input.toAmount);
+  const exchangeRate = input.exchangeRate;
+
+  if (
+    !isValidPositiveAmount(fromAmount) ||
+    !isValidPositiveAmount(toAmount) ||
+    !isValidPositiveAmount(exchangeRate)
+  ) {
+    return false;
+  }
+
+  if (
+    input.fromCurrencyCode !== fromAccount.currencyCode ||
+    input.toCurrencyCode !== toAccount.currencyCode
+  ) {
+    return false;
+  }
+
+  if (fromAccount.currencyCode === toAccount.currencyCode) {
+    return (
+      input.fromCurrencyCode === input.toCurrencyCode &&
+      Math.abs(fromAmount - toAmount) <= 0.01 &&
+      Math.abs(exchangeRate - 1) <= 0.000001
+    );
+  }
+
+  if (input.fromCurrencyCode === input.toCurrencyCode) {
+    return false;
+  }
+
+  const expectedRate = toAmount / fromAmount;
+  const rateDifference = Math.abs(exchangeRate - expectedRate);
+
+  return rateDifference <= Math.max(0.000001, expectedRate * 0.0001);
+}
+
+function buildTransfer(
+  input: NewTransferInput,
+  id: EntityId,
+  timestamp: string
+): Transfer {
+  const fromAmount = roundMoney(input.fromAmount);
+  const toAmount = roundMoney(input.toAmount);
+
+  return {
+    id,
+    fromAccountId: input.fromAccountId,
+    toAccountId: input.toAccountId,
+
+    // Compatibility fields for older code and persisted records.
+    amount: fromAmount,
+    currencyCode: input.fromCurrencyCode,
+
+    fromAmount,
+    fromCurrencyCode: input.fromCurrencyCode,
+    toAmount,
+    toCurrencyCode: input.toCurrencyCode,
+    exchangeRate: input.exchangeRate,
+
+    date: input.date,
+    type: input.type,
+    note: input.note,
+
+    createdAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 
@@ -144,24 +365,46 @@ export const useLedgerStore = create<LedgerStore>()(
             clean.initialBalance = roundMoney(clean.initialBalance);
           }
 
+          if (typeof clean.creditLimit === 'number') {
+            clean.creditLimit = roundMoney(clean.creditLimit);
+          }
+
+          const currentAccount = state.accounts.find(
+            (account) => account.id === id
+          );
+
+          if (!currentAccount) {
+            return state;
+          }
+
+          const hasTransactions = state.transactions.some(
+            (transaction) => transaction.accountId === id
+          );
+
+          const hasTransfers = state.transfers.some(
+            (transfer) =>
+              transfer.fromAccountId === id ||
+              transfer.toAccountId === id
+          );
+
+          const currencyChanged =
+            typeof clean.currencyCode === 'string' &&
+            clean.currencyCode !== currentAccount.currencyCode;
+
+          const safePatch =
+            (hasTransactions || hasTransfers) && currencyChanged
+              ? {
+                  ...clean,
+                  currencyCode: currentAccount.currencyCode,
+                }
+              : clean;
+
           return {
             accounts: state.accounts.map((account) =>
               account.id === id
-                ? { ...account, ...clean, updatedAt: now() }
+                ? { ...account, ...safePatch, updatedAt: now() }
                 : account
             ),
-
-            // Keep transactions synchronized with their account currency.
-            transactions: clean.currencyCode
-              ? state.transactions.map((transaction) =>
-                  transaction.accountId === id
-                    ? {
-                        ...transaction,
-                        currencyCode: clean.currencyCode as string,
-                      }
-                    : transaction
-                )
-              : state.transactions,
           };
         }),
 
@@ -180,7 +423,19 @@ export const useLedgerStore = create<LedgerStore>()(
           transactions: state.transactions.filter(
             (transaction) => transaction.accountId !== id
           ),
+          transfers: state.transfers.filter(
+            (transfer) =>
+              transfer.fromAccountId !== id &&
+              transfer.toAccountId !== id
+          ),
         })),
+
+      clearAccountsAndTransactions: () =>
+        set({
+          accounts: [],
+          transactions: [],
+          transfers: [],
+        }),
 
       /* ----------------------------- Categories ---------------------------- */
 
@@ -207,20 +462,60 @@ export const useLedgerStore = create<LedgerStore>()(
           ),
         })),
 
-      deleteCategory: (id) => {
+      deleteCategory: (id, replacementCategoryId) => {
         const { categories, transactions } = get();
+
         const category = categories.find((item) => item.id === id);
 
-        if (!category || category.isDefault) {
+        if (!category) {
           return false;
         }
 
-        if (transactions.some((item) => item.categoryId === id)) {
+        const hasTransactions = transactions.some(
+          (transaction) => transaction.categoryId === id
+        );
+
+        // A category with linked transactions requires a replacement.
+        if (hasTransactions && !replacementCategoryId) {
           return false;
+        }
+
+        let replacementCategory: Category | undefined;
+
+        if (replacementCategoryId) {
+          replacementCategory = categories.find(
+            (item) => item.id === replacementCategoryId
+          );
+
+          // Replacement must exist, be different, and have the same kind.
+          if (
+            !replacementCategory ||
+            replacementCategory.id === category.id ||
+            replacementCategory.kind !== category.kind
+          ) {
+            return false;
+          }
         }
 
         set((state) => ({
-          categories: state.categories.filter((item) => item.id !== id),
+          categories: state.categories.filter(
+            (item) => item.id !== id
+          ),
+
+          // Reassign every linked transaction before removing the category.
+          // This includes refund records, preserving their link to the
+          // original purchase while keeping both on the same category.
+          transactions: replacementCategory
+            ? state.transactions.map((transaction) =>
+                transaction.categoryId === id
+                  ? {
+                      ...transaction,
+                      categoryId: replacementCategory.id,
+                      updatedAt: now(),
+                    }
+                  : transaction
+              )
+            : state.transactions,
         }));
 
         return true;
@@ -229,7 +524,7 @@ export const useLedgerStore = create<LedgerStore>()(
       /* ---------------------------- Transactions --------------------------- */
 
       addTransaction: (input) => {
-        const { accounts, categories } = get();
+        const { accounts, categories, transactions } = get();
 
         const account = accounts.find(
           (item) => item.id === input.accountId
@@ -243,6 +538,7 @@ export const useLedgerStore = create<LedgerStore>()(
 
         const valid =
           !!account &&
+          !account.archived &&
           !!category &&
           category.kind === input.type &&
           Number.isFinite(amount) &&
@@ -252,11 +548,34 @@ export const useLedgerStore = create<LedgerStore>()(
           return null;
         }
 
+        const normalizedInput = {
+          ...input,
+          amount,
+          entryType: input.entryType ?? 'normal',
+        };
+
+        if (
+          normalizedInput.entryType === 'refund' &&
+          !isValidRefund(
+            normalizedInput,
+            transactions,
+            accounts
+          )
+        ) {
+          return null;
+        }
+
+        if (
+          normalizedInput.entryType === 'normal' &&
+          normalizedInput.relatedTransactionId
+        ) {
+          return null;
+        }
+
         const timestamp = now();
 
         const transaction: Transaction = {
-          ...input,
-          amount,
+          ...normalizedInput,
           currencyCode: account.currencyCode,
           id: generateId('trx'),
           createdAt: timestamp,
@@ -275,7 +594,7 @@ export const useLedgerStore = create<LedgerStore>()(
 
         const current = transactions.find((item) => item.id === id);
 
-        if (!current) {
+        if (!current || current.entryType === 'refund') {
           return false;
         }
 
@@ -294,14 +613,39 @@ export const useLedgerStore = create<LedgerStore>()(
 
         const amount = roundMoney(next.amount);
 
+        const linkedRefunds = getRefundedAmount(
+          transactions,
+          current.id
+        );
+
+        const hasLinkedRefunds = linkedRefunds > 0;
+
+        if (
+          hasLinkedRefunds &&
+          (
+            next.type !== current.type ||
+            next.accountId !== current.accountId ||
+            next.categoryId !== current.categoryId
+          )
+        ) {
+          return false;
+        }
+
         const valid =
           !!account &&
+          !account.archived &&
           !!category &&
           category.kind === next.type &&
           Number.isFinite(amount) &&
-          amount > 0;
+          amount > 0 &&
+          next.entryType !== 'refund' &&
+          !next.relatedTransactionId;
 
         if (!valid || !account) {
+          return false;
+        }
+
+        if (linkedRefunds > amount) {
           return false;
         }
 
@@ -321,10 +665,181 @@ export const useLedgerStore = create<LedgerStore>()(
         return true;
       },
 
-      removeTransaction: (id) =>
+      removeTransaction: (id) => {
+        const { transactions } = get();
+
+        const current = transactions.find(
+          (transaction) => transaction.id === id
+        );
+
+        if (!current) {
+          return;
+        }
+
+        const hasRefunds = transactions.some(
+          (transaction) =>
+            transaction.entryType === 'refund' &&
+            transaction.relatedTransactionId === id
+        );
+
+        if (hasRefunds) {
+          return;
+        }
+
         set((state) => ({
           transactions: state.transactions.filter(
             (transaction) => transaction.id !== id
+          ),
+        }));
+      },
+
+      /* ------------------------------ Transfers ---------------------------- */
+
+      addTransfer: (input) => {
+        const { accounts } = get();
+
+        const fromAccount = accounts.find(
+          (account) => account.id === input.fromAccountId
+        );
+
+        const toAccount = accounts.find(
+          (account) => account.id === input.toAccountId
+        );
+
+        if (
+          !fromAccount ||
+          !toAccount ||
+          !isValidTransferAccounts(
+            fromAccount,
+            toAccount,
+            input.type
+          ) ||
+          !isValidTransferAmounts(
+            input,
+            fromAccount,
+            toAccount
+          )
+        ) {
+          return null;
+        }
+
+        const timestamp = now();
+
+        const transfer = buildTransfer(
+          input,
+          generateId('trf'),
+          timestamp
+        );
+
+        set((state) => ({
+          transfers: [transfer, ...state.transfers],
+        }));
+
+        return transfer.id;
+      },
+
+      updateTransfer: (id, patch) => {
+        const { accounts, transfers } = get();
+
+        const current = transfers.find((item) => item.id === id);
+
+        if (!current) {
+          return false;
+        }
+
+        const patchValues = definedOnly(patch);
+
+        const nextFromAccountId =
+          patchValues.fromAccountId ?? current.fromAccountId;
+
+        const nextToAccountId =
+          patchValues.toAccountId ?? current.toAccountId;
+
+        const nextFromAccount = accounts.find(
+          (account) => account.id === nextFromAccountId
+        );
+
+        const nextToAccount = accounts.find(
+          (account) => account.id === nextToAccountId
+        );
+
+        if (
+          !nextFromAccount ||
+          !nextToAccount ||
+          !isValidTransferAccounts(
+            nextFromAccount,
+            nextToAccount,
+            patchValues.type ?? current.type
+          )
+        ) {
+          return false;
+        }
+
+        const legacyFromAmount = current.fromAmount ?? current.amount;
+        const legacyToAmount = current.toAmount ?? current.amount;
+
+        const nextInput: NewTransferInput = {
+          fromAccountId: nextFromAccountId,
+          toAccountId: nextToAccountId,
+          fromAmount:
+            patchValues.fromAmount ?? legacyFromAmount,
+          fromCurrencyCode:
+            patchValues.fromCurrencyCode ??
+            current.fromCurrencyCode ??
+            current.currencyCode,
+          toAmount:
+            patchValues.toAmount ?? legacyToAmount,
+          toCurrencyCode:
+            patchValues.toCurrencyCode ??
+            current.toCurrencyCode ??
+            current.currencyCode,
+          exchangeRate:
+            patchValues.exchangeRate ??
+            current.exchangeRate ??
+            (
+              legacyFromAmount > 0
+                ? legacyToAmount / legacyFromAmount
+                : 1
+            ),
+          date: patchValues.date ?? current.date,
+          type: patchValues.type ?? current.type,
+          note: patchValues.note ?? current.note,
+        };
+
+        if (
+          !isValidTransferAmounts(
+            nextInput,
+            nextFromAccount,
+            nextToAccount
+          )
+        ) {
+          return false;
+        }
+
+        const updated = buildTransfer(
+          nextInput,
+          current.id,
+          current.createdAt
+        );
+
+        set((state) => ({
+          transfers: state.transfers.map((transfer) =>
+            transfer.id === id
+              ? {
+                  ...updated,
+                  updatedAt: now(),
+                }
+              : transfer
+          ),
+        }));
+
+        return true;
+      },
+
+      removeTransfer: (id) =>
+        set((state) => ({
+          transfers: state.transfers.filter(
+            (transfer) => transfer.id !== id
           ),
         })),
 
@@ -342,6 +857,7 @@ export const useLedgerStore = create<LedgerStore>()(
         accounts: state.accounts,
         categories: state.categories,
         transactions: state.transactions,
+        transfers: state.transfers,
       }),
 
       migrate: (persistedState, _persistedVersion): LedgerData =>

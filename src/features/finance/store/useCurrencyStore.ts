@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import {
+  CURRENCIES,
   DEFAULT_BASE_CURRENCY,
   DEFAULT_RATES_TO_EGP,
   RATE_ANCHOR,
@@ -20,7 +21,7 @@ export interface MetalPrices {
 
 export interface LiveRatesPayload {
   rates: Record<string, number>;
-  metals: Partial<MetalPrices>;
+  metals: MetalPrices;
   updatedAt: string;
 }
 
@@ -36,7 +37,7 @@ interface CurrencyActions {
   setBaseCurrency: (code: string) => void;
   setRate: (code: string, rate: number) => boolean;
   setMetalPrice: (kind: MetalKey, value: number | null) => boolean;
-  applyLiveRates: (payload: LiveRatesPayload) => void;
+  applyLiveRates: (payload: LiveRatesPayload) => boolean;
   resetRates: () => void;
 }
 
@@ -119,10 +120,6 @@ function normalizeUpdatedAt(value: unknown): string | null {
     : null;
 }
 
-/**
- * Converts persisted currency data from older versions to the
- * current shape without discarding valid saved values.
- */
 function migrateCurrencyData(
   persistedState: unknown,
 ): CurrencyData {
@@ -143,6 +140,34 @@ function migrateCurrencyData(
     updatedAt: normalizeUpdatedAt(saved.updatedAt),
     source: normalizeSource(saved.source),
   };
+}
+
+function isCompleteLivePayload(
+  payload: LiveRatesPayload,
+): boolean {
+  if (
+    !isRecord(payload.rates) ||
+    !isRecord(payload.metals) ||
+    typeof payload.updatedAt !== 'string' ||
+    payload.updatedAt.trim() === ''
+  ) {
+    return false;
+  }
+
+  for (const currency of CURRENCIES) {
+    if (
+      currency.code !== RATE_ANCHOR &&
+      !isValidRate(payload.rates[currency.code])
+    ) {
+      return false;
+    }
+  }
+
+  return (
+    payload.rates[RATE_ANCHOR] === 1 &&
+    isValidRate(payload.metals.gold24PerGram) &&
+    isValidRate(payload.metals.silverPerGram)
+  );
 }
 
 export const useCurrencyStore = create<CurrencyStore>()(
@@ -202,45 +227,21 @@ export const useCurrencyStore = create<CurrencyStore>()(
       },
 
       applyLiveRates: (payload) => {
-        set((state) => {
-          const validLiveRates: Record<string, number> = {};
+        if (!isCompleteLivePayload(payload)) {
+          return false;
+        }
 
-          for (const [rawCode, rate] of Object.entries(
-            payload.rates ?? {},
-          )) {
-            const code = rawCode.trim().toUpperCase();
-
-            if (
-              code &&
-              code !== RATE_ANCHOR &&
-              isValidRate(rate)
-            ) {
-              validLiveRates[code] = rate;
-            }
-          }
-
-          const nextMetals = { ...state.metals };
-          const goldPrice = payload.metals?.gold24PerGram;
-          const silverPrice = payload.metals?.silverPerGram;
-
-          if (isValidRate(goldPrice)) {
-            nextMetals.gold24PerGram = goldPrice;
-          }
-
-          if (isValidRate(silverPrice)) {
-            nextMetals.silverPerGram = silverPrice;
-          }
-
-          return {
-            rates: normalizeRates({
-              ...state.rates,
-              ...validLiveRates,
-            }),
-            metals: nextMetals,
-            source: 'live',
-            updatedAt: normalizeUpdatedAt(payload.updatedAt),
-          };
+        set({
+          rates: normalizeRates(payload.rates),
+          metals: {
+            gold24PerGram: payload.metals.gold24PerGram,
+            silverPerGram: payload.metals.silverPerGram,
+          },
+          source: 'live',
+          updatedAt: payload.updatedAt,
         });
+
+        return true;
       },
 
       resetRates: () =>
@@ -279,7 +280,6 @@ export const useCurrencyStore = create<CurrencyStore>()(
   ),
 );
 
-/** True once AsyncStorage data has been loaded into the store. */
 export function useCurrencyHydrated(): boolean {
   const [hydrated, setHydrated] = useState(() =>
     useCurrencyStore.persist.hasHydrated(),

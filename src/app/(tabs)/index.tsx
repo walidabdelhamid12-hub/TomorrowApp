@@ -23,6 +23,7 @@ import { AssetRow } from '@/features/finance/components/AssetRow';
 import { RatesModal } from '@/features/finance/components/RatesModal';
 import { TotalCard } from '@/features/finance/components/TotalCard';
 import { TransactionsSection } from '@/features/finance/components/TransactionsSection';
+import { TransferModal } from '@/features/finance/components/TransferModal';
 import { useAutoRefreshRates } from '@/features/finance/hooks/useAutoRefreshRates';
 import { useFinanceSummary } from '@/features/finance/hooks/useFinanceSummary';
 import {
@@ -50,7 +51,13 @@ import {
 } from '@/features/finance/utils/finance';
 import { moduleColors, useTheme } from '@/theme';
 
-type AddMenuAction = 'transaction' | 'account' | 'asset' | 'rates';
+type AddMenuAction =
+  | 'transaction'
+  | 'transfer'
+  | 'account'
+  | 'asset'
+  | 'rates';
+
 type MenuIconName = ComponentProps<typeof Ionicons>['name'];
 
 export default function FinanceRoute() {
@@ -93,6 +100,8 @@ export default function FinanceRoute() {
 
   const [txOpen, setTxOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+
+  const [transferOpen, setTransferOpen] = useState(false);
 
   const [accountOpen, setAccountOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -148,6 +157,9 @@ export default function FinanceRoute() {
       case 'transaction':
         openTransaction(null);
         break;
+      case 'transfer':
+        setTransferOpen(true);
+        break;
       case 'account':
         openAccount(null);
         break;
@@ -166,6 +178,7 @@ export default function FinanceRoute() {
     useLedgerStore.setState({
       accounts: [],
       transactions: [],
+      transfers: [],
     });
   };
 
@@ -196,7 +209,7 @@ export default function FinanceRoute() {
 
   const confirmDeleteAccount = (account: Account) => {
     const message =
-      'Deleting this account may also delete its linked transactions.';
+      'Deleting this account may also delete its linked transactions and transfers.';
 
     if (Platform.OS === 'web') {
       const confirmed = window.confirm(
@@ -247,7 +260,7 @@ export default function FinanceRoute() {
 
   const confirmClearTestData = () => {
     const message =
-      'This will permanently delete all assets, accounts, and transactions.\n\n' +
+      'This will permanently delete all assets, accounts, transactions, and transfers.\n\n' +
       'Categories, currencies, exchange rates, debts, loans, and cheques will be kept.';
 
     if (Platform.OS === 'web') {
@@ -262,7 +275,7 @@ export default function FinanceRoute() {
       performClearTestData();
 
       window.alert(
-        'Done!\n\nAssets, accounts, and transactions have been cleared.',
+        'Done!\n\nAssets, accounts, transactions, and transfers have been cleared.',
       );
 
       return;
@@ -278,7 +291,7 @@ export default function FinanceRoute() {
 
           Alert.alert(
             'Done',
-            'Assets, accounts, and transactions have been cleared.',
+            'Assets, accounts, transactions, and transfers have been cleared.',
           );
         },
       },
@@ -494,6 +507,11 @@ export default function FinanceRoute() {
         onClose={() => setTxOpen(false)}
       />
 
+      <TransferModal
+        visible={transferOpen}
+        onClose={() => setTransferOpen(false)}
+      />
+
       <AddAccountModal
         visible={accountOpen}
         account={editingAccount}
@@ -611,6 +629,14 @@ export default function FinanceRoute() {
                 onPress={() => handleAddMenuAction('transaction')}
                 accent="#60A5FA"
                 background="#1E3A5F"
+              />
+
+              <MenuOption
+                icon="repeat-outline"
+                title="Transfer"
+                onPress={() => handleAddMenuAction('transfer')}
+                accent="#A78BFA"
+                background="#3B246B"
               />
 
               <MenuOption
