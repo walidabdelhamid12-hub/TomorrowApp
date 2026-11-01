@@ -1,14 +1,16 @@
 
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { AppText, Card } from '@/components/ui';
+import { AppButton, AppText, Card } from '@/components/ui';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
 import { moduleColors, useTheme } from '@/theme';
+
+const PREVIEW_COUNT = 1;
 
 const TYPE_LABELS: Record<AccountType, string> = {
   cash: 'Cash',
@@ -24,122 +26,194 @@ interface AccountsSectionProps {
   onDelete: (account: Account) => void;
   baseCurrency?: string;
   rates?: unknown;
+  amountsVisible: boolean;
 }
 
 export function AccountsSection({
   accounts,
   onEdit,
   onDelete,
+  amountsVisible,
 }: AccountsSectionProps) {
   const { colors, spacing } = useTheme();
+
+  const [expanded, setExpanded] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   const transactions = useLedgerStore((s) => s.transactions);
   const transfers = useLedgerStore((s) => s.transfers);
 
-  // Use the same balance calculation as the Finance Summary.
   const balances = useMemo(() => {
     const map = new Map<string, number>();
 
     for (const account of accounts) {
       map.set(
         account.id,
-        getAccountBalance(account, transactions, transfers)
+        getAccountBalance(account, transactions, transfers),
       );
     }
 
     return map;
   }, [accounts, transactions, transfers]);
 
+  const visibleAccounts = showAll
+    ? accounts
+    : accounts.slice(0, PREVIEW_COUNT);
+
   return (
-    <>
-      <AppText
-        variant="h3"
-        style={{ marginTop: spacing.xl, marginBottom: spacing.md }}
+    <View style={{ marginTop: spacing.xl }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel="Toggle accounts section"
+        onPress={() => {
+          setExpanded((value) => !value);
+          setShowAll(false);
+        }}
+        style={styles.sectionHeader}
       >
-        Accounts
-      </AppText>
+        <View style={styles.headerTitle}>
+          <View style={styles.headerIcon}>
+            <Ionicons
+              name="wallet-outline"
+              size={21}
+              color="#60A5FA"
+            />
+          </View>
 
-      {accounts.length === 0 ? (
-        <Card variant="filled">
-          <AppText color="textSecondary" align="center">
-            No accounts yet. Tap "Account" to add one.
+          <AppText variant="h3">Accounts</AppText>
+
+          <AppText variant="caption" color="textSecondary">
+            {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
           </AppText>
-        </Card>
-      ) : (
-        <Card padded={false}>
-          {accounts.map((account, index) => {
-            const balance =
-              balances.get(account.id) ?? account.initialBalance;
-            const negative = balance < 0;
+        </View>
 
-            return (
-              <View
-                key={account.id}
-                style={[
-                  styles.row,
-                  { padding: spacing.md },
-                  index > 0 && {
-                    borderTopWidth: StyleSheet.hairlineWidth,
-                    borderTopColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.flex}>
-                  <AppText style={styles.name}>
-                    {account.name}
-                  </AppText>
+        <Ionicons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={21}
+          color={colors.textSecondary}
+        />
+      </Pressable>
 
-                  <AppText variant="caption" color="textSecondary">
-                    {`${TYPE_LABELS[account.type]} · ${account.currencyCode}`}
-                  </AppText>
-                </View>
+      {expanded ? (
+        accounts.length === 0 ? (
+          <Card variant="filled">
+            <AppText color="textSecondary" align="center">
+              No accounts yet. Tap "Account" to add one.
+            </AppText>
+          </Card>
+        ) : (
+          <>
+            <Card padded={false}>
+              {visibleAccounts.map((account, index) => {
+                const balance =
+                  balances.get(account.id) ?? account.initialBalance;
+                const negative = balance < 0;
 
-                <AppText
-                  {...(negative ? ({ color: 'danger' } as const) : {})}
-                  style={styles.balance}
-                >
-                  {`${formatAmount(balance)} ${account.currencyCode}`}
-                </AppText>
-
-                <View style={[styles.actions, { marginStart: spacing.sm }]}>
-                  <Pressable
-                    onPress={() => onEdit(account)}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit ${account.name}`}
-                    style={styles.actionButton}
+                return (
+                  <View
+                    key={account.id}
+                    style={[
+                      styles.row,
+                      { padding: spacing.md },
+                      index > 0 && {
+                        borderTopWidth: StyleSheet.hairlineWidth,
+                        borderTopColor: colors.border,
+                      },
+                    ]}
                   >
-                    <Ionicons
-                      name="create-outline"
-                      size={17}
-                      color={moduleColors.finance}
-                    />
-                  </Pressable>
+                    <View style={styles.flex}>
+                      <AppText style={styles.name}>
+                        {account.name}
+                      </AppText>
 
-                  <Pressable
-                    onPress={() => onDelete(account)}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete ${account.name}`}
-                    style={styles.actionButton}
-                  >
-                    <Ionicons
-                      name="trash-outline"
-                      size={15}
-                      color={colors.textSecondary}
-                    />
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })}
-        </Card>
-      )}
-    </>
+                      <AppText variant="caption" color="textSecondary">
+                        {`${TYPE_LABELS[account.type]} · ${account.currencyCode}`}
+                      </AppText>
+                    </View>
+
+                    <AppText
+                      {...(negative ? ({ color: 'danger' } as const) : {})}
+                      style={styles.balance}
+                      numberOfLines={1}
+                    >
+                      {amountsVisible
+                        ? `${formatAmount(balance)} ${account.currencyCode}`
+                        : '••••••'}
+                    </AppText>
+
+                    <View style={[styles.actions, { marginStart: spacing.sm }]}>
+                      <Pressable
+                        onPress={() => onEdit(account)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit ${account.name}`}
+                        style={styles.actionButton}
+                      >
+                        <Ionicons
+                          name="create-outline"
+                          size={17}
+                          color={moduleColors.finance}
+                        />
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => onDelete(account)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete ${account.name}`}
+                        style={styles.actionButton}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={15}
+                          color={colors.textSecondary}
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
+            </Card>
+
+            {accounts.length > PREVIEW_COUNT ? (
+              <AppButton
+                title={
+                  showAll
+                    ? 'Show less'
+                    : `View all (${accounts.length})`
+                }
+                variant="ghost"
+                onPress={() => setShowAll((value) => !value)}
+              />
+            ) : null}
+          </>
+        )
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  headerTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#1E3A5F',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   flex: {
     flex: 1,
     minWidth: 0,
@@ -153,6 +227,7 @@ const styles = StyleSheet.create({
   },
   balance: {
     fontWeight: '600',
+    flexShrink: 1,
   },
   actions: {
     flexDirection: 'row',

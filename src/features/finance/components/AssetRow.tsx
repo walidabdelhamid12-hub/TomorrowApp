@@ -29,6 +29,7 @@ interface AssetRowProps {
   gold24PerGram: number | null;
   silverPerGram: number | null;
   first: boolean;
+  amountsVisible: boolean;
   onEdit: () => void;
   onViewEntries: () => void;
   onDelete: () => void;
@@ -41,6 +42,7 @@ export function AssetRow({
   gold24PerGram,
   silverPerGram,
   first,
+  amountsVisible,
   onEdit,
   onDelete,
 }: AssetRowProps) {
@@ -183,13 +185,17 @@ export function AssetRow({
       </View>
 
       <View style={styles.end}>
-        <AppText variant="bodyStrong" color={metalTextColor}>
-          {amountText}
+        <AppText
+          variant="bodyStrong"
+          color={metalTextColor}
+          numberOfLines={1}
+        >
+          {amountsVisible ? amountText : '••••••'}
         </AppText>
 
         {showConverted ? (
-          <AppText variant="caption" color="textSecondary">
-            {convertedText}
+          <AppText variant="caption" color="textSecondary" numberOfLines={1}>
+            {amountsVisible ? convertedText : '••••••'}
           </AppText>
         ) : null}
       </View>

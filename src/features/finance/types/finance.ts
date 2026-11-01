@@ -38,11 +38,6 @@ export type AssetCategory =
 
 export type GoldKarat = 24 | 22 | 21 | 18 | 14;
 
-/**
- * A dated movement on an asset.
- * Currency assets use currency units.
- * Gold and silver assets use grams.
- */
 export interface AssetEntry {
   id: EntityId;
   date: ISODate;
@@ -83,13 +78,11 @@ export type Asset =
   | GoldAsset
   | SilverAsset;
 
-/** Category is fixed after creation. Entries are added separately. */
 export type NewAssetInput = DistributiveOmit<
   Asset,
   'id' | 'entries' | 'createdAt' | 'updatedAt'
 >;
 
-/** Fields that can be edited after an asset is created. */
 export interface AssetPatch {
   name?: string;
   notes?: string;
@@ -116,6 +109,12 @@ export interface DebtPayment {
   date: ISODate;
   amount: number;
   note?: string;
+
+  /** Account used for the confirmed payment or collection. */
+  accountId?: EntityId;
+
+  /** Ledger transaction created for this payment, if posted. */
+  ledgerTransactionId?: EntityId;
 }
 
 export interface Debt extends Timestamps {
@@ -152,6 +151,12 @@ export interface LoanPayment {
   date: ISODate;
   amount: number;
   note?: string;
+
+  /** Account used for the confirmed installment payment. */
+  accountId?: EntityId;
+
+  /** Ledger transaction created for this installment, if posted. */
+  ledgerTransactionId?: EntityId;
 }
 
 export interface Loan extends Timestamps {
@@ -213,7 +218,7 @@ export type ChequePatch = Partial<
 >;
 
 /* -------------------------------------------------------------------------- */
-/* Persisted state                                                            */
+/* 4) Persisted finance state                                                 */
 /* -------------------------------------------------------------------------- */
 
 export interface FinanceData {

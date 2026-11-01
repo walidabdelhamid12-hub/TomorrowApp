@@ -98,8 +98,8 @@ function parseMetal(json: unknown): number | null {
 /**
  * Fetches all exchange and metal prices as one complete batch.
  *
- * If any source fails or returns invalid data, nothing is saved.
- * The previously saved prices remain unchanged.
+ * If any source fails, returns invalid data, or the store rejects
+ * the update, the previously saved prices remain unchanged.
  */
 export async function refreshLiveRates(): Promise<RefreshResult> {
   const [fxResult, goldResult, silverResult] =
@@ -136,9 +136,9 @@ export async function refreshLiveRates(): Promise<RefreshResult> {
     };
   }
 
-  const egpPerUsd = rates.USD;
+  const egpPerUsd = rates[RATE_ANCHOR];
 
-  if (egpPerUsd === undefined || !Number.isFinite(egpPerUsd)) {
+  if (!Number.isFinite(egpPerUsd) || egpPerUsd <= 0) {
     return {
       ok: false,
       message:
@@ -165,7 +165,7 @@ export async function refreshLiveRates(): Promise<RefreshResult> {
     };
   }
 
-  useCurrencyStore.getState().applyLiveRates({
+  const saved = useCurrencyStore.getState().applyLiveRates({
     rates,
     metals: {
       gold24PerGram,
@@ -173,6 +173,14 @@ export async function refreshLiveRates(): Promise<RefreshResult> {
     },
     updatedAt: new Date().toISOString(),
   });
+
+  if (!saved) {
+    return {
+      ok: false,
+      message:
+        'Rates were received but could not be saved. Previous saved rates were kept.',
+    };
+  }
 
   return {
     ok: true,

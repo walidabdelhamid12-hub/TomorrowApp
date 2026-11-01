@@ -8,7 +8,12 @@ import type {
 
 /* ------------------------------- Accounts -------------------------------- */
 
-export type AccountType = 'cash' | 'bank' | 'wallet' | 'savings' | 'credit_card';
+export type AccountType =
+  | 'cash'
+  | 'bank'
+  | 'wallet'
+  | 'savings'
+  | 'credit_card';
 
 export interface Account extends Timestamps {
   id: EntityId;
@@ -55,19 +60,50 @@ export type CategoryPatch = Partial<Omit<NewCategoryInput, 'kind'>>;
 
 export type TransactionEntryType = 'normal' | 'refund';
 
+/**
+ * Purpose of a transaction.
+ * Optional for backward compatibility with previously saved transactions.
+ */
+export type TransactionPurpose =
+  | 'normal'
+  | 'debt_payment'
+  | 'debt_collection'
+  | 'loan_principal_payment'
+  | 'loan_interest_payment';
+
 export interface Transaction extends Timestamps {
   id: EntityId;
   type: TransactionType;
+
   /** Missing on old records; treated as a normal transaction. */
   entryType?: TransactionEntryType;
+
+  /**
+   * Accounting purpose.
+   * Missing on old records; treat it as a normal transaction.
+   */
+  purpose?: TransactionPurpose;
+
   /** Always positive. The accounting effect depends on type and entryType. */
   amount: number;
+
   /** Copied from the account when saved. */
   currencyCode: CurrencyCode;
+
   accountId: EntityId;
   categoryId: EntityId;
+
   /** Required for refunds; identifies the original expense. */
   relatedTransactionId?: EntityId;
+
+  /**
+   * Optional link to the debt or loan settled by this transaction.
+   * These fields allow the app to prevent duplicate ledger posting.
+   */
+  linkedEntityType?: 'debt' | 'loan';
+  linkedEntityId?: EntityId;
+  linkedPaymentId?: EntityId;
+
   date: ISODate;
   note?: string;
 }

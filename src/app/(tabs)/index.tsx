@@ -1,3 +1,4 @@
+
 import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 import { useState } from 'react';
@@ -51,25 +52,26 @@ import {
 } from '@/features/finance/utils/finance';
 import { moduleColors, useTheme } from '@/theme';
 
-type AddMenuAction =
-  | 'transaction'
-  | 'transfer'
-  | 'account'
-  | 'asset'
-  | 'rates';
+type AddMenuAction = 'transaction' | 'transfer' | 'account' | 'asset';
 
 type MenuIconName = ComponentProps<typeof Ionicons>['name'];
+
+const ASSET_PREVIEW_COUNT = 1;
 
 export default function FinanceRoute() {
   const { colors, spacing } = useTheme();
   const accent = moduleColors.finance;
+
+  const [amountsVisible, setAmountsVisible] = useState(false);
+  const [assetsExpanded, setAssetsExpanded] = useState(false);
+  const [showAllAssets, setShowAllAssets] = useState(false);
 
   const ledgerReady = useLedgerHydrated();
   const currencyReady = useCurrencyHydrated();
   const financeReady = useFinanceHydrated();
   const ready = ledgerReady && currencyReady && financeReady;
 
-  useAutoRefreshRates(ready);
+  const { refresh, isRefreshing } = useAutoRefreshRates(ready);
 
   const summary = useFinanceSummary();
 
@@ -165,9 +167,6 @@ export default function FinanceRoute() {
         break;
       case 'asset':
         openAsset(null);
-        break;
-      case 'rates':
-        setRatesOpen(true);
         break;
     }
   };
@@ -414,6 +413,10 @@ export default function FinanceRoute() {
     ? assets.find((item) => item.id === entriesAsset.id) ?? null
     : null;
 
+  const visibleAssets = showAllAssets
+    ? assets
+    : assets.slice(0, ASSET_PREVIEW_COUNT);
+
   return (
     <Screen scroll>
       <AppText variant="h1">Finance</AppText>
@@ -433,60 +436,140 @@ export default function FinanceRoute() {
         missing={summary.missing}
         income={summary.income}
         expense={summary.expense}
+        amountsVisible={amountsVisible}
+        onToggleAmounts={() =>
+          setAmountsVisible((current) => !current)
+        }
       />
 
-      <View style={{ marginTop: spacing.lg }}>
-        <AppButton
-          title="Add transaction"
-          accentColor={accent}
-          leftIcon={
-            <Ionicons name="add" size={20} color={colors.onPrimary} />
-          }
-          onPress={() => setAddMenuOpen(true)}
-        />
+      <View style={[styles.actionRow, { marginTop: spacing.lg }]}>
+        <View style={styles.transactionButton}>
+          <AppButton
+            title="Add transaction"
+            accentColor={accent}
+            leftIcon={
+              <Ionicons name="add" size={20} color={colors.onPrimary} />
+            }
+            onPress={() => setAddMenuOpen(true)}
+          />
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open exchange rates"
+          onPress={() => setRatesOpen(true)}
+          style={({ pressed }) => [
+            styles.ratesButton,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              opacity: pressed ? 0.75 : 1,
+            },
+          ]}
+        >
+          <Ionicons
+            name="trending-up-outline"
+            size={20}
+            color={accent}
+          />
+          <AppText style={[styles.ratesButtonText, { color: accent }]}>
+            Rates
+          </AppText>
+        </Pressable>
       </View>
 
       <AccountsSection
         accounts={summary.activeAccounts}
         baseCurrency={summary.baseCurrency}
         rates={summary.rates}
+        amountsVisible={amountsVisible}
         onEdit={openAccount}
         onDelete={confirmDeleteAccount}
       />
 
-      <AppText
-        variant="h3"
-        style={{ marginTop: spacing.xl, marginBottom: spacing.md }}
-      >
-        Assets
-      </AppText>
+      <View style={{ marginTop: spacing.xl }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: assetsExpanded }}
+          accessibilityLabel="Toggle assets section"
+          onPress={() => {
+            setAssetsExpanded((value) => !value);
+            setShowAllAssets(false);
+          }}
+          style={styles.sectionHeader}
+        >
+          <View style={styles.sectionTitle}>
+            <View style={styles.assetsHeaderIcon}>
+              <Ionicons
+                name="diamond-outline"
+                size={21}
+                color="#A78BFA"
+              />
+            </View>
 
-      {assets.length === 0 ? (
-        <Card variant="filled">
-          <AppText color="textSecondary" align="center">
-            No assets yet. Use "Add transaction" to add currency, gold or silver.
-          </AppText>
-        </Card>
-      ) : (
-        <Card padded={false}>
-          {assets.map((asset, index) => (
-            <AssetRow
-              key={asset.id}
-              asset={asset}
-              baseCurrency={summary.baseCurrency}
-              rates={summary.rates}
-              gold24PerGram={summary.gold24PerGram}
-              silverPerGram={silverPerGram}
-              first={index === 0}
-              onEdit={() => openAsset(asset)}
-              onViewEntries={() => openAssetEntries(asset)}
-              onDelete={() => confirmDeleteAsset(asset.id, asset.name)}
-            />
-          ))}
-        </Card>
-      )}
+            <AppText variant="h3">Assets</AppText>
+
+            <AppText variant="caption" color="textSecondary">
+              {assets.length} {assets.length === 1 ? 'asset' : 'assets'}
+            </AppText>
+          </View>
+
+          <Ionicons
+            name={assetsExpanded ? 'chevron-up' : 'chevron-down'}
+            size={21}
+            color={colors.textSecondary}
+          />
+        </Pressable>
+
+        {assetsExpanded ? (
+          assets.length === 0 ? (
+            <Card variant="filled">
+              <AppText color="textSecondary" align="center">
+                No assets yet. Use "Add transaction" to add currency, gold or silver.
+              </AppText>
+            </Card>
+          ) : (
+            <>
+              <Card padded={false}>
+                {visibleAssets.map((asset, index) => (
+                  <AssetRow
+                    key={asset.id}
+                    asset={asset}
+                    baseCurrency={summary.baseCurrency}
+                    rates={summary.rates}
+                    gold24PerGram={summary.gold24PerGram}
+                    silverPerGram={silverPerGram}
+                    first={index === 0}
+                    amountsVisible={amountsVisible}
+                    onEdit={() => openAsset(asset)}
+                    onViewEntries={() => openAssetEntries(asset)}
+                    onDelete={() =>
+                      confirmDeleteAsset(asset.id, asset.name)
+                    }
+                  />
+                ))}
+              </Card>
+
+              {assets.length > ASSET_PREVIEW_COUNT ? (
+                <AppButton
+                  title={
+                    showAllAssets
+                      ? 'Show less'
+                      : `View all (${assets.length})`
+                  }
+                  variant="ghost"
+                  onPress={() =>
+                    setShowAllAssets((value) => !value)
+                  }
+                />
+              ) : null}
+            </>
+          )
+        ) : null}
+      </View>
 
       <TransactionsSection
+        amountsVisible={amountsVisible}
         onEdit={openTransaction}
         onDelete={confirmDeleteTransaction}
       />
@@ -585,6 +668,8 @@ export default function FinanceRoute() {
       <RatesModal
         visible={ratesOpen}
         onClose={() => setRatesOpen(false)}
+        refreshRates={refresh}
+        isRefreshing={isRefreshing}
       />
 
       <Modal
@@ -654,14 +739,6 @@ export default function FinanceRoute() {
                 accent="#FBBF24"
                 background="#78350F"
               />
-
-              <MenuOption
-                icon="trending-up-outline"
-                title="Rates"
-                onPress={() => handleAddMenuAction('rates')}
-                accent="#C4B5FD"
-                background="#4C1D95"
-              />
             </View>
           </Pressable>
         </Pressable>
@@ -711,6 +788,50 @@ function MenuOption({
 const styles = StyleSheet.create({
   center: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  transactionButton: {
+    flex: 3,
+    minWidth: 0,
+  },
+  ratesButton: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: 4,
+  },
+  ratesButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  sectionTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  assetsHeaderIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#3B246B',
     alignItems: 'center',
     justifyContent: 'center',
   },

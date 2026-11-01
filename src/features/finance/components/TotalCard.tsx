@@ -1,5 +1,6 @@
 
 import { Ionicons } from '@expo/vector-icons';
+import type { ComponentProps } from 'react';
 import { useState } from 'react';
 import {
   Modal,
@@ -15,6 +16,8 @@ import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { useTheme } from '@/theme';
 
+type IconName = ComponentProps<typeof Ionicons>['name'];
+
 interface TotalCardProps {
   baseCurrency: string;
   total: number;
@@ -26,6 +29,8 @@ interface TotalCardProps {
   missing?: unknown;
   income: number;
   expense: number;
+  amountsVisible: boolean;
+  onToggleAmounts: () => void;
 }
 
 function countOf(value: unknown): number {
@@ -37,15 +42,40 @@ function countOf(value: unknown): number {
 interface StatProps {
   label: string;
   value: string;
+  icon: IconName;
+  color: string;
+  background: string;
+  fullWidth?: boolean;
 }
 
-function Stat({ label, value }: StatProps) {
+function Stat({
+  label,
+  value,
+  icon,
+  color,
+  background,
+  fullWidth = false,
+}: StatProps) {
   return (
-    <View style={styles.stat}>
-      <AppText variant="caption" color="textSecondary">
-        {label}
-      </AppText>
-      <AppText style={styles.statValue}>{value}</AppText>
+    <View style={[styles.stat, fullWidth && styles.fullWidthStat]}>
+      <View style={[styles.statIcon, { backgroundColor: background }]}>
+        <Ionicons name={icon} size={18} color={color} />
+      </View>
+
+      <View style={styles.statContent}>
+        <AppText style={styles.statLabel} numberOfLines={1}>
+          {label}
+        </AppText>
+
+        <AppText
+          style={styles.statValue}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+        >
+          {value}
+        </AppText>
+      </View>
     </View>
   );
 }
@@ -61,34 +91,79 @@ export function TotalCard({
   missing,
   income,
   expense,
+  amountsVisible,
+  onToggleAmounts,
 }: TotalCardProps) {
   const { spacing, colors } = useTheme();
 
   const setBaseCurrency = useCurrencyStore(
-    (state) => state.setBaseCurrency
+    (state) => state.setBaseCurrency,
   );
 
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
   const missingCount = countOf(missing);
 
   const selectedCurrency = CURRENCIES.find(
-    (currency) => currency.code === baseCurrency
+    (currency) => currency.code === baseCurrency,
   );
 
   const currencyFlag = selectedCurrency?.flag ?? '🌐';
+  const hiddenValue = '••••••';
 
-  const money = (n: number) => `${formatAmount(n)} ${baseCurrency}`;
+  const money = (amount: number) =>
+    amountsVisible
+      ? `${formatAmount(amount)} ${baseCurrency}`
+      : hiddenValue;
 
   return (
     <View style={{ marginTop: spacing.lg }}>
       <Card>
-        <AppText variant="caption" color="textSecondary">
-          NET WORTH
-        </AppText>
+        {/* Net Worth heading */}
+        <View style={styles.headingRow}>
+          <View style={styles.netWorthHeading}>
+            <View style={styles.netWorthIcon}>
+              <Ionicons
+                name="wallet"
+                size={18}
+                color={colors.primary}
+              />
+            </View>
 
+            <AppText style={styles.netWorthLabel}>
+              NET WORTH
+            </AppText>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              amountsVisible ? 'Hide amounts' : 'Show amounts'
+            }
+            accessibilityState={{ expanded: amountsVisible }}
+            onPress={onToggleAmounts}
+            hitSlop={10}
+            style={styles.visibilityButton}
+          >
+            <Ionicons
+              name={amountsVisible ? 'eye-outline' : 'eye-off-outline'}
+              size={21}
+              color={colors.text}
+            />
+          </Pressable>
+        </View>
+
+        {/* Main balance */}
         <View style={[styles.balanceRow, { marginTop: spacing.xs }]}>
           <View style={styles.balanceAmount}>
-            <AppText variant="h1">{formatAmount(total)}</AppText>
+            <AppText
+              variant="h1"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              style={styles.netWorthAmount}
+            >
+              {amountsVisible ? formatAmount(total) : hiddenValue}
+            </AppText>
           </View>
 
           <Pressable
@@ -101,8 +176,14 @@ export function TotalCard({
             ]}
             onPress={() => setCurrencyPickerOpen(true)}
           >
-            <AppText style={styles.currencyFlag}>{currencyFlag}</AppText>
-            <AppText style={styles.currencyCode}>{baseCurrency}</AppText>
+            <AppText style={styles.currencyFlag}>
+              {currencyFlag}
+            </AppText>
+
+            <AppText style={styles.currencyCode}>
+              {baseCurrency}
+            </AppText>
+
             <Ionicons
               name="chevron-down"
               size={16}
@@ -111,33 +192,93 @@ export function TotalCard({
           </Pressable>
         </View>
 
-        <View style={[styles.row, { marginTop: spacing.md }]}>
-          <Stat label="Accounts" value={money(accountsTotal)} />
-          <Stat label="Assets" value={money(assetsTotal)} />
+        {/* Accounts and Assets */}
+        <View style={[styles.row, { marginTop: spacing.lg }]}>
+          <Stat
+            label="Accounts"
+            value={money(accountsTotal)}
+            icon="wallet"
+            color="#2878D0"
+            background="#EAF3FC"
+          />
+
+          <Stat
+            label="Assets"
+            value={money(assetsTotal)}
+            icon="diamond"
+            color="#7556B8"
+            background="#F0EBFA"
+          />
         </View>
 
+        {/* Receivables and Payables */}
         <View style={[styles.row, { marginTop: spacing.md }]}>
           <Stat
             label="Receivables"
-            value={`+${money(receivablesTotal)}`}
+            value={
+              amountsVisible
+                ? `+${money(receivablesTotal)}`
+                : hiddenValue
+            }
+            icon="arrow-down-circle"
+            color="#209B70"
+            background="#E7F5EF"
           />
+
           <Stat
             label="Payables"
-            value={`-${money(payablesTotal)}`}
+            value={
+              amountsVisible
+                ? `-${money(payablesTotal)}`
+                : hiddenValue
+            }
+            icon="arrow-up-circle"
+            color="#D65353"
+            background="#FBECEC"
           />
         </View>
 
+        {/* Income and Expense */}
+        <View style={[styles.row, { marginTop: spacing.md }]}>
+          <Stat
+            label="Income"
+            value={
+              amountsVisible
+                ? `+${money(income)}`
+                : hiddenValue
+            }
+            icon="trending-up"
+            color="#209B70"
+            background="#E7F5EF"
+          />
+
+          <Stat
+            label="Expense"
+            value={
+              amountsVisible
+                ? `-${money(Math.abs(expense))}`
+                : hiddenValue
+            }
+            icon="trending-down"
+            color="#D65353"
+            background="#FBECEC"
+          />
+        </View>
+
+        {/* Loans Remaining - full width at the bottom */}
         <View style={[styles.row, { marginTop: spacing.md }]}>
           <Stat
             label="Loans Remaining"
-            value={`-${money(loansRemainingTotal)}`}
+            value={
+              amountsVisible
+                ? `-${money(loansRemainingTotal)}`
+                : hiddenValue
+            }
+            icon="card"
+            color="#B98218"
+            background="#FBF3E2"
+            fullWidth
           />
-          <Stat label="" value="" />
-        </View>
-
-        <View style={[styles.row, { marginTop: spacing.md }]}>
-          <Stat label="Income" value={`+${money(income)}`} />
-          <Stat label="Expense" value={`-${money(Math.abs(expense))}`} />
         </View>
 
         {missingCount > 0 ? (
@@ -151,6 +292,7 @@ export function TotalCard({
         ) : null}
       </Card>
 
+      {/* Base currency picker */}
       <Modal
         visible={currencyPickerOpen}
         transparent
@@ -160,7 +302,9 @@ export function TotalCard({
         <View style={styles.modalBackdrop}>
           <View style={styles.currencyModal}>
             <View style={styles.modalHeader}>
-              <AppText variant="h3">Choose base currency</AppText>
+              <AppText variant="h3">
+                Choose base currency
+              </AppText>
 
               <Pressable
                 accessibilityRole="button"
@@ -168,7 +312,11 @@ export function TotalCard({
                 onPress={() => setCurrencyPickerOpen(false)}
                 hitSlop={10}
               >
-                <Ionicons name="close" size={24} color="#333333" />
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color="#333333"
+                />
               </Pressable>
             </View>
 
@@ -201,6 +349,7 @@ export function TotalCard({
                       <AppText style={styles.optionFlag}>
                         {currency.flag}
                       </AppText>
+
                       <AppText>
                         {currency.name} ({currency.code})
                       </AppText>
@@ -225,9 +374,35 @@ export function TotalCard({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row' },
-  stat: { flex: 1 },
-  statValue: { fontWeight: '600', marginTop: 2 },
+  headingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  netWorthHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  netWorthIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    backgroundColor: '#EAF1FC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  netWorthLabel: {
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  netWorthAmount: {
+    fontSize: 28.5,
+    fontWeight: '700',
+  },
+  visibilityButton: {
+    padding: 5,
+  },
   balanceRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -236,6 +411,7 @@ const styles = StyleSheet.create({
   },
   balanceAmount: {
     flex: 1,
+    minWidth: 0,
   },
   currencyButton: {
     flexDirection: 'row',
@@ -251,6 +427,46 @@ const styles = StyleSheet.create({
   },
   currencyCode: {
     fontWeight: '700',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  stat: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 70,
+    borderRadius: 12,
+    backgroundColor: '#F7F8FC',
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  fullWidthStat: {
+    flex: 1,
+    width: '100%',
+  },
+  statIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  statLabel: {
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  statValue: {
+    fontWeight: '700',
+    fontSize: 15,
+    marginTop: 5,
   },
   modalBackdrop: {
     flex: 1,

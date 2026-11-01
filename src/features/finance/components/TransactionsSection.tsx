@@ -1,3 +1,4 @@
+
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -8,7 +9,7 @@ import type { Transaction } from '@/features/finance/types/ledger';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { moduleColors, useTheme } from '@/theme';
 
-const PREVIEW_COUNT = 10;
+const PREVIEW_COUNT = 1;
 
 type GlyphName = keyof typeof Ionicons.glyphMap;
 const isGlyph = (name: string): name is GlyphName =>
@@ -17,16 +18,21 @@ const isGlyph = (name: string): name is GlyphName =>
 interface TransactionsSectionProps {
   onEdit: (transaction: Transaction) => void;
   onDelete: (transaction: Transaction) => void;
+  amountsVisible: boolean;
 }
 
 export function TransactionsSection({
   onEdit,
   onDelete,
+  amountsVisible,
 }: TransactionsSectionProps) {
   const { colors, spacing } = useTheme();
+
   const transactions = useLedgerStore((s) => s.transactions);
   const categories = useLedgerStore((s) => s.categories);
   const accounts = useLedgerStore((s) => s.accounts);
+
+  const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
   const sorted = useMemo(
@@ -49,116 +55,181 @@ export function TransactionsSection({
     [accounts],
   );
 
-  const visible = showAll ? sorted : sorted.slice(0, PREVIEW_COUNT);
+  const visible = showAll
+    ? sorted
+    : sorted.slice(0, PREVIEW_COUNT);
 
   return (
-    <>
-      <AppText
-        variant="h3"
-        style={{ marginTop: spacing.xl, marginBottom: spacing.md }}
+    <View style={{ marginTop: spacing.xl }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel="Toggle recent transactions section"
+        onPress={() => {
+          setExpanded((value) => !value);
+          setShowAll(false);
+        }}
+        style={styles.sectionHeader}
       >
-        Recent transactions
-      </AppText>
+        <View style={styles.headerTitle}>
+          <View style={styles.headerIcon}>
+            <Ionicons
+              name="swap-horizontal-outline"
+              size={21}
+              color="#60A5FA"
+            />
+          </View>
 
-      {sorted.length === 0 ? (
-        <Card variant="filled">
-          <AppText color="textSecondary" align="center">
-            No transactions yet. Tap "Add transaction" to start.
+          <AppText variant="h3">Recent transactions</AppText>
+
+          <AppText variant="caption" color="textSecondary">
+            {sorted.length} total
           </AppText>
-        </Card>
-      ) : (
-        <Card padded={false}>
-          {visible.map((tx, index) => {
-            const category = categoryById.get(tx.categoryId);
-            const account = accountById.get(tx.accountId);
-            const isExpense = tx.type === 'expense';
-            const icon = category?.icon ?? '';
-            const tint = category?.color ?? moduleColors.finance;
+        </View>
 
-            return (
-              <View
-                key={tx.id}
-                style={[
-                  styles.row,
-                  { padding: spacing.md },
-                  index > 0 && {
-                    borderTopWidth: StyleSheet.hairlineWidth,
-                    borderTopColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={[styles.iconCircle, { marginEnd: spacing.md }]}>
-                  {isGlyph(icon) ? (
-                    <Ionicons name={icon} size={20} color={tint} />
-                  ) : (
-                    <AppText>{icon || '•'}</AppText>
-                  )}
-                </View>
-
-                <View style={styles.flex}>
-                  <AppText style={styles.name}>
-                    {category?.name ?? 'Uncategorized'}
-                  </AppText>
-
-                  <AppText variant="caption" color="textSecondary">
-                    {`${tx.date} · ${account?.name ?? '—'}`}
-                  </AppText>
-                </View>
-
-                <AppText
-                  {...(isExpense ? ({ color: 'danger' } as const) : {})}
-                  style={styles.amount}
-                >
-                  {`${isExpense ? '-' : '+'}${formatAmount(tx.amount)} ${tx.currencyCode}`}
-                </AppText>
-
-                <View style={[styles.actions, { marginStart: spacing.sm }]}>
-                  <Pressable
-                    onPress={() => onEdit(tx)}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Edit transaction"
-                    style={styles.actionButton}
-                  >
-                    <Ionicons
-                      name="create-outline"
-                      size={17}
-                      color={moduleColors.finance}
-                    />
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => onDelete(tx)}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Delete transaction"
-                    style={styles.actionButton}
-                  >
-                    <Ionicons
-                      name="trash-outline"
-                      size={15}
-                      color={colors.textSecondary}
-                    />
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })}
-        </Card>
-      )}
-
-      {sorted.length > PREVIEW_COUNT ? (
-        <AppButton
-          title={showAll ? 'Show less' : `Show all (${sorted.length})`}
-          variant="ghost"
-          onPress={() => setShowAll((v) => !v)}
+        <Ionicons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={21}
+          color={colors.textSecondary}
         />
+      </Pressable>
+
+      {expanded ? (
+        sorted.length === 0 ? (
+          <Card variant="filled">
+            <AppText color="textSecondary" align="center">
+              No transactions yet. Tap "Add transaction" to start.
+            </AppText>
+          </Card>
+        ) : (
+          <>
+            <Card padded={false}>
+              {visible.map((tx, index) => {
+                const category = categoryById.get(tx.categoryId);
+                const account = accountById.get(tx.accountId);
+                const isExpense = tx.type === 'expense';
+                const icon = category?.icon ?? '';
+                const tint = category?.color ?? moduleColors.finance;
+
+                return (
+                  <View
+                    key={tx.id}
+                    style={[
+                      styles.row,
+                      { padding: spacing.md },
+                      index > 0 && {
+                        borderTopWidth: StyleSheet.hairlineWidth,
+                        borderTopColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        { marginEnd: spacing.md },
+                      ]}
+                    >
+                      {isGlyph(icon) ? (
+                        <Ionicons name={icon} size={20} color={tint} />
+                      ) : (
+                        <AppText>{icon || '•'}</AppText>
+                      )}
+                    </View>
+
+                    <View style={styles.flex}>
+                      <AppText style={styles.name}>
+                        {category?.name ?? 'Uncategorized'}
+                      </AppText>
+
+                      <AppText variant="caption" color="textSecondary">
+                        {`${tx.date} · ${account?.name ?? '—'}`}
+                      </AppText>
+                    </View>
+
+                    <AppText
+                      style={[
+                        styles.amount,
+                        { color: isExpense ? '#DC2626' : '#16A34A' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {amountsVisible
+                        ? `${isExpense ? '-' : '+'}${formatAmount(tx.amount)} ${tx.currencyCode}`
+                        : '••••••'}
+                    </AppText>
+
+                    <View style={[styles.actions, { marginStart: spacing.sm }]}>
+                      <Pressable
+                        onPress={() => onEdit(tx)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Edit transaction"
+                        style={styles.actionButton}
+                      >
+                        <Ionicons
+                          name="create-outline"
+                          size={17}
+                          color={moduleColors.finance}
+                        />
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => onDelete(tx)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Delete transaction"
+                        style={styles.actionButton}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={15}
+                          color={colors.textSecondary}
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
+            </Card>
+
+            {sorted.length > PREVIEW_COUNT ? (
+              <AppButton
+                title={
+                  showAll
+                    ? 'Show less'
+                    : `View all (${sorted.length})`
+                }
+                variant="ghost"
+                onPress={() => setShowAll((value) => !value)}
+              />
+            ) : null}
+          </>
+        )
       ) : null}
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  headerTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#1E3A5F',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   flex: {
     flex: 1,
     minWidth: 0,
@@ -180,6 +251,7 @@ const styles = StyleSheet.create({
   },
   amount: {
     fontWeight: '600',
+    flexShrink: 1,
   },
   actions: {
     flexDirection: 'row',
