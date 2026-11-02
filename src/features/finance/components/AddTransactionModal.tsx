@@ -19,7 +19,6 @@ import {
   DateField,
 } from '@/components/ui';
 import { FormModal } from '@/features/finance/components/FormModal';
-import { CalculatorPad } from '@/features/finance/components/CalculatorPad';
 import { ScanDocumentButton } from '@/features/finance/components/ScanDocumentButton';
 import { getCurrencyLabel } from '@/features/finance/constants/currencies';
 import type { ScanResult } from '@/features/finance/scanner/types';
@@ -1144,6 +1143,39 @@ interface AddTransactionModalProps {
 }
 
 const styles = StyleSheet.create({
+  calculatorBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  calculatorPanel: {
+    width: '100%',
+    maxWidth: 390,
+    padding: 18,
+    gap: 14,
+  },
+  calculatorDisplay: {
+    minHeight: 92,
+    padding: 14,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  calculatorKeys: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  calculatorKey: {
+    width: '23%',
+    minHeight: 52,
+    borderWidth: 1,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   calculatorTrigger: {
     minWidth: 36,
     minHeight: 36,
@@ -1299,3 +1331,160 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 });
+
+const CALCULATOR_KEYS = [
+  ['C', '(', ')', '⌫'],
+  ['7', '8', '9', '÷'],
+  ['4', '5', '6', '×'],
+  ['1', '2', '3', '−'],
+  ['0', '.', '=', '+'],
+] as const;
+
+function calculateExpression(source: string): number | null {
+  const normalized = source.replace(/\\s/g, '').replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
+  const tokens = normalized.match(/\\d+(?:\\.\\d*)?|\\.\\d+|[()+\\-*/]/g);
+  if (!tokens || tokens.join('') !== normalized) return null;
+
+  let index = 0;
+  const parseExpression = (): number => {
+    const parsePrimary = (): number => {
+      const token = tokens[index++];
+      if (token === '+') return parsePrimary();
+      if (token === '-') return -parsePrimary();
+      if (token === '(') {
+        const value = parseExpression();
+        if (tokens[index++] !== ')') throw new Error('Missing parenthesis');
+        return value;
+      }
+      if (!token || !/^\\d*\\.?\\d+$/.test(token)) throw new Error('Invalid number');
+      return Number(token);
+    };
+    const parseTerm = (): number => {
+      let value = parsePrimary();
+      while (tokens[index] === '*' || tokens[index] === '/') {
+        const operator = tokens[index++];
+        const right = parsePrimary();
+        if (operator === '/' && right === 0) throw new Error('Division by zero');
+        value = operator === '*' ? value * right : value / right;
+      }
+      return value;
+    };
+    let value = parseTerm();
+    while (tokens[index] === '+' || tokens[index] === '-') {
+      const operator = tokens[index++];
+      const right = parseTerm();
+      value = operator === '+' ? value + right : value - right;
+    }
+    return value;
+  };
+
+  try {
+    const value = parseExpression();
+    if (index !== tokens.length || !Number.isFinite(value)) return null;
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+  } catch {
+    return null;
+  }
+}
+
+function CalculatorPad({
+  visible,
+  initialValue,
+  onClose,
+  onApply,
+}: {
+  visible: boolean;
+  initialValue: string;
+  onClose: () => void;
+  onApply: (value: string) => void;
+}) {
+  const { colors, radius } = useTheme();
+  const [expression, setExpression] = useState('0');
+  const [result, setResult] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      setExpression(initialValue.trim() || '0');
+      setResult(null);
+    }
+  }, [visible, initialValue]);
+
+  const pressKey = (key: string) => {
+    if (key === 'C') {
+      setExpression('0');
+      setResult(null);
+    } else if (key === '⌫') {
+      setExpression((current) => current.length > 1 ? current.slice(0, -1) : '0');
+      setResult(null);
+    } else if (key === '=') {
+      setResult(calculateExpression(expression));
+    } else {
+      setExpression((current) => current === '0' && /[0-9.]/.test(key) ? key : current + key);
+      setResult(null);
+    }
+  };
+
+  const displayResult = result ?? calculateExpression(expression);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={styles.calculatorBackdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={[styles.calculatorPanel, { backgroundColor: colors.surface, borderRadius: radius.xl }]}>
+          <View style={styles.categoryModalHeader}>
+            <AppText variant="h2">Calculator</AppText>
+            <Pressable onPress={onClose} hitSlop={10} accessibilityLabel="Close calculator">
+              <Ionicons name="close" size={23} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+
+          <View style={[styles.calculatorDisplay, { backgroundColor: colors.surfaceAlt, borderRadius: radius.md }]}>
+            <AppText color="textSecondary">{expression}</AppText>
+            <AppText variant="h2">
+              {displayResult === null ? '—' : displayResult.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </AppText>
+          </View>
+
+          <View style={styles.calculatorKeys}>
+            {CALCULATOR_KEYS.flat().map((key) => {
+              const isOperator = ['C', '⌫', '=', '+', '−', '×', '÷'].includes(key);
+              return (
+                <Pressable
+                  key={key}
+                  onPress={() => pressKey(key)}
+                  accessibilityRole="button"
+                  accessibilityLabel={key === '⌫' ? 'Backspace' : key}
+                  style={({ pressed }) => [
+                    styles.calculatorKey,
+                    {
+                      backgroundColor: key === '=' ? moduleColors.finance : isOperator ? colors.surfaceAlt : colors.background,
+                      borderColor: colors.border,
+                      opacity: pressed ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  <AppText style={{ fontSize: 19, fontWeight: '600', color: key === '=' ? '#FFFFFF' : isOperator ? moduleColors.finance : colors.text }}>
+                    {key}
+                  </AppText>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.categoryModalActions}>
+            <Pressable onPress={onClose} style={[styles.categoryActionButton, { backgroundColor: colors.surfaceAlt }]}>
+              <AppText>Cancel</AppText>
+            </Pressable>
+            <Pressable
+              disabled={displayResult === null || displayResult <= 0}
+              onPress={() => displayResult !== null && displayResult > 0 && onApply(String(displayResult))}
+              style={[styles.categoryActionButton, { backgroundColor: moduleColors.finance, opacity: displayResult !== null && displayResult > 0 ? 1 : 0.45 }]}
+            >
+              <AppText color="onPrimary" variant="label">Use result</AppText>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
