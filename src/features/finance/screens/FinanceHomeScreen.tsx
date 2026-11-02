@@ -219,7 +219,7 @@ export default function FinanceHomeScreen() {
   const handleNetworkPress = (key: FinanceNetworkKey) => {
     switch (key) {
       case 'assets':
-        setAssetsOpen(true);
+        router.push('/finance/assets');
         break;
 
       case 'accounts':
