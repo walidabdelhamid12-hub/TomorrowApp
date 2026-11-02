@@ -256,6 +256,10 @@ export default function FinanceHomeScreen() {
         router.push('/finance/expenses');
         break;
 
+      case 'categories':
+        router.push('/finance/categories');
+        break;
+
       default: {
         const item = NETWORK_ITEMS.find(
           (network) => network.key === key,
