@@ -133,12 +133,8 @@ export default function LoansScreen() {
         Alert.alert('Cannot edit payment', 'This payment has no linked account transaction. Please keep its history unchanged.');
         return;
       }
-      const principalAlreadyPaid = selectedLoan.payments
-        .filter(p => p.id !== editingPayment.id)
-        .reduce((sum, p) => sum + (p.principalAmount ?? p.amount), 0);
-      const principalRoom = Math.max(0, (selectedLoan.principalAmount ?? amount) - principalAlreadyPaid);
-      const nextPrincipal = Math.min(amount, principalRoom);
-      const nextInterest = amount - nextPrincipal;
+      const nextPrincipal = amount;
+      const nextInterest = 0;
       const previousTransaction = transactions.find(t => t.id === accountTransactionId);
       const updated = updateTransaction(accountTransactionId, {
         amount, accountId: account.id, date: paymentDate,
@@ -185,8 +181,8 @@ export default function LoansScreen() {
     }
     const paymentId = addLoanPayment(selectedLoan.id, {
       amount, date: paymentDate, note: note.trim() || (settlementMode ? 'Early settlement' : undefined),
-      principalAmount: settlementMode ? 0 : Math.min(amount, Math.max(0, (selectedLoan.principalAmount ?? amount) - selectedLoan.payments.reduce((sum, p) => sum + (p.principalAmount ?? p.amount), 0))),
-      interestAmount: settlementMode ? amount : Math.max(0, amount - Math.min(amount, Math.max(0, (selectedLoan.principalAmount ?? amount) - selectedLoan.payments.reduce((sum, p) => sum + (p.principalAmount ?? p.amount), 0)))),
+      principalAmount: amount,
+      interestAmount: 0,
       accountId: account.id,
     });
     if (!paymentId) {
