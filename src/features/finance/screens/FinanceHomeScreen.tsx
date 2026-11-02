@@ -244,6 +244,10 @@ export default function FinanceHomeScreen() {
         openTransfer(null);
         break;
 
+      case 'loans':
+        router.push('/finance/loans');
+        break;
+
       default: {
         const item = NETWORK_ITEMS.find(
           (network) => network.key === key,
