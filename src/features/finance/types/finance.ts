@@ -163,6 +163,9 @@ export interface LoanPayment {
   /** Account used for the confirmed installment payment. */
   accountId?: EntityId;
 
+  /** One-off custom payment method; does not affect a registered account balance. */
+  paymentMethodLabel?: string;
+
   /** Ledger transaction created for this installment, if posted. */
   ledgerTransactionId?: EntityId;
 }
