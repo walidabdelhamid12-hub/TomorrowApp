@@ -443,16 +443,6 @@ export const useFinanceStore = create<FinanceStore>()(
         const interestAmount = roundMoney(
           input.interestAmount ?? amount - principalAmount
         );
-        const paidPrincipal = loan.payments.reduce(
-          (sum, item) =>
-            sum + (item.principalAmount ?? item.amount),
-          0
-        );
-        const remainingPrincipal =
-          loan.principalAmount === undefined
-            ? Number.POSITIVE_INFINITY
-            : Math.max(0, roundMoney(loan.principalAmount - paidPrincipal));
-
         if (
           !Number.isFinite(amount) ||
           amount <= 0 ||
@@ -462,8 +452,7 @@ export const useFinanceStore = create<FinanceStore>()(
           interestAmount < 0 ||
           Math.abs(
             roundMoney(principalAmount + interestAmount) - amount
-          ) > 0.001 ||
-          false
+          ) > 0.001
         ) {
           return null;
         }
@@ -511,22 +500,6 @@ export const useFinanceStore = create<FinanceStore>()(
           (cleanPatch.amount !== undefined
             ? 0
             : currentPayment.amount - nextPrincipal);
-        const paidPrincipalExcludingCurrent = loan.payments
-          .filter((item) => item.id !== paymentId)
-          .reduce(
-            (sum, item) => sum + (item.principalAmount ?? item.amount),
-            0
-          );
-        const remainingPrincipal =
-          loan.principalAmount === undefined
-            ? Number.POSITIVE_INFINITY
-            : Math.max(
-                0,
-                roundMoney(
-                  loan.principalAmount - paidPrincipalExcludingCurrent
-                )
-              );
-
         if (
           !Number.isFinite(nextAmount) ||
           nextAmount <= 0 ||
@@ -536,8 +509,7 @@ export const useFinanceStore = create<FinanceStore>()(
           nextInterest < 0 ||
           Math.abs(
             roundMoney(nextPrincipal + nextInterest) - nextAmount
-          ) > 0.001 ||
-          false
+          ) > 0.001
         ) {
           return;
         }
