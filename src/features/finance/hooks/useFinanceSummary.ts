@@ -123,30 +123,10 @@ export function useFinanceSummary() {
           ? 0
           : Math.max(scheduledRepayment - paidInstallments, 0);
 
-      const principalConverted = convertAmount(
-        remainingPrincipal,
-        loan.currencyCode,
-        baseCurrency,
-        rates,
-        verifiedCurrencies
-      );
-      const installmentsConverted = convertAmount(
-        remainingInstallments,
-        loan.currencyCode,
-        baseCurrency,
-        rates,
-        verifiedCurrencies
-      );
-
-      if (principalConverted === null) {
-        missing += 1;
-      } else {
-        loansRemainingTotal += principalConverted;
-      }
-
       if (installmentsConverted === null) {
         missing += 1;
       } else {
+        loansRemainingTotal += installmentsConverted;
         loansInstallmentsRemainingTotal += installmentsConverted;
       }
     }
