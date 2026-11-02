@@ -149,7 +149,15 @@ export type LoanStatus = 'active' | 'completed';
 export interface LoanPayment {
   id: EntityId;
   date: ISODate;
+  /** Total cash amount paid for this installment (principal + interest). */
   amount: number;
+
+  /** Principal portion; absent on legacy records, where amount is treated as principal. */
+  principalAmount?: number;
+
+  /** Interest portion; absent on legacy records and treated as zero. */
+  interestAmount?: number;
+
   note?: string;
 
   /** Account used for the confirmed installment payment. */
