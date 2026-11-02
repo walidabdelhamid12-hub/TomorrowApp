@@ -442,16 +442,39 @@ export default function FinanceHomeScreen() {
         });
       }
 
+      // Read the latest persisted asset state at save time. The modal may
+      // have been opened from an older render, so never calculate a balance
+      // adjustment from a potentially stale asset object.
+      const latestAsset = useFinanceStore
+        .getState()
+        .assets.find((item) => item.id === editingAsset.id);
+
+      if (!latestAsset) {
+        Alert.alert(
+          'Asset not found',
+          'This asset could not be found. No balance movement was recorded.',
+        );
+        return;
+      }
+
       const difference = roundMoney(
-        amount - getAssetBalance(editingAsset),
+        amount - getAssetBalance(latestAsset),
       );
 
       if (difference !== 0) {
-        addAssetEntry(editingAsset.id, {
+        const entryId = addAssetEntry(latestAsset.id, {
           date: todayISO(),
           amount: difference,
           note: 'Balance adjustment',
         });
+
+        if (!entryId) {
+          Alert.alert(
+            'Adjustment not saved',
+            'The asset balance was not changed because the movement could not be saved.',
+          );
+          return;
+        }
       }
 
       closeAssetModal();
