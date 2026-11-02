@@ -144,7 +144,7 @@ export type DebtPaymentPatch = Partial<NewDebtPaymentInput>;
 /* 3) Loans and Cheques                                                       */
 /* -------------------------------------------------------------------------- */
 
-export type LoanStatus = 'active' | 'completed';
+export type LoanStatus = 'active' | 'completed' | 'settled';
 
 export interface LoanPayment {
   id: EntityId;
@@ -174,6 +174,18 @@ export interface Loan extends Timestamps {
 
   /** Original loan principal. Optional for compatibility with old saved loans. */
   principalAmount?: number;
+
+  /** Contractual total repayment amount (principal + interest). */
+  totalRepaymentAmount?: number;
+
+  /** Current lifecycle state; missing legacy values are treated as active. */
+  status?: LoanStatus;
+
+  /** Actual amount paid to close the loan early, when settled. */
+  settlementAmount?: number;
+  settlementDate?: ISODate;
+  settlementAccountId?: EntityId;
+  settlementNote?: string;
 
   currencyCode: CurrencyCode;
   monthlyInstallment: number;
