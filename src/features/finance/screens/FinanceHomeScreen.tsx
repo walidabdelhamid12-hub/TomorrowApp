@@ -790,6 +790,10 @@ export default function FinanceHomeScreen() {
               </Pressable>
             </View>
 
+            <AppText color="textSecondary" style={{ marginBottom: 12 }}>
+              Track cash holdings, foreign currencies, gold, and silver, including their recorded movements and converted values.
+            </AppText>
+
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.assetsList}
