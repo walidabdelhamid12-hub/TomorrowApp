@@ -82,7 +82,7 @@ export default function LoansScreen() {
 
   const activeAccounts = useMemo(() => accounts.filter(a => !a.archived), [accounts]);
   const paymentAccounts = useMemo(() => activeAccounts
-    .filter(a => a.currencyCode === selectedLoan?.currencyCode)
+    .filter(a => a.currencyCode === selectedLoan?.currencyCode && a.type !== 'credit_card')
     .sort((a, b) => Number(b.type === 'bank') - Number(a.type === 'bank')),
     [activeAccounts, selectedLoan?.currencyCode]);
   const depositAccounts = useMemo(() => activeAccounts
