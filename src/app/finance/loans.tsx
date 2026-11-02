@@ -312,6 +312,9 @@ export default function LoansScreen() {
         <Pressable onPress={() => router.back()} style={styles.back}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
         <View style={{ flex: 1 }}><AppText variant="h1">Loans</AppText><AppText variant="caption" color="textSecondary">{loans.length} loans</AppText></View>
       </View>
+      <AppText color="textSecondary" style={{ marginBottom: 16 }}>
+        Track money borrowed, confirm received funds, record repayments, and monitor your outstanding loan balance.
+      </AppText>
       <AppButton title="Add loan" accentColor={moduleColors.finance} leftIcon={<Ionicons name="add" size={18} color={colors.onPrimary} />} onPress={() => setShowLoanForm(true)} />
       {loans.length === 0 ? <Card variant="filled"><AppText align="center" color="textSecondary">No loans recorded yet. Add your first loan.</AppText></Card> :
         loans.map(loan => {
