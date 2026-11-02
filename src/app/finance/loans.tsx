@@ -61,6 +61,7 @@ export default function LoansScreen() {
   const [accountId, setAccountId] = useState('');
   const [note, setNote] = useState('');
   const [settlementMode, setSettlementMode] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<Loan['payments'][number] | null>(null);
 
   const activeAccounts = useMemo(() => accounts.filter(a => !a.archived), [accounts]);
   const expenseCategory = categories.find(c => c.kind === 'expense' && c.id === 'cat_bills')
@@ -104,7 +105,7 @@ export default function LoansScreen() {
     setNote('');
   };
 
-  const closePayment = () => { setSelectedLoan(null); setPaymentAmount(''); setNote(''); setSettlementMode(false); };
+  const closePayment = () => { setSelectedLoan(null); setPaymentAmount(''); setNote(''); setSettlementMode(false); setEditingPayment(null); };
 
   const confirmPayment = () => {
     if (!selectedLoan) return;
@@ -114,6 +115,33 @@ export default function LoansScreen() {
     if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding + 0.001 ||
       !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) || !account) {
       Alert.alert('Invalid payment', 'Check the amount, date and account. The account must use the loan currency and the payment cannot exceed the remaining contractual amount.');
+      return;
+    }
+    if (editingPayment) {
+      const accountTransactionId = editingPayment.ledgerTransactionId;
+      if (!accountTransactionId) {
+        Alert.alert('Cannot edit payment', 'This payment has no linked account transaction. Please keep its history unchanged.');
+        return;
+      }
+      const oldPrincipal = editingPayment.principalAmount ?? editingPayment.amount;
+      const oldInterest = editingPayment.interestAmount ?? Math.max(0, editingPayment.amount - oldPrincipal);
+      const ratio = editingPayment.amount > 0 ? oldPrincipal / editingPayment.amount : 1;
+      const nextPrincipal = Math.min(amount, Math.max(0, oldPrincipal + (amount - editingPayment.amount) * ratio));
+      const nextInterest = amount - nextPrincipal;
+      const updated = updateTransaction(accountTransactionId, {
+        amount, accountId: account.id, date: paymentDate,
+        note: note.trim() || `Loan payment: ${selectedLoan.name}`,
+      });
+      if (!updated) {
+        Alert.alert('Update failed', 'The linked account transaction could not be updated. The loan history was not changed.');
+        return;
+      }
+      updateLoanPayment(selectedLoan.id, editingPayment.id, {
+        amount, date: paymentDate, note: note.trim() || undefined,
+        accountId: account.id, principalAmount: nextPrincipal,
+        interestAmount: nextInterest,
+      });
+      closePayment();
       return;
     }
     const paymentId = addLoanPayment(selectedLoan.id, {
@@ -148,6 +176,21 @@ export default function LoansScreen() {
       updateLoan(selectedLoan.id, { status: 'completed' });
     }
     closePayment();
+  };
+
+  const openEditPayment = (loan: Loan, payment: Loan['payments'][number]) => {
+    const matching = activeAccounts.filter(a => a.currencyCode === loan.currencyCode);
+    if (!payment.ledgerTransactionId || !matching.length) {
+      Alert.alert('Cannot edit payment', 'This payment is missing its linked account transaction or a matching active account.');
+      return;
+    }
+    setSelectedLoan(loan);
+    setEditingPayment(payment);
+    setSettlementMode(false);
+    setPaymentAmount(String(payment.amount));
+    setPaymentDate(payment.date);
+    setAccountId(payment.accountId && matching.some(a => a.id === payment.accountId) ? payment.accountId : matching[0].id);
+    setNote(payment.note ?? '');
   };
 
   const confirmDeletePayment = (loan: Loan, payment: Loan['payments'][number]) => {
@@ -200,7 +243,7 @@ export default function LoansScreen() {
             {loan.payments.length > 0 && <View style={styles.history}><AppText style={{ fontWeight: '600' }}>Payment history</AppText>
               {loan.payments.map(payment => <View key={payment.id} style={styles.paymentRow}>
                 <View style={{ flex: 1 }}><AppText>{formatAmount(payment.amount)} {loan.currencyCode}</AppText><AppText variant="caption" color="textSecondary">{payment.date} · {payment.note || 'Installment'}</AppText></View>
-                <Pressable onPress={() => confirmDeletePayment(loan, payment)} hitSlop={8}><Ionicons name="trash-outline" size={19} color={colors.danger} /></Pressable>
+                <View style={styles.row}><Pressable onPress={() => openEditPayment(loan, payment)} hitSlop={8}><Ionicons name="create-outline" size={19} color={moduleColors.finance} /></Pressable><Pressable onPress={() => confirmDeletePayment(loan, payment)} hitSlop={8}><Ionicons name="trash-outline" size={19} color={colors.danger} /></Pressable></View>
               </View>)}
             </View>}
           </Card>;
@@ -221,14 +264,14 @@ export default function LoansScreen() {
       </Modal>
       <Modal visible={!!selectedLoan} transparent animationType="slide" onRequestClose={closePayment}>
         <View style={styles.overlay}><Card style={styles.modal}>
-          <AppText variant="h2">{settlementMode ? 'Early settlement' : 'Record installment'}</AppText>
+          <AppText variant="h2">{editingPayment ? 'Edit payment' : settlementMode ? 'Early settlement' : 'Record installment'}</AppText>
           <AppText color="textSecondary">Outstanding: {selectedLoan ? formatAmount(remaining(selectedLoan)) + ' ' + selectedLoan.currencyCode : ''}</AppText>
           <Field label="Amount" value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" />
           <Field label="Payment date (YYYY-MM-DD)" value={paymentDate} onChangeText={setPaymentDate} />
           <Field label="Note" value={note} onChangeText={setNote} />
           <AppText weight="semibold">Pay from account</AppText>
           {activeAccounts.filter(a => a.currencyCode === selectedLoan?.currencyCode).map(account => <Pressable key={account.id} onPress={() => setAccountId(account.id)} style={[styles.accountChoice, accountId === account.id && { borderColor: moduleColors.finance, backgroundColor: colors.surface }]}><AppText>{account.name} · {account.currencyCode}{accountId === account.id ? ' ✓' : ''}</AppText></Pressable>)}
-          <View style={styles.actions}><AppButton title={settlementMode ? 'Confirm settlement' : 'Confirm payment'} onPress={confirmPayment} /><AppButton title="Cancel" variant="outline" onPress={closePayment} /></View>
+          <View style={styles.actions}><AppButton title={editingPayment ? 'Save changes' : settlementMode ? 'Confirm settlement' : 'Confirm payment'} onPress={confirmPayment} /><AppButton title="Cancel" variant="outline" onPress={closePayment} /></View>
         </Card></View>
       </Modal>
     </Screen>
