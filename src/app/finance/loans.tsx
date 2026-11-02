@@ -76,6 +76,10 @@ export default function LoansScreen() {
   const [closureReason, setClosureReason] = useState('');
 
   const activeAccounts = useMemo(() => accounts.filter(a => !a.archived), [accounts]);
+  const paymentAccounts = useMemo(() => activeAccounts
+    .filter(a => a.currencyCode === selectedLoan?.currencyCode)
+    .sort((a, b) => Number(b.type === 'bank') - Number(a.type === 'bank')),
+    [activeAccounts, selectedLoan?.currencyCode]);
   const expenseCategory = categories.find(c => c.kind === 'expense' && c.id === 'cat_bills')
     ?? categories.find(c => c.kind === 'expense');
 
@@ -306,17 +310,12 @@ export default function LoansScreen() {
             <AppText variant="h2">Choose payment method</AppText>
             <AppText variant="caption" color="textSecondary">Accounts in {selectedLoan?.currencyCode ?? ''}</AppText>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
-              {activeAccounts.filter(a => a.currencyCode === selectedLoan?.currencyCode && a.type === 'bank').map(account => (
+              {paymentAccounts.map(account => (
                 <Pressable key={account.id} onPress={() => { setAccountId(account.id); setPaymentMethod('account'); setShowPaymentPicker(false); }} style={styles.pickerOption}>
-                  <AppText>{account.name} · {account.currencyCode}</AppText>{paymentMethod === 'account' && accountId === account.id && <Ionicons name="checkmark" size={18} color={moduleColors.finance} />}
+                  <AppText>{account.name} · {account.currencyCode}{account.type === 'bank' ? ' · Bank' : ''}</AppText>{paymentMethod === 'account' && accountId === account.id && <Ionicons name="checkmark" size={18} color={moduleColors.finance} />}
                 </Pressable>
               ))}
-              {activeAccounts.filter(a => a.currencyCode === selectedLoan?.currencyCode && a.type !== 'bank' && a.type !== 'credit_card').map(account => (
-                <Pressable key={account.id} onPress={() => { setAccountId(account.id); setPaymentMethod('account'); setShowPaymentPicker(false); }} style={styles.pickerOption}>
-                  <AppText>{account.name} · {account.currencyCode}</AppText>{paymentMethod === 'account' && accountId === account.id && <Ionicons name="checkmark" size={18} color={moduleColors.finance} />}
-                </Pressable>
-              ))}
-              {activeAccounts.filter(a => a.currencyCode === selectedLoan?.currencyCode && a.type !== 'credit_card').length === 0 && (
+              {paymentAccounts.length === 0 && (
                 <AppText color="textSecondary">No active registered accounts in this currency.</AppText>
               )}
               <Pressable onPress={() => { setPaymentMethod('custom'); setAccountId(''); setShowPaymentPicker(false); }} style={styles.pickerOption}>
@@ -349,7 +348,7 @@ export default function LoansScreen() {
             <AppText>{paymentMethod === 'custom' ? (customPaymentMethod.trim() || 'Custom / مخصص') : (activeAccounts.find(a => a.id === accountId)?.name ?? 'Select a registered account')}</AppText>
             <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
           </Pressable>
-          <Pressable onPress={() => setShowAddBank(true)} style={styles.addBankChoice}><AppText color="primary">+ Add bank account</AppText></Pressable>
+          <AppButton title="Add bank account" variant="outline" onPress={() => setShowAddBank(true)} />
           {paymentMethod === 'custom' && <Field label="Payment method name (e.g. Cash)" value={customPaymentMethod} onChangeText={setCustomPaymentMethod} />}
           <View style={styles.actions}><AppButton title={editingPayment ? 'Save changes' : settlementMode ? 'Confirm settlement' : 'Confirm payment'} onPress={confirmPayment} /><AppButton title="Cancel" variant="outline" onPress={closePayment} /></View>
         </Card></View>
