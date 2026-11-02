@@ -144,7 +144,7 @@ export type DebtPaymentPatch = Partial<NewDebtPaymentInput>;
 /* 3) Loans and Cheques                                                       */
 /* -------------------------------------------------------------------------- */
 
-export type LoanStatus = 'active' | 'completed' | 'settled';
+export type LoanStatus = 'active' | 'completed' | 'settled' | 'closed';
 
 export interface LoanPayment {
   id: EntityId;
@@ -187,6 +187,8 @@ export interface Loan extends Timestamps {
   settlementAccountId?: EntityId;
   settlementPaymentId?: EntityId;
   settlementNote?: string;
+  closureDate?: ISODate;
+  closureReason?: string;
 
   currencyCode: CurrencyCode;
   monthlyInstallment: number;
