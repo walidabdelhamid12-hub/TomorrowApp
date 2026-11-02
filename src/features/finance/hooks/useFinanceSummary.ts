@@ -46,6 +46,7 @@ export function useFinanceSummary() {
     let accountsTotal = 0;
     let assetsTotal = 0;
     let loansRemainingTotal = 0;
+    let loansInstallmentsRemainingTotal = 0;
     let receivablesTotal = 0;
     let payablesTotal = 0;
     let chequesTotal = 0;
@@ -99,28 +100,53 @@ export function useFinanceSummary() {
         continue;
       }
 
-      const paidAmount = loan.payments.reduce(
+      // Legacy payments without a split are treated as principal-only.
+      const paidPrincipal = loan.payments.reduce(
+        (sum, payment) =>
+          sum + (payment.principalAmount ?? payment.amount),
+        0
+      );
+      const paidInstallments = loan.payments.reduce(
         (sum, payment) => sum + payment.amount,
         0
       );
 
-      const remainingAmount = Math.max(
-        loan.principalAmount - paidAmount,
+      const remainingPrincipal = Math.max(
+        loan.principalAmount - paidPrincipal,
+        0
+      );
+      const scheduledRepayment =
+        loan.monthlyInstallment * loan.numberOfInstallments;
+      const remainingInstallments = Math.max(
+        scheduledRepayment - paidInstallments,
         0
       );
 
-      const converted = convertAmount(
-        remainingAmount,
+      const principalConverted = convertAmount(
+        remainingPrincipal,
+        loan.currencyCode,
+        baseCurrency,
+        rates,
+        verifiedCurrencies
+      );
+      const installmentsConverted = convertAmount(
+        remainingInstallments,
         loan.currencyCode,
         baseCurrency,
         rates,
         verifiedCurrencies
       );
 
-      if (converted === null) {
+      if (principalConverted === null) {
         missing += 1;
       } else {
-        loansRemainingTotal += converted;
+        loansRemainingTotal += principalConverted;
+      }
+
+      if (installmentsConverted === null) {
+        missing += 1;
+      } else {
+        loansInstallmentsRemainingTotal += installmentsConverted;
       }
     }
 
@@ -197,6 +223,7 @@ export function useFinanceSummary() {
       accountsTotal,
       assetsTotal,
       loansRemainingTotal,
+      loansInstallmentsRemainingTotal,
       receivablesTotal,
       payablesTotal,
       chequesTotal,
@@ -278,6 +305,8 @@ export function useFinanceSummary() {
     accountsTotal: totals.accountsTotal,
     assetsTotal: totals.assetsTotal,
     loansRemainingTotal: totals.loansRemainingTotal,
+    loansInstallmentsRemainingTotal:
+      totals.loansInstallmentsRemainingTotal,
     receivablesTotal: totals.receivablesTotal,
     payablesTotal: totals.payablesTotal,
     chequesTotal: totals.chequesTotal,
