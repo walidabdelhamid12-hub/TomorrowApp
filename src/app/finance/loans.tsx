@@ -132,7 +132,7 @@ export default function LoansScreen() {
   const confirmPayment = () => {
     if (!selectedLoan) return;
     const amount = money(paymentAmount);
-    if (!editingPayment && !expenseCategory) {
+    if (!editingPayment && paymentMethod === 'account' && !expenseCategory) {
       Alert.alert('Expense category required', 'Add or restore an expense category before recording a loan payment. No payment has been recorded.');
       return;
     }
@@ -272,7 +272,10 @@ export default function LoansScreen() {
               <Field label="Monthly installment (amount per month)" value={installment} onChangeText={setInstallment} keyboardType="decimal-pad" />
               <Field label="Number of installments (months)" value={count} onChangeText={setCount} keyboardType="number-pad" />
               <Field label="First due date (YYYY-MM-DD)" value={firstDue} onChangeText={setFirstDue} />
-              <Field label="Currency code (e.g. OMR, EGP)" value={currency} onChangeText={setCurrency} />
+              <AppText variant="caption" color="textSecondary">Loan currency</AppText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
+                {['OMR', 'EGP', 'SAR', 'AED', 'USD', 'EUR', 'GBP', 'JOD', 'QAR', 'KWD'].map(code => <Pressable key={code} onPress={() => setCurrency(code)} style={[styles.accountChoice, { paddingVertical: 7, paddingHorizontal: 12 }, currency === code && { borderColor: moduleColors.finance, backgroundColor: colors.surface }]}><AppText>{code}{currency === code ? ' ✓' : ''}</AppText></Pressable>)}
+              </ScrollView>
             </ScrollView>
             <View style={styles.actions}>
               <AppButton title="Save loan" onPress={saveLoan} />
