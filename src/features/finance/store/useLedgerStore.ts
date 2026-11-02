@@ -5,7 +5,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { DEFAULT_CATEGORIES } from '@/features/finance/constants/defaultCategories';
-import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
+import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import type { EntityId } from '@/features/finance/types/finance';
 import type {
   Account,
@@ -343,7 +343,7 @@ export const useLedgerStore = create<LedgerStore>()(
           ...input,
           currencyCode:
             input.currencyCode ||
-            useFinanceStore.getState().baseCurrency,
+            useCurrencyStore.getState().baseCurrency,
           initialBalance: roundMoney(input.initialBalance),
           archived: input.archived ?? false,
           id: generateId('acc'),
