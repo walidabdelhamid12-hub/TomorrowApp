@@ -79,6 +79,12 @@ export default function LoansScreen() {
   const [editingPayment, setEditingPayment] = useState<Loan['payments'][number] | null>(null);
   const [closingLoan, setClosingLoan] = useState<Loan | null>(null);
   const [closureReason, setClosureReason] = useState('');
+  const [receivingLoan, setReceivingLoan] = useState<Loan | null>(null);
+  const [receivedAmount, setReceivedAmount] = useState('');
+  const [receivedDate, setReceivedDate] = useState(today());
+  const [receiptAccountId, setReceiptAccountId] = useState('');
+  const [receiptMethod, setReceiptMethod] = useState<'account' | 'custom'>('account');
+  const [receiptMethodLabel, setReceiptMethodLabel] = useState('');
 
   const activeAccounts = useMemo(() => accounts.filter(a => !a.archived), [accounts]);
   const paymentAccounts = useMemo(() => activeAccounts
@@ -91,6 +97,8 @@ export default function LoansScreen() {
     [activeAccounts, currency]);
   const expenseCategory = categories.find(c => c.kind === 'expense' && c.id === 'cat_bills')
     ?? categories.find(c => c.kind === 'expense');
+  const incomeCategory = categories.find(c => c.kind === 'income' && c.id === 'cat_other_in')
+    ?? categories.find(c => c.kind === 'income');
 
   const resetLoanForm = () => {
     setShowLoanForm(false); setLoanName(''); setLender(''); setPrincipal('');
@@ -113,7 +121,9 @@ export default function LoansScreen() {
       firstDueDate: firstDue, currencyCode: currency, status: 'active',
       ...(depositMethod === 'account' && depositAccountId
         ? { depositAccountId }
-        : { depositMethodLabel: customDepositMethod.trim() || 'Custom' }),
+        : depositMethod === 'custom' && customDepositMethod.trim()
+          ? { depositMethodLabel: customDepositMethod.trim() }
+          : {}),
     };
     addLoan(input);
     resetLoanForm();
@@ -132,6 +142,76 @@ export default function LoansScreen() {
   };
 
   const closePayment = () => { setSelectedLoan(null); setPaymentAmount(''); setNote(''); setSettlementMode(false); setEditingPayment(null); setPaymentMethod('account'); setCustomPaymentMethod(''); };
+
+  const openReceiveLoan = (loan: Loan) => {
+    if (loan.receivedAt || loan.receiptTransactionId) {
+      Alert.alert('Already confirmed', 'The loan receipt has already been recorded.');
+      return;
+    }
+    const matching = activeAccounts.filter(a => a.currencyCode === loan.currencyCode && a.type !== 'credit_card');
+    const savedAccount = matching.find(a => a.id === loan.depositAccountId);
+    setReceivingLoan(loan);
+    setReceivedAmount(String(loan.principalAmount ?? 0));
+    setReceivedDate(today());
+    setReceiptAccountId(savedAccount?.id ?? matching.find(a => a.type === 'bank')?.id ?? matching[0]?.id ?? '');
+    setReceiptMethod(savedAccount ? 'account' : loan.depositMethodLabel ? 'custom' : 'account');
+    setReceiptMethodLabel(loan.depositMethodLabel ?? '');
+  };
+
+  const confirmLoanReceived = () => {
+    if (!receivingLoan) return;
+    const current = useFinanceStore.getState().loans.find(l => l.id === receivingLoan.id);
+    if (!current || current.receivedAt || current.receiptTransactionId) {
+      Alert.alert('Already confirmed', 'This loan receipt has already been recorded.');
+      setReceivingLoan(null);
+      return;
+    }
+    const amount = money(receivedAmount);
+    const account = receiptMethod === 'account'
+      ? activeAccounts.find(a => a.id === receiptAccountId && a.currencyCode === receivingLoan.currencyCode && !a.archived && a.type !== 'credit_card')
+      : undefined;
+    const label = receiptMethodLabel.trim();
+    if (!Number.isFinite(amount) || amount <= 0 ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(receivedDate) ||
+      (receiptMethod === 'account' && !account) ||
+      (receiptMethod === 'custom' && !label)) {
+      Alert.alert('Check receipt details', 'Enter a valid received amount and date, then select a matching account or describe the receipt method.');
+      return;
+    }
+    if (receiptMethod === 'account' && !incomeCategory) {
+      Alert.alert('Income category required', 'Add or restore an income category before confirming receipt. No account transaction has been created.');
+      return;
+    }
+    let transactionId: string | undefined;
+    if (account) {
+      transactionId = addTransaction({
+        type: 'income',
+        amount,
+        accountId: account.id,
+        categoryId: incomeCategory!.id,
+        linkedEntityType: 'loan',
+        linkedEntityId: receivingLoan.id,
+        date: receivedDate,
+        note: `Loan received: ${receivingLoan.name}`,
+      }) ?? undefined;
+      if (!transactionId) {
+        Alert.alert('Receipt not posted', 'The income transaction could not be created. The loan remains unconfirmed.');
+        return;
+      }
+    }
+    updateLoan(receivingLoan.id, {
+      receivedAt: receivedDate,
+      receivedAmount: amount,
+      ...(account ? { receiptTransactionId: transactionId } : { depositMethodLabel: label, depositAccountId: undefined }),
+    });
+    const saved = useFinanceStore.getState().loans.find(l => l.id === receivingLoan.id);
+    if (!saved?.receivedAt || (account && saved.receiptTransactionId !== transactionId)) {
+      if (transactionId) removeTransaction(transactionId);
+      Alert.alert('Receipt confirmation failed', 'The transaction was rolled back because the loan confirmation could not be saved.');
+      return;
+    }
+    setReceivingLoan(null);
+  };
 
   const confirmCloseWithoutPayment = () => {
     if (!closingLoan || !closureReason.trim()) {
@@ -248,6 +328,9 @@ export default function LoansScreen() {
             </View>
             <AppText variant="caption" color="textSecondary">Paid: {formatAmount(paid)} {loan.currencyCode} · Installment: {formatAmount(loan.monthlyInstallment)} {loan.currencyCode}</AppText>
             <AppText variant="caption" color="textSecondary">Payments recorded: {loan.payments.length} · Scheduled installments remaining: {loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed' ? 0 : Math.max(0, loan.numberOfInstallments - loan.payments.length)} · First due {loan.firstDueDate}</AppText>
+            {loan.receivedAt
+              ? <AppText color="success" variant="caption">Received: {formatAmount(loan.receivedAmount ?? loan.principalAmount ?? 0)} {loan.currencyCode} on {loan.receivedAt}{loan.receiptTransactionId ? ' · Posted to account' : ' · Custom method'}</AppText>
+              : <View style={styles.actions}><AppButton title="Confirm loan received" fullWidth={false} variant="outline" onPress={() => openReceiveLoan(loan)} /></View>}
             {loan.status !== 'settled' && loan.status !== 'completed' && loan.status !== 'closed' && <View style={styles.actions}>
               <AppButton title="Record payment" fullWidth={false} onPress={() => openPayment(loan)} />
               <AppButton title="Early settlement" fullWidth={false} variant="outline" onPress={() => openPayment(loan, true)} />
@@ -398,6 +481,32 @@ export default function LoansScreen() {
             </ScrollView>
           </View>
         </View>
+      </Modal>
+      <Modal visible={!!receivingLoan} transparent animationType="slide" onRequestClose={() => setReceivingLoan(null)}>
+        <View style={styles.overlay}><Card style={styles.modal}>
+          <AppText variant="h2">Confirm loan received</AppText>
+          <AppText color="textSecondary">This records the money only now, when you confirm it was actually received.</AppText>
+          <Field label={`Amount received (${receivingLoan?.currencyCode ?? ''})`} value={receivedAmount} onChangeText={setReceivedAmount} keyboardType="decimal-pad" />
+          <DateField label="Received date" value={receivedDate} onChange={setReceivedDate} />
+          <AppText style={{ fontWeight: '600' }}>Deposit destination</AppText>
+          <ScrollView style={{ maxHeight: 150 }} keyboardShouldPersistTaps="handled">
+            {activeAccounts.filter(a => !a.archived && a.currencyCode === receivingLoan?.currencyCode && a.type !== 'credit_card').map(account => (
+              <Pressable key={account.id} onPress={() => { setReceiptAccountId(account.id); setReceiptMethod('account'); }} style={styles.pickerOption}>
+                <AppText>{account.name} · {account.currencyCode}</AppText>
+                {receiptAccountId === account.id && receiptMethod === 'account' && <Ionicons name="checkmark" size={18} color={moduleColors.finance} />}
+              </Pressable>
+            ))}
+          </ScrollView>
+          <Pressable onPress={() => setReceiptMethod('custom')} style={[styles.dropdown, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+            <AppText>Other / Something else</AppText>
+            {receiptMethod === 'custom' && <Ionicons name="checkmark" size={18} color={moduleColors.finance} />}
+          </Pressable>
+          {receiptMethod === 'custom' && <Field label="Receipt method (e.g. Cash)" value={receiptMethodLabel} onChangeText={setReceiptMethodLabel} />}
+          <View style={styles.actions}>
+            <AppButton title="Confirm receipt" onPress={confirmLoanReceived} />
+            <AppButton title="Cancel" variant="outline" onPress={() => setReceivingLoan(null)} />
+          </View>
+        </Card></View>
       </Modal>
       <Modal visible={!!closingLoan} transparent animationType="fade" onRequestClose={() => setClosingLoan(null)}>
         <View style={styles.overlay}><Card style={styles.modal}>
