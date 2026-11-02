@@ -68,6 +68,7 @@ export type TransactionPurpose =
   | 'normal'
   | 'debt_payment'
   | 'debt_collection'
+  | 'loan_payment'
   | 'loan_principal_payment'
   | 'loan_interest_payment';
 
