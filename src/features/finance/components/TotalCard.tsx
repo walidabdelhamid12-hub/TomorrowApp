@@ -216,47 +216,19 @@ function NetworkCard({
         ]}
       >
         <View style={styles.networkMain}>
-          <View
-            style={[
-              styles.networkIcon,
-              { backgroundColor: `${item.color}18` },
-            ]}
-          >
-            <Ionicons
-              name={item.icon}
-              size={27}
-              color={item.color}
-            />
-          </View>
-
           <View style={styles.networkInfo}>
-            <AppText style={styles.networkLabel} numberOfLines={1}>
-              {item.label}
-            </AppText>
-
-            <AppText
-              style={styles.networkDescription}
-              numberOfLines={2}
-            >
-              {item.description}
-            </AppText>
-
+            <View style={styles.networkTitleRow}>
+              <View style={[styles.networkIcon, { backgroundColor: `${item.color}18` }]}>
+                <Ionicons name={item.icon} size={21} color={item.color} />
+              </View>
+              <AppText style={styles.networkLabel} numberOfLines={1}>{item.label}</AppText>
+            </View>
             {hasAmount ? (
-              <AppText
-                style={[styles.networkAmount, { color: item.color }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
-              >
+              <AppText style={[styles.networkAmount, { color: item.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
                 {visible ? formattedAmount : '••••••'}
               </AppText>
             ) : (
-              <AppText
-                style={[styles.networkAmount, { color: item.color }]}
-                numberOfLines={1}
-              >
-                Open to view
-              </AppText>
+              <AppText style={[styles.networkAmount, { color: item.color }]} numberOfLines={1}>Open to view</AppText>
             )}
           </View>
         </View>
@@ -615,7 +587,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   currencyFlag: {
     fontSize: 18,
@@ -652,7 +624,7 @@ const styles = StyleSheet.create({
   },
   networkCard: {
     width: '48.5%',
-    minHeight: 116,
+    minHeight: 70,
     borderWidth: 1,
     borderRadius: 15,
     flexDirection: 'row',
@@ -672,14 +644,20 @@ const styles = StyleSheet.create({
   networkMain: {
     flex: 1,
     minWidth: 0,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 5,
+  },
+  networkTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 7,
+    minWidth: 0,
   },
   networkIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 29,
+    height: 29,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -692,15 +670,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
-  networkDescription: {
-    fontSize: 10,
-    color: '#555F75',
-    lineHeight: 14,
-  },
+
   networkAmount: {
     fontSize: 12,
     fontWeight: '800',
-    marginTop: 3,
+    marginTop: 1,
   },
   networkEye: {
     alignSelf: 'center',
