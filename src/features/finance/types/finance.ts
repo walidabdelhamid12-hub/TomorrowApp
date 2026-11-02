@@ -185,6 +185,7 @@ export interface Loan extends Timestamps {
   settlementAmount?: number;
   settlementDate?: ISODate;
   settlementAccountId?: EntityId;
+  settlementPaymentId?: EntityId;
   settlementNote?: string;
 
   currencyCode: CurrencyCode;
