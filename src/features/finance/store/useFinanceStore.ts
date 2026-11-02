@@ -434,7 +434,7 @@ export const useFinanceStore = create<FinanceStore>()(
 
       addLoanPayment: (loanId, input) => {
         const loan = get().loans.find((item) => item.id === loanId);
-        if (!loan || loan.status === 'settled' || loan.status === 'completed') return null;
+        if (!loan || loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed') return null;
 
         const amount = roundMoney(input.amount);
         const principalAmount = roundMoney(
