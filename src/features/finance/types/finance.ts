@@ -187,6 +187,13 @@ export interface Loan extends Timestamps {
   /** Custom description when proceeds were received outside a registered account. */
   depositMethodLabel?: string;
 
+  /** Date and amount confirmed as actually received; absent means not confirmed. */
+  receivedAt?: ISODate;
+  receivedAmount?: number;
+
+  /** Income transaction posted when proceeds were received into a registered account. */
+  receiptTransactionId?: EntityId;
+
   /** Current lifecycle state; missing legacy values are treated as active. */
   status?: LoanStatus;
 
