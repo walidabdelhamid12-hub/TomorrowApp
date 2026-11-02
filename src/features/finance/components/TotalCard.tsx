@@ -223,13 +223,9 @@ function NetworkCard({
               </View>
               <AppText style={styles.networkLabel} numberOfLines={1}>{item.label}</AppText>
             </View>
-            {hasAmount ? (
-              <AppText style={[styles.networkAmount, { color: item.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
-                {visible ? formattedAmount : '••••••'}
-              </AppText>
-            ) : (
-              <AppText style={[styles.networkAmount, { color: item.color }]} numberOfLines={1}>Open to view</AppText>
-            )}
+            <AppText style={[styles.networkAmount, { color: item.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
+              {visible ? (formattedAmount ?? 'Open to view') : '••••••'}
+            </AppText>
           </View>
         </View>
 
@@ -240,31 +236,29 @@ function NetworkCard({
         />
       </Pressable>
 
-      {hasAmount && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            visible
-              ? `Hide ${item.label} balance`
-              : `Show ${item.label} balance`
-          }
-          accessibilityState={{ expanded: visible }}
-          onPress={onToggleVisibility}
-          hitSlop={8}
-          style={({ pressed }) => [
-            styles.networkEye,
-            {
-              opacity: pressed ? 0.55 : 1,
-            },
-          ]}
-        >
-          <Ionicons
-            name={visible ? 'eye-outline' : 'eye-off-outline'}
-            size={21}
-            color="#25304A"
-          />
-        </Pressable>
-      )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={
+          visible
+            ? `Hide ${item.label} amount`
+            : `Show ${item.label} amount`
+        }
+        accessibilityState={{ expanded: visible }}
+        onPress={onToggleVisibility}
+        hitSlop={8}
+        style={({ pressed }) => [
+          styles.networkEye,
+          {
+            opacity: pressed ? 0.55 : 1,
+          },
+        ]}
+      >
+        <Ionicons
+          name={visible ? 'eye-outline' : 'eye-off-outline'}
+          size={21}
+          color="#25304A"
+        />
+      </Pressable>
     </View>
   );
 }
