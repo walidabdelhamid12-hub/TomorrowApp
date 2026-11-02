@@ -395,6 +395,11 @@ export const useFinanceStore = create<FinanceStore>()(
             input.principalAmount === undefined
               ? undefined
               : roundMoney(input.principalAmount),
+          totalRepaymentAmount:
+            input.totalRepaymentAmount === undefined
+              ? roundMoney(input.monthlyInstallment * input.numberOfInstallments)
+              : roundMoney(input.totalRepaymentAmount),
+          status: input.status ?? 'active',
           monthlyInstallment: roundMoney(input.monthlyInstallment),
           id: generateId('lon'),
           payments: [],
@@ -427,7 +432,7 @@ export const useFinanceStore = create<FinanceStore>()(
 
       addLoanPayment: (loanId, input) => {
         const loan = get().loans.find((item) => item.id === loanId);
-        if (!loan) return null;
+        if (!loan || loan.status === 'settled' || loan.status === 'completed') return null;
 
         const amount = roundMoney(input.amount);
         const principalAmount = roundMoney(
