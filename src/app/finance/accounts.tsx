@@ -157,6 +157,10 @@ export default function AccountsScreen() {
         </View>
       </View>
 
+      <AppText color="textSecondary" style={{ marginBottom: 16 }}>
+        Manage your cash, bank, wallet, savings, and credit card balances.
+      </AppText>
+
       <AppButton
         title="Add account"
         accentColor={moduleColors.finance}
