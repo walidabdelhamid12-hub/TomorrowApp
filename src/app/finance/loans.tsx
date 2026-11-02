@@ -63,6 +63,8 @@ export default function LoansScreen() {
   const [note, setNote] = useState('');
   const [settlementMode, setSettlementMode] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Loan['payments'][number] | null>(null);
+  const [closingLoan, setClosingLoan] = useState<Loan | null>(null);
+  const [closureReason, setClosureReason] = useState('');
 
   const activeAccounts = useMemo(() => accounts.filter(a => !a.archived), [accounts]);
   const expenseCategory = categories.find(c => c.kind === 'expense' && c.id === 'cat_bills')
@@ -106,6 +108,21 @@ export default function LoansScreen() {
   };
 
   const closePayment = () => { setSelectedLoan(null); setPaymentAmount(''); setNote(''); setSettlementMode(false); setEditingPayment(null); };
+
+  const confirmCloseWithoutPayment = () => {
+    if (!closingLoan || !closureReason.trim()) {
+      Alert.alert('Reason required', 'Enter a reason for closing this loan without a payment.');
+      return;
+    }
+    Alert.alert('Close loan without payment?', 'This will remove the outstanding loan from net worth without creating an account transaction. The loan and its payment history will remain saved.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Close loan', style: 'destructive', onPress: () => {
+        updateLoan(closingLoan.id, { status: 'closed', closureDate: today(), closureReason: closureReason.trim() });
+        setClosingLoan(null);
+        setClosureReason('');
+      } },
+    ]);
+  };
 
   const confirmPayment = () => {
     if (!selectedLoan) return;
@@ -270,7 +287,7 @@ export default function LoansScreen() {
           const due = remaining(loan);
           return <Card key={loan.id} style={styles.loanCard}>
             <View style={styles.row}><View style={{ flex: 1 }}><AppText variant="h2">{loan.name}</AppText><AppText color="textSecondary" variant="caption">{loan.lenderName} · {loan.currencyCode}</AppText></View>
-              <AppText style={{ color: loan.status === 'active' || !loan.status ? colors.warning : colors.success }}>{loan.status === 'settled' ? 'Settled' : loan.status === 'completed' ? 'Completed' : 'Active'}</AppText>
+              <AppText style={{ color: loan.status === 'active' || !loan.status ? colors.warning : colors.success }}>{loan.status === 'settled' ? 'Settled' : loan.status === 'completed' ? 'Completed' : loan.status === 'closed' ? 'Closed without payment' : 'Active'}</AppText>
             </View>
             <View style={styles.metrics}>
               <View><AppText variant="caption" color="textSecondary">Contract total</AppText><AppText>{formatAmount(loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments)} {loan.currencyCode}</AppText></View>
@@ -278,10 +295,12 @@ export default function LoansScreen() {
               <View><AppText variant="caption" color="textSecondary">Remaining</AppText><AppText style={styles.remaining}>{formatAmount(due)} {loan.currencyCode}</AppText></View>
             </View>
             <AppText variant="caption" color="textSecondary">Installment: {formatAmount(loan.monthlyInstallment)} {loan.currencyCode} · {loan.numberOfInstallments} installments · First due {loan.firstDueDate}</AppText>
-            {loan.status !== 'settled' && loan.status !== 'completed' && <View style={styles.actions}>
+            {loan.status !== 'settled' && loan.status !== 'completed' && loan.status !== 'closed' && <View style={styles.actions}>
               <AppButton title="Record payment" fullWidth={false} onPress={() => openPayment(loan)} />
               <AppButton title="Early settlement" fullWidth={false} variant="outline" onPress={() => openPayment(loan, true)} />
+              <AppButton title="Close without payment" fullWidth={false} variant="danger" onPress={() => { setClosingLoan(loan); setClosureReason(''); }} />
             </View>}
+            {loan.status === 'closed' && <AppText color="warning">Closed without payment on {loan.closureDate}: {loan.closureReason}</AppText>}
             {loan.status === 'settled' && (() => {
               const scheduled = loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments;
               const paidBeforeSettlement = loan.payments
@@ -314,6 +333,17 @@ export default function LoansScreen() {
           <Field label="Currency code (e.g. OMR, EGP)" value={currency} onChangeText={setCurrency} />
           <View style={styles.actions}><AppButton title="Save loan" onPress={saveLoan} /><AppButton title="Cancel" variant="outline" onPress={resetLoanForm} /></View>
         </Card></ScrollView></View>
+      </Modal>
+      <Modal visible={!!closingLoan} transparent animationType="fade" onRequestClose={() => setClosingLoan(null)}>
+        <View style={styles.overlay}><Card style={styles.modal}>
+          <AppText variant="h2">Close without payment</AppText>
+          <AppText color="textSecondary">No money will be deducted from any account. The loan history will be kept.</AppText>
+          <Field label="Reason (required)" value={closureReason} onChangeText={setClosureReason} />
+          <View style={styles.actions}>
+            <AppButton title="Confirm closure" variant="danger" onPress={confirmCloseWithoutPayment} />
+            <AppButton title="Cancel" variant="outline" onPress={() => { setClosingLoan(null); setClosureReason(''); }} />
+          </View>
+        </Card></View>
       </Modal>
       <Modal visible={!!selectedLoan} transparent animationType="slide" onRequestClose={closePayment}>
         <View style={styles.overlay}><Card style={styles.modal}>
