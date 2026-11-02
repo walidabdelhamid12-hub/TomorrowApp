@@ -109,6 +109,7 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 interface AddAccountModalProps {
   visible: boolean;
   account?: Account | null;
+  initialType?: AccountTypeLabel;
   onClose: () => void;
   onSave: (data: AddAccountFormData) => void;
 }
@@ -116,6 +117,7 @@ interface AddAccountModalProps {
 export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   visible,
   account = null,
+  initialType = 'Cash',
   onClose,
   onSave,
 }) => {
@@ -143,9 +145,9 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
 
     setAccountName('');
     setAmount('0');
-    setSelectedType('Cash');
+    setSelectedType(initialType);
     setSelectedCurrency(baseCurrency);
-  }, [visible, account, baseCurrency]);
+  }, [visible, account, baseCurrency, initialType]);
 
   const selectedCurrencyOption = CURRENCY_OPTIONS.find(
     (currency) => currency.code === selectedCurrency,
