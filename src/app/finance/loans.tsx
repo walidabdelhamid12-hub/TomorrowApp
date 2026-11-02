@@ -44,6 +44,7 @@ export default function LoansScreen() {
   const addTransaction = useLedgerStore(s => s.addTransaction);
   const updateTransaction = useLedgerStore(s => s.updateTransaction);
   const removeTransaction = useLedgerStore(s => s.removeTransaction);
+  const transactions = useLedgerStore(s => s.transactions);
 
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [loanName, setLoanName] = useState('');
@@ -117,8 +118,8 @@ export default function LoansScreen() {
     }
     const paymentId = addLoanPayment(selectedLoan.id, {
       amount, date: paymentDate, note: note.trim() || (settlementMode ? 'Early settlement' : undefined),
-      principalAmount: settlementMode ? 0 : Math.min(amount, Math.max(0, selectedLoan.principalAmount ?? amount)),
-      interestAmount: settlementMode ? amount : Math.max(0, amount - Math.min(amount, selectedLoan.principalAmount ?? amount)),
+      principalAmount: settlementMode ? 0 : Math.min(amount, Math.max(0, (selectedLoan.principalAmount ?? amount) - selectedLoan.payments.reduce((sum, p) => sum + (p.principalAmount ?? p.amount), 0))),
+      interestAmount: settlementMode ? amount : Math.max(0, amount - Math.min(amount, Math.max(0, (selectedLoan.principalAmount ?? amount) - selectedLoan.payments.reduce((sum, p) => sum + (p.principalAmount ?? p.amount), 0)))),
       accountId: account.id,
     });
     if (!paymentId) {
@@ -154,8 +155,13 @@ export default function LoansScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => {
         if (payment.ledgerTransactionId) {
-          try { removeTransaction(payment.ledgerTransactionId); }
-          catch { Alert.alert('Cannot delete', 'The linked transaction could not be removed.'); return; }
+          try {
+            removeTransaction(payment.ledgerTransactionId);
+            if (transactions.some(t => t.id === payment.ledgerTransactionId)) {
+              Alert.alert('Cannot delete', 'The linked account transaction is protected or could not be removed. The loan payment was kept.');
+              return;
+            }
+          } catch { Alert.alert('Cannot delete', 'The linked transaction could not be removed.'); return; }
         }
         deleteLoanPayment(loan.id, payment.id);
         if (loan.status === 'completed' || loan.status === 'settled') updateLoan(loan.id, { status: 'active', settlementAmount: undefined, settlementDate: undefined, settlementAccountId: undefined, settlementNote: undefined });
@@ -187,11 +193,11 @@ export default function LoansScreen() {
             </View>
             <AppText variant="caption" color="textSecondary">Installment: {formatAmount(loan.monthlyInstallment)} {loan.currencyCode} · {loan.numberOfInstallments} installments · First due {loan.firstDueDate}</AppText>
             {loan.status !== 'settled' && loan.status !== 'completed' && <View style={styles.actions}>
-              <AppButton title="Record payment" size="small" onPress={() => openPayment(loan)} />
-              <AppButton title="Early settlement" size="small" variant="outline" onPress={() => openPayment(loan, true)} />
+              <AppButton title="Record payment" fullWidth={false} onPress={() => openPayment(loan)} />
+              <AppButton title="Early settlement" fullWidth={false} variant="outline" onPress={() => openPayment(loan, true)} />
             </View>}
             {loan.status === 'settled' && <AppText color="success">Settlement: {formatAmount(loan.settlementAmount ?? 0)} {loan.currencyCode} on {loan.settlementDate}</AppText>}
-            {loan.payments.length > 0 && <View style={styles.history}><AppText weight="semibold">Payment history</AppText>
+            {loan.payments.length > 0 && <View style={styles.history}><AppText style={{ fontWeight: '600' }}>Payment history</AppText>
               {loan.payments.map(payment => <View key={payment.id} style={styles.paymentRow}>
                 <View style={{ flex: 1 }}><AppText>{formatAmount(payment.amount)} {loan.currencyCode}</AppText><AppText variant="caption" color="textSecondary">{payment.date} · {payment.note || 'Installment'}</AppText></View>
                 <Pressable onPress={() => confirmDeletePayment(loan, payment)} hitSlop={8}><Ionicons name="trash-outline" size={19} color={colors.danger} /></Pressable>
