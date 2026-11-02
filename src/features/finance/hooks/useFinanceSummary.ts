@@ -92,37 +92,48 @@ export function useFinanceSummary() {
     }
 
     for (const loan of loans) {
-      const scheduledRepayment =
-        loan.totalRepaymentAmount ??
-        loan.monthlyInstallment * loan.numberOfInstallments;
+      // A loan is a liability only after its proceeds are confirmed as received.
+      // Closing without payment is an explicit write-off/closure action in this app.
+      if (
+        (!loan.receivedAt && !loan.receiptTransactionId) ||
+        loan.status === 'closed'
+      ) {
+        continue;
+      }
 
-      if (!Number.isFinite(scheduledRepayment) || scheduledRepayment < 0) {
+      const principalReceived = loan.receivedAmount ?? loan.principalAmount ?? 0;
+      if (!Number.isFinite(principalReceived) || principalReceived < 0) {
         missing += 1;
         continue;
       }
 
-      const paidInstallments = (loan.payments ?? []).reduce(
-        (sum, payment) => sum + payment.amount,
+      // Legacy payments without principalAmount are treated as principal payments.
+      // Interest must never reduce the outstanding principal liability.
+      const principalPaid = (loan.payments ?? []).reduce(
+        (sum, payment) =>
+          sum + (payment.principalAmount ?? payment.amount),
         0
       );
-      const remainingInstallments =
-        loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed'
-          ? 0
-          : Math.max(scheduledRepayment - paidInstallments, 0);
 
-      const installmentsConverted = convertAmount(
-        remainingInstallments,
+      if (!Number.isFinite(principalPaid) || principalPaid < 0) {
+        missing += 1;
+        continue;
+      }
+
+      const remainingPrincipal = Math.max(principalReceived - principalPaid, 0);
+      const principalConverted = convertAmount(
+        remainingPrincipal,
         loan.currencyCode,
         baseCurrency,
         rates,
         verifiedCurrencies
       );
 
-      if (installmentsConverted === null) {
+      if (principalConverted === null) {
         missing += 1;
       } else {
-        loansRemainingTotal += installmentsConverted;
-        loansInstallmentsRemainingTotal += installmentsConverted;
+        loansRemainingTotal += principalConverted;
+        loansInstallmentsRemainingTotal += principalConverted;
       }
     }
 
