@@ -92,36 +92,31 @@ export function useFinanceSummary() {
     }
 
     for (const loan of loans) {
-      if (
-        typeof loan.principalAmount !== 'number' ||
-        !Number.isFinite(loan.principalAmount)
-      ) {
+      const scheduledRepayment =
+        loan.totalRepaymentAmount ??
+        loan.monthlyInstallment * loan.numberOfInstallments;
+
+      if (!Number.isFinite(scheduledRepayment) || scheduledRepayment < 0) {
         missing += 1;
         continue;
       }
 
-      // Legacy payments without a split are treated as principal-only.
-      const paidPrincipal = loan.payments.reduce(
-        (sum, payment) =>
-          sum + (payment.principalAmount ?? payment.amount),
-        0
-      );
-      const paidInstallments = loan.payments.reduce(
+      const paidInstallments = (loan.payments ?? []).reduce(
         (sum, payment) => sum + payment.amount,
         0
       );
-
-      const remainingPrincipal = Math.max(
-        loan.principalAmount - paidPrincipal,
-        0
-      );
-      const scheduledRepayment =
-        loan.totalRepaymentAmount ??
-        loan.monthlyInstallment * loan.numberOfInstallments;
       const remainingInstallments =
         loan.status === 'settled' || loan.status === 'completed'
           ? 0
           : Math.max(scheduledRepayment - paidInstallments, 0);
+
+      const installmentsConverted = convertAmount(
+        remainingInstallments,
+        loan.currencyCode,
+        baseCurrency,
+        rates,
+        verifiedCurrencies
+      );
 
       if (installmentsConverted === null) {
         missing += 1;
