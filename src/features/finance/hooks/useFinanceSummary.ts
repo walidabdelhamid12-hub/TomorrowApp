@@ -106,7 +106,7 @@ export function useFinanceSummary() {
         0
       );
       const remainingInstallments =
-        loan.status === 'settled' || loan.status === 'completed'
+        loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed'
           ? 0
           : Math.max(scheduledRepayment - paidInstallments, 0);
 
