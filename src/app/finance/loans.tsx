@@ -24,7 +24,7 @@ const today = () => {
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
 };
 const money = (value: string) => Number(value.trim().replace(/,/g, ''));
-const remaining = (loan: Loan) => loan.status === 'settled' || loan.status === 'completed'
+const remaining = (loan: Loan) => loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed'
   ? 0
   : Math.max(0, (loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments) - loan.payments.reduce((s, p) => s + p.amount, 0));
 
