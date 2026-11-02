@@ -156,7 +156,10 @@ function migrateFinanceData(
   return {
     assets: normalizeRecords<Asset>(saved.assets),
     debts: normalizeRecords<Debt>(saved.debts),
-    loans: normalizeRecords<Loan>(saved.loans),
+    loans: normalizeRecords<Loan>(saved.loans).map((loan) => ({
+      ...loan,
+      payments: Array.isArray(loan.payments) ? loan.payments : [],
+    })),
     cheques: normalizeRecords<Cheque>(saved.cheques),
   };
 }
