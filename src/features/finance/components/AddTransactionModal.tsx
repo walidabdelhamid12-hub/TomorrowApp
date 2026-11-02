@@ -1341,8 +1341,8 @@ const CALCULATOR_KEYS = [
 ] as const;
 
 function calculateExpression(source: string): number | null {
-  const normalized = source.replace(/\\s/g, '').replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
-  const tokens = normalized.match(/\\d+(?:\\.\\d*)?|\\.\\d+|[()+\\-*/]/g);
+  const normalized = source.replace(/\s/g, '').replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
+  const tokens = normalized.match(/\d+(?:\.\d*)?|\.\d+|[()+\-*\/]/g);
   if (!tokens || tokens.join('') !== normalized) return null;
 
   let index = 0;
@@ -1356,7 +1356,7 @@ function calculateExpression(source: string): number | null {
         if (tokens[index++] !== ')') throw new Error('Missing parenthesis');
         return value;
       }
-      if (!token || !/^\\d*\\.?\\d+$/.test(token)) throw new Error('Invalid number');
+      if (!token || !/^\d*\.?\d+$/.test(token)) throw new Error('Invalid number');
       return Number(token);
     };
     const parseTerm = (): number => {
