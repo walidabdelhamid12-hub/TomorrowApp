@@ -277,10 +277,10 @@ export default function LoansScreen() {
   return (
     <Screen scroll>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.back}><Ionicons name="arrow-back" size={23} color={colors.text} /></Pressable>
+        <Pressable onPress={() => router.back()} style={styles.back}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
         <View style={{ flex: 1 }}><AppText variant="h1">Loans</AppText><AppText variant="caption" color="textSecondary">{loans.length} loans</AppText></View>
       </View>
-      <AppButton title="Add loan" accentColor={moduleColors.finance} leftIcon={<Ionicons name="add" size={20} color={colors.onPrimary} />} onPress={() => setShowLoanForm(true)} />
+      <AppButton title="Add loan" accentColor={moduleColors.finance} leftIcon={<Ionicons name="add" size={18} color={colors.onPrimary} />} onPress={() => setShowLoanForm(true)} />
       {loans.length === 0 ? <Card variant="filled"><AppText align="center" color="textSecondary">No loans recorded yet. Add your first loan.</AppText></Card> :
         loans.map(loan => {
           const paid = loan.payments.reduce((s, p) => s + p.amount, 0);
@@ -316,20 +316,20 @@ export default function LoansScreen() {
             {loan.payments.length > 0 && <View style={styles.history}><AppText style={{ fontWeight: '600' }}>Payment history</AppText>
               {loan.payments.map(payment => <View key={payment.id} style={styles.paymentRow}>
                 <View style={{ flex: 1 }}><AppText>{formatAmount(payment.amount)} {loan.currencyCode}</AppText><AppText variant="caption" color="textSecondary">{payment.date} · {payment.note || 'Installment'}</AppText></View>
-                <View style={styles.row}><Pressable onPress={() => openEditPayment(loan, payment)} hitSlop={8}><Ionicons name="create-outline" size={19} color={moduleColors.finance} /></Pressable><Pressable onPress={() => confirmDeletePayment(loan, payment)} hitSlop={8}><Ionicons name="trash-outline" size={19} color={colors.danger} /></Pressable></View>
+                <View style={styles.row}><Pressable onPress={() => openEditPayment(loan, payment)} hitSlop={8}><Ionicons name="create-outline" size={16} color={moduleColors.finance} /></Pressable><Pressable onPress={() => confirmDeletePayment(loan, payment)} hitSlop={8}><Ionicons name="trash-outline" size={16} color={colors.danger} /></Pressable></View>
               </View>)}
             </View>}
           </Card>;
         })}
       <Modal visible={showLoanForm} transparent animationType="slide" onRequestClose={resetLoanForm}>
-        <View style={styles.overlay}><ScrollView contentContainerStyle={styles.modalWrap}><Card style={styles.modal}>
+        <View style={styles.overlay}><ScrollView style={styles.formScroll} contentContainerStyle={styles.modalWrap} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator><Card style={styles.modal}>
           <AppText variant="h2">New loan</AppText>
           <Field label="Loan name" value={loanName} onChangeText={setLoanName} />
           <Field label="Lender / bank" value={lender} onChangeText={setLender} />
-          <Field label="Original principal" value={principal} onChangeText={setPrincipal} keyboardType="decimal-pad" />
-          <Field label="Total repayment (including interest)" value={total} onChangeText={setTotal} keyboardType="decimal-pad" />
-          <Field label="Monthly installment" value={installment} onChangeText={setInstallment} keyboardType="decimal-pad" />
-          <Field label="Number of installments" value={count} onChangeText={setCount} keyboardType="number-pad" />
+          <Field label="Original principal (amount borrowed)" value={principal} onChangeText={setPrincipal} keyboardType="decimal-pad" />
+          <Field label="Total repayment (principal + interest)" value={total} onChangeText={setTotal} keyboardType="decimal-pad" />
+          <Field label="Monthly installment (amount per month)" value={installment} onChangeText={setInstallment} keyboardType="decimal-pad" />
+          <Field label="Number of installments (months)" value={count} onChangeText={setCount} keyboardType="number-pad" />
           <Field label="First due date (YYYY-MM-DD)" value={firstDue} onChangeText={setFirstDue} />
           <Field label="Currency code (e.g. OMR, EGP)" value={currency} onChangeText={setCurrency} />
           <View style={styles.actions}><AppButton title="Save loan" onPress={saveLoan} /><AppButton title="Cancel" variant="outline" onPress={resetLoanForm} /></View>
@@ -369,18 +369,19 @@ function Field({ label, value, onChangeText, keyboardType = 'default' }: { label
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
-  back: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  loanCard: { marginTop: 14, gap: 12 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  metrics: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 12 },
+  back: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  loanCard: { marginTop: 9, gap: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  metrics: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
   remaining: { fontWeight: '700' },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 7 },
   history: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#9995', paddingTop: 10, gap: 8 },
-  paymentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 12 },
+  paymentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
   overlay: { flex: 1, backgroundColor: '#0008', justifyContent: 'center', padding: 16 },
-  modalWrap: { flexGrow: 1, justifyContent: 'center' },
-  modal: { gap: 12, maxHeight: '95%' },
+  formScroll: { flex: 1 },
+  modalWrap: { flexGrow: 1, justifyContent: 'center', paddingVertical: 12 },
+  modal: { gap: 9 },
   field: { gap: 5 },
   input: { minHeight: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12 },
   accountChoice: { padding: 12, borderWidth: 1, borderColor: '#9996', borderRadius: 10 },
