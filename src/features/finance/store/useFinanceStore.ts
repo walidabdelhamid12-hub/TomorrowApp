@@ -426,40 +426,132 @@ export const useFinanceStore = create<FinanceStore>()(
         })),
 
       addLoanPayment: (loanId, input) => {
-        if (!get().loans.some((loan) => loan.id === loanId)) {
+        const loan = get().loans.find((item) => item.id === loanId);
+        if (!loan) return null;
+
+        const amount = roundMoney(input.amount);
+        const principalAmount = roundMoney(
+          input.principalAmount ?? amount
+        );
+        const interestAmount = roundMoney(
+          input.interestAmount ?? amount - principalAmount
+        );
+        const paidPrincipal = loan.payments.reduce(
+          (sum, item) =>
+            sum + (item.principalAmount ?? item.amount),
+          0
+        );
+        const remainingPrincipal =
+          loan.principalAmount === undefined
+            ? Number.POSITIVE_INFINITY
+            : Math.max(0, roundMoney(loan.principalAmount - paidPrincipal));
+
+        if (
+          !Number.isFinite(amount) ||
+          amount <= 0 ||
+          !Number.isFinite(principalAmount) ||
+          principalAmount < 0 ||
+          !Number.isFinite(interestAmount) ||
+          interestAmount < 0 ||
+          Math.abs(
+            roundMoney(principalAmount + interestAmount) - amount
+          ) > 0.001 ||
+          principalAmount > remainingPrincipal + 0.001
+        ) {
           return null;
         }
 
         const payment: LoanPayment = {
           ...input,
-          amount: roundMoney(input.amount),
+          amount,
+          principalAmount,
+          interestAmount,
           id: generateId('lpy'),
         };
 
         set((state) => ({
-          loans: patchParent(state.loans, loanId, (loan) => ({
-            ...loan,
-            payments: [...loan.payments, payment],
+          loans: patchParent(state.loans, loanId, (currentLoan) => ({
+            ...currentLoan,
+            payments: [...currentLoan.payments, payment],
           })),
         }));
 
         return payment.id;
       },
 
-      updateLoanPayment: (loanId, paymentId, patch) =>
+      updateLoanPayment: (loanId, paymentId, patch) => {
+        const loan = get().loans.find((item) => item.id === loanId);
+        const currentPayment = loan?.payments.find(
+          (item) => item.id === paymentId
+        );
+        if (!loan || !currentPayment) return;
+
+        const cleanPatch = withRounded(definedOnly(patch), [
+          'amount',
+          'principalAmount',
+          'interestAmount',
+        ]);
+        const nextAmount = cleanPatch.amount ?? currentPayment.amount;
+        const nextPrincipal =
+          cleanPatch.principalAmount ??
+          currentPayment.principalAmount ??
+          (cleanPatch.amount !== undefined
+            ? nextAmount
+            : currentPayment.amount);
+        const nextInterest =
+          cleanPatch.interestAmount ??
+          currentPayment.interestAmount ??
+          (cleanPatch.amount !== undefined
+            ? 0
+            : currentPayment.amount - nextPrincipal);
+        const paidPrincipalExcludingCurrent = loan.payments
+          .filter((item) => item.id !== paymentId)
+          .reduce(
+            (sum, item) => sum + (item.principalAmount ?? item.amount),
+            0
+          );
+        const remainingPrincipal =
+          loan.principalAmount === undefined
+            ? Number.POSITIVE_INFINITY
+            : Math.max(
+                0,
+                roundMoney(
+                  loan.principalAmount - paidPrincipalExcludingCurrent
+                )
+              );
+
+        if (
+          !Number.isFinite(nextAmount) ||
+          nextAmount <= 0 ||
+          !Number.isFinite(nextPrincipal) ||
+          nextPrincipal < 0 ||
+          !Number.isFinite(nextInterest) ||
+          nextInterest < 0 ||
+          Math.abs(
+            roundMoney(nextPrincipal + nextInterest) - nextAmount
+          ) > 0.001 ||
+          nextPrincipal > remainingPrincipal + 0.001
+        ) {
+          return;
+        }
+
         set((state) => ({
-          loans: patchParent(state.loans, loanId, (loan) => ({
-            ...loan,
-            payments: loan.payments.map((payment) =>
+          loans: patchParent(state.loans, loanId, (currentLoan) => ({
+            ...currentLoan,
+            payments: currentLoan.payments.map((payment) =>
               payment.id === paymentId
                 ? {
                     ...payment,
-                    ...withRounded(definedOnly(patch), ['amount']),
+                    ...cleanPatch,
+                    amount: nextAmount,
+                    principalAmount: nextPrincipal,
+                    interestAmount: nextInterest,
                   }
                 : payment
             ),
           })),
-        })),
+        }));
+      },
 
       deleteLoanPayment: (loanId, paymentId) =>
         set((state) => ({
