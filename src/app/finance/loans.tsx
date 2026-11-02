@@ -273,7 +273,17 @@ export default function LoansScreen() {
               <AppButton title="Record payment" fullWidth={false} onPress={() => openPayment(loan)} />
               <AppButton title="Early settlement" fullWidth={false} variant="outline" onPress={() => openPayment(loan, true)} />
             </View>}
-            {loan.status === 'settled' && <AppText color="success">Settlement: {formatAmount(loan.settlementAmount ?? 0)} {loan.currencyCode} on {loan.settlementDate}</AppText>}
+            {loan.status === 'settled' && (() => {
+              const scheduled = loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments;
+              const paidBeforeSettlement = loan.payments
+                .filter(payment => payment.id !== loan.settlementPaymentId)
+                .reduce((sum, payment) => sum + payment.amount, 0);
+              const saved = Math.max(0, scheduled - paidBeforeSettlement - (loan.settlementAmount ?? 0));
+              return <View style={{ gap: 4 }}>
+                <AppText color="success">Settlement: {formatAmount(loan.settlementAmount ?? 0)} {loan.currencyCode} on {loan.settlementDate}</AppText>
+                {saved > 0.001 && <AppText color="success" variant="caption">Early settlement saving: {formatAmount(saved)} {loan.currencyCode}</AppText>}
+              </View>;
+            })()}
             {loan.payments.length > 0 && <View style={styles.history}><AppText style={{ fontWeight: '600' }}>Payment history</AppText>
               {loan.payments.map(payment => <View key={payment.id} style={styles.paymentRow}>
                 <View style={{ flex: 1 }}><AppText>{formatAmount(payment.amount)} {loan.currencyCode}</AppText><AppText variant="caption" color="textSecondary">{payment.date} · {payment.note || 'Installment'}</AppText></View>
