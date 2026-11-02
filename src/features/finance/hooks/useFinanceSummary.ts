@@ -116,11 +116,12 @@ export function useFinanceSummary() {
         0
       );
       const scheduledRepayment =
+        loan.totalRepaymentAmount ??
         loan.monthlyInstallment * loan.numberOfInstallments;
-      const remainingInstallments = Math.max(
-        scheduledRepayment - paidInstallments,
-        0
-      );
+      const remainingInstallments =
+        loan.status === 'settled' || loan.status === 'completed'
+          ? 0
+          : Math.max(scheduledRepayment - paidInstallments, 0);
 
       const principalConverted = convertAmount(
         remainingPrincipal,
@@ -251,7 +252,7 @@ export function useFinanceSummary() {
     totals.assetsTotal +
     totals.receivablesTotal -
     totals.payablesTotal -
-    totals.loansRemainingTotal;
+    totals.loansInstallmentsRemainingTotal;
 
   const month = useMemo(() => {
     let income = 0;
