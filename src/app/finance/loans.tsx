@@ -110,7 +110,7 @@ export default function LoansScreen() {
   const confirmPayment = () => {
     if (!selectedLoan) return;
     const amount = money(paymentAmount);
-    const outstanding = remaining(selectedLoan);
+    const outstanding = remaining(selectedLoan) + (editingPayment?.amount ?? 0);
     const account = activeAccounts.find(a => a.id === accountId && a.currencyCode === selectedLoan.currencyCode);
     if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding + 0.001 ||
       !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) || !account) {
@@ -123,11 +123,13 @@ export default function LoansScreen() {
         Alert.alert('Cannot edit payment', 'This payment has no linked account transaction. Please keep its history unchanged.');
         return;
       }
-      const oldPrincipal = editingPayment.principalAmount ?? editingPayment.amount;
-      const oldInterest = editingPayment.interestAmount ?? Math.max(0, editingPayment.amount - oldPrincipal);
-      const ratio = editingPayment.amount > 0 ? oldPrincipal / editingPayment.amount : 1;
-      const nextPrincipal = Math.min(amount, Math.max(0, oldPrincipal + (amount - editingPayment.amount) * ratio));
+      const principalAlreadyPaid = selectedLoan.payments
+        .filter(p => p.id !== editingPayment.id)
+        .reduce((sum, p) => sum + (p.principalAmount ?? p.amount), 0);
+      const principalRoom = Math.max(0, (selectedLoan.principalAmount ?? amount) - principalAlreadyPaid);
+      const nextPrincipal = Math.min(amount, principalRoom);
       const nextInterest = amount - nextPrincipal;
+      const previousTransaction = transactions.find(t => t.id === accountTransactionId);
       const updated = updateTransaction(accountTransactionId, {
         amount, accountId: account.id, date: paymentDate,
         note: note.trim() || `Loan payment: ${selectedLoan.name}`,
@@ -141,6 +143,16 @@ export default function LoansScreen() {
         accountId: account.id, principalAmount: nextPrincipal,
         interestAmount: nextInterest,
       });
+      const savedPayment = useFinanceStore.getState().loans
+        .find(l => l.id === selectedLoan.id)?.payments.find(p => p.id === editingPayment.id);
+      if (!savedPayment || savedPayment.amount !== amount) {
+        if (previousTransaction) updateTransaction(accountTransactionId, {
+          amount: previousTransaction.amount, accountId: previousTransaction.accountId,
+          date: previousTransaction.date, note: previousTransaction.note,
+        });
+        Alert.alert('Update rejected', 'The loan store rejected the updated payment. The account transaction was restored.');
+        return;
+      }
       closePayment();
       return;
     }
