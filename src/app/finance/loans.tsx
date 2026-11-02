@@ -290,11 +290,12 @@ export default function LoansScreen() {
               <AppText style={{ color: loan.status === 'active' || !loan.status ? colors.warning : colors.success }}>{loan.status === 'settled' ? 'Settled' : loan.status === 'completed' ? 'Completed' : loan.status === 'closed' ? 'Closed without payment' : 'Active'}</AppText>
             </View>
             <View style={styles.metrics}>
+              <View><AppText variant="caption" color="textSecondary">Original principal</AppText><AppText>{formatAmount(loan.principalAmount ?? 0)} {loan.currencyCode}</AppText></View>
               <View><AppText variant="caption" color="textSecondary">Contract total</AppText><AppText>{formatAmount(loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments)} {loan.currencyCode}</AppText></View>
-              <View><AppText variant="caption" color="textSecondary">Paid</AppText><AppText>{formatAmount(paid)} {loan.currencyCode}</AppText></View>
               <View><AppText variant="caption" color="textSecondary">Remaining</AppText><AppText style={styles.remaining}>{formatAmount(due)} {loan.currencyCode}</AppText></View>
             </View>
-            <AppText variant="caption" color="textSecondary">Installment: {formatAmount(loan.monthlyInstallment)} {loan.currencyCode} · {loan.numberOfInstallments} installments · First due {loan.firstDueDate}</AppText>
+            <AppText variant="caption" color="textSecondary">Paid: {formatAmount(paid)} {loan.currencyCode} · Installment: {formatAmount(loan.monthlyInstallment)} {loan.currencyCode}</AppText>
+            <AppText variant="caption" color="textSecondary">Payments recorded: {loan.payments.length} · Scheduled installments remaining: {loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed' ? 0 : Math.max(0, loan.numberOfInstallments - loan.payments.length)} · First due {loan.firstDueDate}</AppText>
             {loan.status !== 'settled' && loan.status !== 'completed' && loan.status !== 'closed' && <View style={styles.actions}>
               <AppButton title="Record payment" fullWidth={false} onPress={() => openPayment(loan)} />
               <AppButton title="Early settlement" fullWidth={false} variant="outline" onPress={() => openPayment(loan, true)} />
