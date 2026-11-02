@@ -322,18 +322,25 @@ export default function LoansScreen() {
           </Card>;
         })}
       <Modal visible={showLoanForm} transparent animationType="slide" onRequestClose={resetLoanForm}>
-        <View style={styles.overlay}><ScrollView style={styles.formScroll} contentContainerStyle={styles.modalWrap} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator><Card style={styles.modal}>
-          <AppText variant="h2">New loan</AppText>
-          <Field label="Loan name" value={loanName} onChangeText={setLoanName} />
-          <Field label="Lender / bank" value={lender} onChangeText={setLender} />
-          <Field label="Original principal (amount borrowed)" value={principal} onChangeText={setPrincipal} keyboardType="decimal-pad" />
-          <Field label="Total repayment (principal + interest)" value={total} onChangeText={setTotal} keyboardType="decimal-pad" />
-          <Field label="Monthly installment (amount per month)" value={installment} onChangeText={setInstallment} keyboardType="decimal-pad" />
-          <Field label="Number of installments (months)" value={count} onChangeText={setCount} keyboardType="number-pad" />
-          <Field label="First due date (YYYY-MM-DD)" value={firstDue} onChangeText={setFirstDue} />
-          <Field label="Currency code (e.g. OMR, EGP)" value={currency} onChangeText={setCurrency} />
-          <View style={styles.actions}><AppButton title="Save loan" onPress={saveLoan} /><AppButton title="Cancel" variant="outline" onPress={resetLoanForm} /></View>
-        </Card></ScrollView></View>
+        <View style={styles.overlay}>
+          <Card style={styles.loanFormModal}>
+            <AppText variant="h2">New loan</AppText>
+            <ScrollView style={styles.formScroll} contentContainerStyle={styles.formFields} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+              <Field label="Loan name" value={loanName} onChangeText={setLoanName} />
+              <Field label="Lender / bank" value={lender} onChangeText={setLender} />
+              <Field label="Original principal (amount borrowed)" value={principal} onChangeText={setPrincipal} keyboardType="decimal-pad" />
+              <Field label="Total repayment (principal + interest)" value={total} onChangeText={setTotal} keyboardType="decimal-pad" />
+              <Field label="Monthly installment (amount per month)" value={installment} onChangeText={setInstallment} keyboardType="decimal-pad" />
+              <Field label="Number of installments (months)" value={count} onChangeText={setCount} keyboardType="number-pad" />
+              <Field label="First due date (YYYY-MM-DD)" value={firstDue} onChangeText={setFirstDue} />
+              <Field label="Currency code (e.g. OMR, EGP)" value={currency} onChangeText={setCurrency} />
+            </ScrollView>
+            <View style={styles.actions}>
+              <AppButton title="Save loan" onPress={saveLoan} />
+              <AppButton title="Cancel" variant="outline" onPress={resetLoanForm} />
+            </View>
+          </Card>
+        </View>
       </Modal>
       <Modal visible={!!closingLoan} transparent animationType="fade" onRequestClose={() => setClosingLoan(null)}>
         <View style={styles.overlay}><Card style={styles.modal}>
@@ -364,7 +371,7 @@ export default function LoansScreen() {
 
 function Field({ label, value, onChangeText, keyboardType = 'default' }: { label: string; value: string; onChangeText: (value: string) => void; keyboardType?: 'default' | 'decimal-pad' | 'number-pad' }) {
   const { colors } = useTheme();
-  return <View style={styles.field}><AppText variant="caption" color="textSecondary">{label}</AppText><TextInput value={value} onChangeText={onChangeText} keyboardType={keyboardType} placeholderTextColor={colors.textSecondary} style={[styles.input, { color: colors.text, borderColor: colors.border }]} /></View>;
+  return <View style={styles.field}><AppText variant="caption" color="textSecondary">{label}</AppText><TextInput value={value} onChangeText={onChangeText} keyboardType={keyboardType} placeholder="Tap here to enter" placeholderTextColor={colors.textSecondary} selectionColor={moduleColors.finance} style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]} /></View>;
 }
 
 const styles = StyleSheet.create({
@@ -380,9 +387,10 @@ const styles = StyleSheet.create({
   paymentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
   overlay: { flex: 1, backgroundColor: '#0008', justifyContent: 'center', padding: 16 },
   formScroll: { flex: 1 },
-  modalWrap: { flexGrow: 1, justifyContent: 'center', paddingVertical: 12 },
+  formFields: { gap: 10, paddingVertical: 8 },
+  loanFormModal: { maxHeight: '92%', gap: 10 },
   modal: { gap: 9 },
   field: { gap: 5 },
-  input: { minHeight: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12 },
+  input: { minHeight: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
   accountChoice: { padding: 12, borderWidth: 1, borderColor: '#9996', borderRadius: 10 },
 });
