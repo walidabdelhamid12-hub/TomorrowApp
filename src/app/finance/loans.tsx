@@ -114,7 +114,13 @@ export default function LoansScreen() {
       Alert.alert('Expense category required', 'Add or restore an expense category before recording a loan payment. No payment has been recorded.');
       return;
     }
-    const outstanding = remaining(selectedLoan) + (editingPayment?.amount ?? 0);
+    const scheduledTotal = selectedLoan.totalRepaymentAmount ??
+      selectedLoan.monthlyInstallment * selectedLoan.numberOfInstallments;
+    const outstanding = editingPayment
+      ? Math.max(0, scheduledTotal - selectedLoan.payments
+          .filter(payment => payment.id !== editingPayment.id)
+          .reduce((sum, payment) => sum + payment.amount, 0))
+      : remaining(selectedLoan);
     const account = activeAccounts.find(a => a.id === accountId && a.currencyCode === selectedLoan.currencyCode);
     if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding + 0.001 ||
       !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) || !account) {
@@ -241,7 +247,14 @@ export default function LoansScreen() {
           } catch { Alert.alert('Cannot delete', 'The linked transaction could not be removed.'); return; }
         }
         deleteLoanPayment(loan.id, payment.id);
-        if (loan.status === 'completed' || loan.status === 'settled') updateLoan(loan.id, { status: 'active', settlementAmount: undefined, settlementDate: undefined, settlementAccountId: undefined, settlementPaymentId: undefined, settlementNote: undefined });
+        if (loan.status === 'completed') {
+          updateLoan(loan.id, { status: 'active' });
+        } else if (loan.status === 'settled' && loan.settlementPaymentId === payment.id) {
+          updateLoan(loan.id, {
+            status: 'active', settlementAmount: undefined, settlementDate: undefined,
+            settlementAccountId: undefined, settlementPaymentId: undefined, settlementNote: undefined,
+          });
+        }
       }},
     ]);
   };
