@@ -323,7 +323,7 @@ export default function LoansScreen() {
         })}
       <Modal visible={showLoanForm} transparent animationType="slide" onRequestClose={resetLoanForm}>
         <View style={styles.overlay}>
-          <Card style={styles.loanFormModal}>
+          <View style={[styles.loanFormModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <AppText variant="h2">New loan</AppText>
             <ScrollView style={styles.formScroll} contentContainerStyle={styles.formFields} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
               <Field label="Loan name" value={loanName} onChangeText={setLoanName} />
@@ -339,7 +339,7 @@ export default function LoansScreen() {
               <AppButton title="Save loan" onPress={saveLoan} />
               <AppButton title="Cancel" variant="outline" onPress={resetLoanForm} />
             </View>
-          </Card>
+          </View>
         </View>
       </Modal>
       <Modal visible={!!closingLoan} transparent animationType="fade" onRequestClose={() => setClosingLoan(null)}>
@@ -385,12 +385,12 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 7 },
   history: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#9995', paddingTop: 10, gap: 8 },
   paymentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
-  overlay: { flex: 1, backgroundColor: '#0008', justifyContent: 'center', padding: 16 },
-  formScroll: { flex: 1 },
-  formFields: { gap: 10, paddingVertical: 8 },
-  loanFormModal: { maxHeight: '92%', gap: 10 },
+  overlay: { flex: 1, backgroundColor: '#0008', justifyContent: 'center', alignItems: 'center', padding: 12 },
+  formScroll: { flexShrink: 1, minHeight: 0 },
+  formFields: { gap: 8, paddingVertical: 6 },
+  loanFormModal: { width: '100%', maxHeight: '94%', flexShrink: 1, borderRadius: 18, padding: 14, gap: 8, borderWidth: StyleSheet.hairlineWidth },
   modal: { gap: 9 },
   field: { gap: 5 },
-  input: { minHeight: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
-  accountChoice: { padding: 12, borderWidth: 1, borderColor: '#9996', borderRadius: 10 },
+  input: { minHeight: 42, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7 },
+  accountChoice: { padding: 10, borderWidth: 1, borderColor: '#9996', borderRadius: 10 },
 });
