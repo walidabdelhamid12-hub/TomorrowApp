@@ -11,7 +11,14 @@ export function getGoldValueEGP(
   karat: number,
   gold24PerGram: number | null
 ): number | null {
-  if (gold24PerGram === null || gold24PerGram <= 0) {
+  if (
+    !Number.isFinite(grams) ||
+    !Number.isFinite(karat) ||
+    gold24PerGram === null ||
+    !Number.isFinite(gold24PerGram) ||
+    gold24PerGram <= 0 ||
+    karat <= 0
+  ) {
     return null;
   }
 
@@ -23,7 +30,12 @@ export function getSilverValueEGP(
   grams: number,
   silverPerGram: number | null
 ): number | null {
-  if (silverPerGram === null || silverPerGram <= 0) {
+  if (
+    !Number.isFinite(grams) ||
+    silverPerGram === null ||
+    !Number.isFinite(silverPerGram) ||
+    silverPerGram <= 0
+  ) {
     return null;
   }
 
@@ -36,9 +48,14 @@ export function getAssetValueInBase(
   baseCurrency: string,
   rates: RateMap,
   gold24PerGram: number | null,
-  silverPerGram: number | null = null
+  silverPerGram: number | null = null,
+  verifiedCurrencies: readonly string[] = ['EGP']
 ): number | null {
   const balance = getAssetBalance(asset);
+
+  if (!Number.isFinite(balance)) {
+    return null;
+  }
 
   if (asset.category === 'gold') {
     const egp = getGoldValueEGP(
@@ -49,7 +66,13 @@ export function getAssetValueInBase(
 
     return egp === null
       ? null
-      : convertAmount(egp, RATE_ANCHOR, baseCurrency, rates);
+      : convertAmount(
+          egp,
+          RATE_ANCHOR,
+          baseCurrency,
+          rates,
+          verifiedCurrencies
+        );
   }
 
   if (asset.category === 'silver') {
@@ -57,13 +80,20 @@ export function getAssetValueInBase(
 
     return egp === null
       ? null
-      : convertAmount(egp, RATE_ANCHOR, baseCurrency, rates);
+      : convertAmount(
+          egp,
+          RATE_ANCHOR,
+          baseCurrency,
+          rates,
+          verifiedCurrencies
+        );
   }
 
   return convertAmount(
     balance,
     asset.currencyCode,
     baseCurrency,
-    rates
+    rates,
+    verifiedCurrencies
   );
 }

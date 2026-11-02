@@ -1,3 +1,4 @@
+
 import { roundMoney } from '@/features/finance/utils/finance';
 import { normalizeDigits } from '@/utils/input';
 
@@ -67,21 +68,41 @@ export function formatMoney(value: number, _code: string): string {
  * Converts between currencies using rates stored as:
  * 1 unit of currency = X EGP.
  *
- * Returns null if either required rate is missing or invalid.
- * No exchange rate is guessed.
+ * A conversion is allowed only when both currencies have
+ * verified exchange rates.
+ *
+ * EGP is the fixed reference currency and is trusted by default.
+ * Unverified/default rates are never used for conversion.
+ *
+ * Returns null if a required rate is missing, invalid,
+ * or not verified.
  */
 export function convertAmount(
   amount: number,
   from: string,
   to: string,
-  rates: RateMap
+  rates: RateMap,
+  verifiedCurrencies: readonly string[] = ['EGP'],
 ): number | null {
   if (!Number.isFinite(amount)) return null;
 
-  if (from === to) return amount;
+  const fromCode = from.trim().toUpperCase();
+  const toCode = to.trim().toUpperCase();
 
-  const fromRate = rates[from];
-  const toRate = rates[to];
+  if (!fromCode || !toCode) return null;
+
+  if (fromCode === toCode) return amount;
+
+  const verified = new Set(
+    verifiedCurrencies.map((code) => code.trim().toUpperCase()),
+  );
+
+  if (!verified.has(fromCode) || !verified.has(toCode)) {
+    return null;
+  }
+
+  const fromRate = rates[fromCode];
+  const toRate = rates[toCode];
 
   if (
     !Number.isFinite(fromRate) ||

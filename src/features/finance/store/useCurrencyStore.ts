@@ -21,13 +21,18 @@ export interface MetalPrices {
 
 export interface LiveRatesPayload {
   rates: Record<string, number>;
-  metals: MetalPrices;
+  metals: Partial<MetalPrices>;
   updatedAt: string;
 }
+
+type MetalSources = Record<MetalKey, RateSource>;
 
 interface CurrencyData {
   baseCurrency: string;
   rates: Record<string, number>;
+  verifiedCurrencies: string[];
+  rateSources: Record<string, RateSource>;
+  metalSources: MetalSources;
   metals: MetalPrices;
   updatedAt: string | null;
   lastLiveUpdatedAt: string | null;
@@ -39,19 +44,47 @@ interface CurrencyActions {
   setBaseCurrency: (code: string) => void;
   setRate: (code: string, rate: number) => boolean;
   setMetalPrice: (kind: MetalKey, value: number | null) => boolean;
+  setManualRates: (
+    rates: Record<string, number>,
+    metals: MetalPrices,
+  ) => boolean;
   applyLiveRates: (payload: LiveRatesPayload) => boolean;
+  markRatesUnconfirmed: (
+    currencyCodes: string[],
+    metalKeys: MetalKey[],
+  ) => void;
   resetRates: () => void;
 }
 
 export type CurrencyStore = CurrencyData & CurrencyActions;
 
-const STORAGE_VERSION = 3;
+const STORAGE_VERSION = 5;
+const FUTURE_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000;
+
+const SUPPORTED_CURRENCY_CODES = new Set(
+  CURRENCIES.map((currency) => currency.code),
+);
+
+const ALL_CURRENCY_CODES = CURRENCIES.map(
+  (currency) => currency.code,
+);
 
 const initialData: CurrencyData = {
   baseCurrency: DEFAULT_BASE_CURRENCY,
   rates: {
     ...DEFAULT_RATES_TO_EGP,
     [RATE_ANCHOR]: 1,
+  },
+  verifiedCurrencies: [RATE_ANCHOR],
+  rateSources: Object.fromEntries(
+    ALL_CURRENCY_CODES.map((code) => [
+      code,
+      code === RATE_ANCHOR ? 'live' : 'default',
+    ]),
+  ) as Record<string, RateSource>,
+  metalSources: {
+    gold24PerGram: 'default',
+    silverPerGram: 'default',
   },
   metals: {
     gold24PerGram: null,
@@ -79,6 +112,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   );
 }
 
+function isSupportedCurrency(code: string): boolean {
+  return SUPPORTED_CURRENCY_CODES.has(code);
+}
+
 function normalizeRates(rates?: unknown): Record<string, number> {
   const normalized: Record<string, number> = {
     ...DEFAULT_RATES_TO_EGP,
@@ -88,7 +125,7 @@ function normalizeRates(rates?: unknown): Record<string, number> {
     for (const [rawCode, value] of Object.entries(rates)) {
       const code = rawCode.trim().toUpperCase();
 
-      if (code && isValidRate(value)) {
+      if (isSupportedCurrency(code) && isValidRate(value)) {
         normalized[code] = value;
       }
     }
@@ -98,19 +135,7 @@ function normalizeRates(rates?: unknown): Record<string, number> {
   return normalized;
 }
 
-function normalizeMetalPrice(value: unknown): number | null {
-  return isValidRate(value) ? value : null;
-}
-
-function normalizeBaseCurrency(value: unknown): string {
-  if (typeof value === 'string' && value.trim() !== '') {
-    return value.trim().toUpperCase();
-  }
-
-  return DEFAULT_BASE_CURRENCY;
-}
-
-function normalizeSource(value: unknown): RateSource {
+function normalizeRateSource(value: unknown): RateSource {
   if (value === 'live' || value === 'manual') {
     return value;
   }
@@ -118,10 +143,128 @@ function normalizeSource(value: unknown): RateSource {
   return 'default';
 }
 
+function normalizeRateSources(
+  value: unknown,
+  rates: Record<string, number>,
+  verifiedCurrencies: string[],
+): Record<string, RateSource> {
+  const result: Record<string, RateSource> = {};
+
+  for (const code of ALL_CURRENCY_CODES) {
+    if (code === RATE_ANCHOR) {
+      result[code] = 'live';
+      continue;
+    }
+
+    if (isRecord(value) && value[code] !== undefined) {
+      result[code] = normalizeRateSource(value[code]);
+      continue;
+    }
+
+    result[code] = verifiedCurrencies.includes(code)
+      ? 'manual'
+      : 'default';
+  }
+
+  return result;
+}
+
+function normalizeVerifiedCurrencies(
+  value: unknown,
+): string[] {
+  if (!Array.isArray(value)) {
+    return [RATE_ANCHOR];
+  }
+
+  const verified = new Set<string>();
+
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+
+    const code = item.trim().toUpperCase();
+
+    if (isSupportedCurrency(code)) {
+      verified.add(code);
+    }
+  }
+
+  verified.add(RATE_ANCHOR);
+  return [...verified];
+}
+
+function normalizeMetalPrice(value: unknown): number | null {
+  return isValidRate(value) ? value : null;
+}
+
+function normalizeBaseCurrency(value: unknown): string {
+  if (typeof value === 'string') {
+    const code = value.trim().toUpperCase();
+
+    if (isSupportedCurrency(code)) {
+      return code;
+    }
+  }
+
+  return DEFAULT_BASE_CURRENCY;
+}
+
+function normalizeSource(value: unknown): RateSource {
+  return normalizeRateSource(value);
+}
+
 function normalizeUpdatedAt(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() !== ''
-    ? value
-    : null;
+  if (typeof value !== 'string' || value.trim() === '') {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+
+  if (!Number.isFinite(timestamp)) {
+    return null;
+  }
+
+  if (timestamp > Date.now() + FUTURE_TIMESTAMP_TOLERANCE_MS) {
+    return null;
+  }
+
+  return new Date(timestamp).toISOString();
+}
+
+function normalizeMetalSources(
+  value: unknown,
+  metals: MetalPrices,
+  legacySource: RateSource,
+  lastLiveUpdatedAt: string | null,
+): MetalSources {
+  const result: MetalSources = {
+    gold24PerGram: 'default',
+    silverPerGram: 'default',
+  };
+
+  const keys: MetalKey[] = [
+    'gold24PerGram',
+    'silverPerGram',
+  ];
+
+  for (const key of keys) {
+    if (!isValidRate(metals[key])) {
+      result[key] = 'default';
+      continue;
+    }
+
+    if (isRecord(value) && value[key] !== undefined) {
+      result[key] = normalizeRateSource(value[key]);
+      continue;
+    }
+
+    if (legacySource === 'manual') {
+      result[key] = 'manual';
+    } else if (lastLiveUpdatedAt) {
+      result[key] = 'live';
+    }
+  }
+
+  return result;
 }
 
 function migrateCurrencyData(
@@ -131,56 +274,108 @@ function migrateCurrencyData(
   const savedMetals = isRecord(saved.metals) ? saved.metals : {};
 
   const updatedAt = normalizeUpdatedAt(saved.updatedAt);
-  const source = normalizeSource(saved.source);
+  const legacySource = normalizeSource(saved.source);
+
+  const lastLiveUpdatedAt =
+    normalizeUpdatedAt(saved.lastLiveUpdatedAt) ??
+    (legacySource === 'live' ? updatedAt : null);
+
+  const verifiedCurrencies = Array.isArray(
+    saved.verifiedCurrencies,
+  )
+    ? normalizeVerifiedCurrencies(saved.verifiedCurrencies)
+    : legacySource === 'live' && lastLiveUpdatedAt !== null
+      ? [...ALL_CURRENCY_CODES]
+      : [RATE_ANCHOR];
+
+  const rates = normalizeRates(saved.rates);
+
+  const metals: MetalPrices = {
+    gold24PerGram: normalizeMetalPrice(
+      savedMetals.gold24PerGram,
+    ),
+    silverPerGram: normalizeMetalPrice(
+      savedMetals.silverPerGram,
+    ),
+  };
+
+  const rateSources = normalizeRateSources(
+    saved.rateSources,
+    rates,
+    verifiedCurrencies,
+  );
+
+  const metalSources = normalizeMetalSources(
+    saved.metalSources,
+    metals,
+    legacySource,
+    lastLiveUpdatedAt,
+  );
+
+  const normalizedVerified = ALL_CURRENCY_CODES.filter(
+    (code) =>
+      code === RATE_ANCHOR || rateSources[code] !== 'default',
+  );
 
   return {
     baseCurrency: normalizeBaseCurrency(saved.baseCurrency),
-    rates: normalizeRates(saved.rates),
-    metals: {
-      gold24PerGram: normalizeMetalPrice(
-        savedMetals.gold24PerGram,
-      ),
-      silverPerGram: normalizeMetalPrice(
-        savedMetals.silverPerGram,
-      ),
-    },
+    rates,
+    verifiedCurrencies: normalizedVerified,
+    rateSources,
+    metalSources,
+    metals,
     updatedAt,
-    source,
-    lastLiveUpdatedAt:
-      normalizeUpdatedAt(saved.lastLiveUpdatedAt) ??
-      (source === 'live' ? updatedAt : null),
+    source: legacySource,
+    lastLiveUpdatedAt,
     lastManualUpdatedAt:
       normalizeUpdatedAt(saved.lastManualUpdatedAt) ??
-      (source === 'manual' ? updatedAt : null),
+      (legacySource === 'manual' ? updatedAt : null),
   };
 }
 
-function isCompleteLivePayload(
-  payload: LiveRatesPayload,
+function isValidLiveTimestamp(value: string): boolean {
+  const timestamp = Date.parse(value);
+
+  return (
+    Number.isFinite(timestamp) &&
+    timestamp <= Date.now() + FUTURE_TIMESTAMP_TOLERANCE_MS
+  );
+}
+
+function isValidManualPayload(
+  rates: Record<string, number>,
+  metals: MetalPrices,
 ): boolean {
-  if (
-    !isRecord(payload.rates) ||
-    !isRecord(payload.metals) ||
-    typeof payload.updatedAt !== 'string' ||
-    payload.updatedAt.trim() === '' ||
-    !Number.isFinite(Date.parse(payload.updatedAt))
-  ) {
+  if (!isRecord(rates) || !isRecord(metals)) {
     return false;
   }
 
-  for (const currency of CURRENCIES) {
+  for (const [rawCode, value] of Object.entries(rates)) {
+    const code = rawCode.trim().toUpperCase();
+
     if (
-      currency.code !== RATE_ANCHOR &&
-      !isValidRate(payload.rates[currency.code])
+      !isSupportedCurrency(code) ||
+      code === RATE_ANCHOR ||
+      !isValidRate(value)
     ) {
       return false;
     }
   }
 
   return (
-    payload.rates[RATE_ANCHOR] === 1 &&
-    isValidRate(payload.metals.gold24PerGram) &&
-    isValidRate(payload.metals.silverPerGram)
+    (metals.gold24PerGram === null ||
+      isValidRate(metals.gold24PerGram)) &&
+    (metals.silverPerGram === null ||
+      isValidRate(metals.silverPerGram))
+  );
+}
+
+function getVerifiedCurrencies(
+  rateSources: Record<string, RateSource>,
+): string[] {
+  return ALL_CURRENCY_CODES.filter(
+    (code) =>
+      code === RATE_ANCHOR || rateSources[code] !== 'default',
   );
 }
 
@@ -190,21 +385,26 @@ export const useCurrencyStore = create<CurrencyStore>()(
       ...initialData,
 
       setBaseCurrency: (code) => {
+        if (typeof code !== 'string') return;
+
         const normalizedCode = code.trim().toUpperCase();
 
-        if (!normalizedCode) return;
+        if (!isSupportedCurrency(normalizedCode)) {
+          return;
+        }
 
-        set((state) => ({
+        set({
           baseCurrency: normalizedCode,
-          rates: normalizeRates(state.rates),
-        }));
+        });
       },
 
       setRate: (code, rate) => {
+        if (typeof code !== 'string') return false;
+
         const normalizedCode = code.trim().toUpperCase();
 
         if (
-          !normalizedCode ||
+          !isSupportedCurrency(normalizedCode) ||
           normalizedCode === RATE_ANCHOR ||
           !isValidRate(rate)
         ) {
@@ -213,21 +413,35 @@ export const useCurrencyStore = create<CurrencyStore>()(
 
         const now = new Date().toISOString();
 
-        set((state) => ({
-          rates: normalizeRates({
-            ...state.rates,
-            [normalizedCode]: rate,
-          }),
-          source: 'manual',
-          updatedAt: now,
-          lastManualUpdatedAt: now,
-        }));
+        set((state) => {
+          const rateSources = {
+            ...state.rateSources,
+            [normalizedCode]: 'manual' as const,
+            [RATE_ANCHOR]: 'live' as const,
+          };
+
+          return {
+            rates: {
+              ...state.rates,
+              [normalizedCode]: rate,
+              [RATE_ANCHOR]: 1,
+            },
+            rateSources,
+            verifiedCurrencies: getVerifiedCurrencies(rateSources),
+            source: 'manual',
+            updatedAt: now,
+            lastManualUpdatedAt: now,
+          };
+        });
 
         return true;
       },
 
       setMetalPrice: (kind, value) => {
-        if (value !== null && !isValidRate(value)) {
+        if (
+          (kind !== 'gold24PerGram' && kind !== 'silverPerGram') ||
+          (value !== null && !isValidRate(value))
+        ) {
           return false;
         }
 
@@ -238,6 +452,10 @@ export const useCurrencyStore = create<CurrencyStore>()(
             ...state.metals,
             [kind]: value,
           },
+          metalSources: {
+            ...state.metalSources,
+            [kind]: value === null ? 'default' : 'manual',
+          },
           source: 'manual',
           updatedAt: now,
           lastManualUpdatedAt: now,
@@ -246,29 +464,231 @@ export const useCurrencyStore = create<CurrencyStore>()(
         return true;
       },
 
-      applyLiveRates: (payload) => {
-        if (!isCompleteLivePayload(payload)) {
+      setManualRates: (rates, metals) => {
+        if (!isValidManualPayload(rates, metals)) {
           return false;
         }
 
-        set({
-          rates: normalizeRates(payload.rates),
-          metals: {
-            gold24PerGram: payload.metals.gold24PerGram,
-            silverPerGram: payload.metals.silverPerGram,
-          },
-          source: 'live',
-          updatedAt: payload.updatedAt,
-          lastLiveUpdatedAt: payload.updatedAt,
-          lastManualUpdatedAt: null,
+        const now = new Date().toISOString();
+
+        set((state) => {
+          const normalizedManualRates: Record<string, number> = {};
+
+          for (const [rawCode, value] of Object.entries(rates)) {
+            const code = rawCode.trim().toUpperCase();
+            normalizedManualRates[code] = value;
+          }
+
+          const rateSources = {
+            ...state.rateSources,
+            ...Object.fromEntries(
+              Object.keys(normalizedManualRates).map((code) => [
+                code,
+                'manual' as const,
+              ]),
+            ),
+            [RATE_ANCHOR]: 'live' as const,
+          };
+
+          const metalSources = {
+            ...state.metalSources,
+            gold24PerGram:
+              metals.gold24PerGram === null
+                ? state.metalSources.gold24PerGram
+                : 'manual' as const,
+            silverPerGram:
+              metals.silverPerGram === null
+                ? state.metalSources.silverPerGram
+                : 'manual' as const,
+          };
+
+          return {
+            rates: {
+              ...state.rates,
+              ...normalizedManualRates,
+              [RATE_ANCHOR]: 1,
+            },
+            rateSources,
+            verifiedCurrencies: getVerifiedCurrencies(rateSources),
+            metals: {
+              gold24PerGram:
+                metals.gold24PerGram === null
+                  ? state.metals.gold24PerGram
+                  : metals.gold24PerGram,
+              silverPerGram:
+                metals.silverPerGram === null
+                  ? state.metals.silverPerGram
+                  : metals.silverPerGram,
+            },
+            metalSources,
+            source: 'manual',
+            updatedAt: now,
+            lastManualUpdatedAt: now,
+          };
         });
 
         return true;
       },
 
+      applyLiveRates: (payload) => {
+        if (
+          !isRecord(payload) ||
+          !isRecord(payload.rates) ||
+          !isRecord(payload.metals) ||
+          typeof payload.updatedAt !== 'string' ||
+          !isValidLiveTimestamp(payload.updatedAt)
+        ) {
+          return false;
+        }
+
+        const incomingTimestamp = Date.parse(payload.updatedAt);
+
+        const currentLastLiveTimestamp = Date.parse(
+          useCurrencyStore.getState().lastLiveUpdatedAt ?? '',
+        );
+
+        if (
+          Number.isFinite(currentLastLiveTimestamp) &&
+          incomingTimestamp <= currentLastLiveTimestamp
+        ) {
+          return false;
+        }
+
+        const incomingRates: Record<string, number> = {};
+
+        for (const [rawCode, value] of Object.entries(payload.rates)) {
+          const code = rawCode.trim().toUpperCase();
+
+          if (
+            !isSupportedCurrency(code) ||
+            code === RATE_ANCHOR ||
+            !isValidRate(value)
+          ) {
+            continue;
+          }
+
+          incomingRates[code] = value;
+        }
+
+        const incomingMetals: Partial<MetalPrices> = {};
+
+        if (isValidRate(payload.metals.gold24PerGram)) {
+          incomingMetals.gold24PerGram =
+            payload.metals.gold24PerGram;
+        }
+
+        if (isValidRate(payload.metals.silverPerGram)) {
+          incomingMetals.silverPerGram =
+            payload.metals.silverPerGram;
+        }
+
+        const hasIncomingRates = Object.keys(incomingRates).length > 0;
+        const hasIncomingMetals =
+          Object.keys(incomingMetals).length > 0;
+
+        if (!hasIncomingRates && !hasIncomingMetals) {
+          return false;
+        }
+
+        const normalizedTimestamp = new Date(
+          incomingTimestamp,
+        ).toISOString();
+
+        set((state) => {
+          const rateSources = {
+            ...state.rateSources,
+            ...Object.fromEntries(
+              Object.keys(incomingRates).map((code) => [
+                code,
+                'live' as const,
+              ]),
+            ),
+            [RATE_ANCHOR]: 'live' as const,
+          };
+
+          const metalSources = {
+            ...state.metalSources,
+            ...(incomingMetals.gold24PerGram !== undefined
+              ? { gold24PerGram: 'live' as const }
+              : {}),
+            ...(incomingMetals.silverPerGram !== undefined
+              ? { silverPerGram: 'live' as const }
+              : {}),
+          };
+
+          return {
+            rates: {
+              ...state.rates,
+              ...incomingRates,
+              [RATE_ANCHOR]: 1,
+            },
+            rateSources,
+            verifiedCurrencies: getVerifiedCurrencies(rateSources),
+            metals: {
+              ...state.metals,
+              ...incomingMetals,
+            },
+            metalSources,
+            source: 'live',
+            updatedAt: normalizedTimestamp,
+            lastLiveUpdatedAt: normalizedTimestamp,
+          };
+        });
+
+        return true;
+      },
+
+      markRatesUnconfirmed: (currencyCodes, metalKeys) => {
+        set((state) => {
+          const rateSources = { ...state.rateSources };
+          const metalSources = { ...state.metalSources };
+
+          for (const rawCode of currencyCodes) {
+            if (typeof rawCode !== 'string') continue;
+
+            const code = rawCode.trim().toUpperCase();
+
+            if (
+              isSupportedCurrency(code) &&
+              code !== RATE_ANCHOR &&
+              rateSources[code] === 'live'
+            ) {
+              rateSources[code] = 'default';
+            }
+          }
+
+          for (const key of metalKeys) {
+            if (
+              (key === 'gold24PerGram' ||
+                key === 'silverPerGram') &&
+              metalSources[key] === 'live'
+            ) {
+              metalSources[key] = 'default';
+            }
+          }
+
+          return {
+            rateSources,
+            metalSources,
+            verifiedCurrencies: getVerifiedCurrencies(rateSources),
+          };
+        });
+      },
+
       resetRates: () =>
         set({
           rates: normalizeRates(DEFAULT_RATES_TO_EGP),
+          verifiedCurrencies: [RATE_ANCHOR],
+          rateSources: Object.fromEntries(
+            ALL_CURRENCY_CODES.map((code) => [
+              code,
+              code === RATE_ANCHOR ? 'live' : 'default',
+            ]),
+          ) as Record<string, RateSource>,
+          metalSources: {
+            gold24PerGram: 'default',
+            silverPerGram: 'default',
+          },
           metals: {
             gold24PerGram: null,
             silverPerGram: null,
@@ -287,6 +707,9 @@ export const useCurrencyStore = create<CurrencyStore>()(
       partialize: (state): CurrencyData => ({
         baseCurrency: state.baseCurrency,
         rates: state.rates,
+        verifiedCurrencies: state.verifiedCurrencies,
+        rateSources: state.rateSources,
+        metalSources: state.metalSources,
         metals: state.metals,
         updatedAt: state.updatedAt,
         lastLiveUpdatedAt: state.lastLiveUpdatedAt,
@@ -294,7 +717,7 @@ export const useCurrencyStore = create<CurrencyStore>()(
         source: state.source,
       }),
 
-      migrate: (persistedState, _persistedVersion): CurrencyData => {
+      migrate: (persistedState): CurrencyData => {
         return migrateCurrencyData(persistedState);
       },
 

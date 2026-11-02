@@ -18,6 +18,18 @@ import { useTheme } from '@/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
+export type FinanceNetworkKey =
+  | 'accounts'
+  | 'assets'
+  | 'receivable'
+  | 'payable'
+  | 'income'
+  | 'expenses'
+  | 'loans'
+  | 'cheques'
+  | 'categories'
+  | 'transfers';
+
 interface TotalCardProps {
   baseCurrency: string;
   total: number;
@@ -31,7 +43,131 @@ interface TotalCardProps {
   expense: number;
   amountsVisible: boolean;
   onToggleAmounts: () => void;
+  onNetworkPress: (key: FinanceNetworkKey) => void;
+  chequesTotal?: number;
+  transfersTotal?: number;
 }
+
+interface NetworkItem {
+  key: FinanceNetworkKey;
+  label: string;
+  description: string;
+  icon: IconName;
+  color: string;
+  background: string;
+  amount?: number;
+  sign?: '+' | '-';
+}
+
+const NETWORK_ITEMS: NetworkItem[] = [
+  {
+    key: 'accounts',
+    label: 'Accounts',
+    description: 'Manage your accounts',
+    icon: 'wallet-outline',
+    color: '#2878D0',
+    background: '#EAF3FC',
+    amount: 0,
+  },
+  {
+    key: 'assets',
+    label: 'Assets',
+    description: 'Track your assets',
+    icon: 'diamond-outline',
+    color: '#7556B8',
+    background: '#F0EBFA',
+    amount: 0,
+  },
+  {
+    key: 'receivable',
+    label: 'Receivable',
+    description: 'Manage what others owe you',
+    icon: 'arrow-down-circle-outline',
+    color: '#209B70',
+    background: '#E7F5EF',
+    amount: 0,
+    sign: '+',
+  },
+  {
+    key: 'payable',
+    label: 'Payable',
+    description: 'Manage what you owe',
+    icon: 'arrow-up-circle-outline',
+    color: '#D65353',
+    background: '#FBECEC',
+    amount: 0,
+    sign: '-',
+  },
+  {
+    key: 'income',
+    label: 'Income',
+    description: 'Record your income',
+    icon: 'trending-up-outline',
+    color: '#209B70',
+    background: '#E7F5EF',
+    amount: 0,
+    sign: '+',
+  },
+  {
+    key: 'expenses',
+    label: 'Expenses',
+    description: 'Track your expenses',
+    icon: 'trending-down-outline',
+    color: '#D65353',
+    background: '#FBECEC',
+    amount: 0,
+    sign: '-',
+  },
+  {
+    key: 'loans',
+    label: 'Loans',
+    description: 'Manage your loans',
+    icon: 'cash-outline',
+    color: '#B98218',
+    background: '#FBF3E2',
+    amount: 0,
+    sign: '-',
+  },
+  {
+    key: 'cheques',
+    label: 'Cheques',
+    description: 'Manage your cheques',
+    icon: 'document-text-outline',
+    color: '#159BB5',
+    background: '#E6F7FA',
+  },
+  {
+    key: 'categories',
+    label: 'Categories',
+    description: 'Manage your categories',
+    icon: 'grid-outline',
+    color: '#7556B8',
+    background: '#F0EBFA',
+  },
+  {
+    key: 'transfers',
+    label: 'Transfers',
+    description: 'Move money between accounts',
+    icon: 'swap-horizontal-outline',
+    color: '#2878D0',
+    background: '#EAF3FC',
+  },
+];
+
+type VisibilityState = Record<FinanceNetworkKey, boolean>;
+
+const INITIAL_VISIBILITY: VisibilityState = {
+  accounts: true,
+  assets: true,
+  receivable: true,
+  payable: true,
+  income: true,
+  expenses: true,
+  loans: true,
+  cheques: true,
+  categories: true,
+  transfers: true,
+};
 
 function countOf(value: unknown): number {
   if (Array.isArray(value)) return value.length;
@@ -39,43 +175,124 @@ function countOf(value: unknown): number {
   return value ? 1 : 0;
 }
 
-interface StatProps {
-  label: string;
-  value: string;
-  icon: IconName;
-  color: string;
-  background: string;
-  fullWidth?: boolean;
-}
+function NetworkCard({
+  item,
+  currency,
+  visible,
+  onToggleVisibility,
+  onPress,
+}: {
+  item: NetworkItem;
+  currency: string;
+  visible: boolean;
+  onToggleVisibility: () => void;
+  onPress: () => void;
+}) {
+  const hasAmount = typeof item.amount === 'number';
 
-function Stat({
-  label,
-  value,
-  icon,
-  color,
-  background,
-  fullWidth = false,
-}: StatProps) {
+  const formattedAmount = hasAmount
+    ? `${item.sign ?? ''}${formatAmount(item.amount ?? 0)} ${currency}`
+    : null;
+
   return (
-    <View style={[styles.stat, fullWidth && styles.fullWidthStat]}>
-      <View style={[styles.statIcon, { backgroundColor: background }]}>
-        <Ionicons name={icon} size={18} color={color} />
-      </View>
+    <View
+      style={[
+        styles.networkCard,
+        {
+          backgroundColor: item.background,
+          borderColor: `${item.color}35`,
+        },
+      ]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${item.label}`}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.networkCardBody,
+          {
+            opacity: pressed ? 0.72 : 1,
+          },
+        ]}
+      >
+        <View style={styles.networkMain}>
+          <View
+            style={[
+              styles.networkIcon,
+              { backgroundColor: `${item.color}18` },
+            ]}
+          >
+            <Ionicons
+              name={item.icon}
+              size={27}
+              color={item.color}
+            />
+          </View>
 
-      <View style={styles.statContent}>
-        <AppText style={styles.statLabel} numberOfLines={1}>
-          {label}
-        </AppText>
+          <View style={styles.networkInfo}>
+            <AppText style={styles.networkLabel} numberOfLines={1}>
+              {item.label}
+            </AppText>
 
-        <AppText
-          style={styles.statValue}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.75}
+            <AppText
+              style={styles.networkDescription}
+              numberOfLines={2}
+            >
+              {item.description}
+            </AppText>
+
+            {hasAmount ? (
+              <AppText
+                style={[styles.networkAmount, { color: item.color }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {visible ? formattedAmount : '••••••'}
+              </AppText>
+            ) : (
+              <AppText
+                style={[styles.networkAmount, { color: item.color }]}
+                numberOfLines={1}
+              >
+                Open to view
+              </AppText>
+            )}
+          </View>
+        </View>
+
+        <Ionicons
+          name="chevron-forward"
+          size={17}
+          color="#667085"
+        />
+      </Pressable>
+
+      {hasAmount && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            visible
+              ? `Hide ${item.label} balance`
+              : `Show ${item.label} balance`
+          }
+          accessibilityState={{ expanded: visible }}
+          onPress={onToggleVisibility}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.networkEye,
+            {
+              opacity: pressed ? 0.55 : 1,
+            },
+          ]}
         >
-          {value}
-        </AppText>
-      </View>
+          <Ionicons
+            name={visible ? 'eye-outline' : 'eye-off-outline'}
+            size={21}
+            color="#25304A"
+          />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -93,6 +310,9 @@ export function TotalCard({
   expense,
   amountsVisible,
   onToggleAmounts,
+  onNetworkPress,
+  chequesTotal,
+  transfersTotal,
 }: TotalCardProps) {
   const { spacing, colors } = useTheme();
 
@@ -101,6 +321,10 @@ export function TotalCard({
   );
 
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
+
+  const [networkVisibility, setNetworkVisibility] =
+    useState<VisibilityState>(INITIAL_VISIBILITY);
+
   const missingCount = countOf(missing);
 
   const selectedCurrency = CURRENCIES.find(
@@ -110,21 +334,56 @@ export function TotalCard({
   const currencyFlag = selectedCurrency?.flag ?? '🌐';
   const hiddenValue = '••••••';
 
-  const money = (amount: number) =>
-    amountsVisible
-      ? `${formatAmount(amount)} ${baseCurrency}`
-      : hiddenValue;
+  const networkItems = NETWORK_ITEMS.map((item) => {
+    switch (item.key) {
+      case 'accounts':
+        return { ...item, amount: accountsTotal };
+
+      case 'assets':
+        return { ...item, amount: assetsTotal };
+
+      case 'receivable':
+        return { ...item, amount: receivablesTotal };
+
+      case 'payable':
+        return { ...item, amount: payablesTotal };
+
+      case 'income':
+        return { ...item, amount: income };
+
+      case 'expenses':
+        return { ...item, amount: Math.abs(expense) };
+
+      case 'loans':
+        return { ...item, amount: loansRemainingTotal };
+
+      case 'cheques':
+        return { ...item, amount: chequesTotal };
+
+      case 'transfers':
+        return { ...item, amount: transfersTotal };
+
+      default:
+        return item;
+    }
+  });
+
+  const toggleNetworkVisibility = (key: FinanceNetworkKey) => {
+    setNetworkVisibility((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  };
 
   return (
     <View style={{ marginTop: spacing.lg }}>
       <Card>
-        {/* Net Worth heading */}
         <View style={styles.headingRow}>
           <View style={styles.netWorthHeading}>
             <View style={styles.netWorthIcon}>
               <Ionicons
                 name="wallet"
-                size={18}
+                size={19}
                 color={colors.primary}
               />
             </View>
@@ -137,7 +396,7 @@ export function TotalCard({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              amountsVisible ? 'Hide amounts' : 'Show amounts'
+              amountsVisible ? 'Hide total balance' : 'Show total balance'
             }
             accessibilityState={{ expanded: amountsVisible }}
             onPress={onToggleAmounts}
@@ -146,14 +405,13 @@ export function TotalCard({
           >
             <Ionicons
               name={amountsVisible ? 'eye-outline' : 'eye-off-outline'}
-              size={21}
+              size={22}
               color={colors.text}
             />
           </Pressable>
         </View>
 
-        {/* Main balance */}
-        <View style={[styles.balanceRow, { marginTop: spacing.xs }]}>
+        <View style={[styles.balanceRow, { marginTop: spacing.sm }]}>
           <View style={styles.balanceAmount}>
             <AppText
               variant="h1"
@@ -192,93 +450,31 @@ export function TotalCard({
           </Pressable>
         </View>
 
-        {/* Accounts and Assets */}
-        <View style={[styles.row, { marginTop: spacing.lg }]}>
-          <Stat
-            label="Accounts"
-            value={money(accountsTotal)}
-            icon="wallet"
-            color="#2878D0"
-            background="#EAF3FC"
-          />
+        <View style={styles.networkDivider} />
 
-          <Stat
-            label="Assets"
-            value={money(assetsTotal)}
-            icon="diamond"
-            color="#7556B8"
-            background="#F0EBFA"
-          />
+        <View style={styles.shortcutsHeading}>
+          <AppText style={styles.sectionTitle}>
+            Finance Shortcuts
+          </AppText>
+
+          <AppText style={styles.shortcutsCount}>
+            10 sections
+          </AppText>
         </View>
 
-        {/* Receivables and Payables */}
-        <View style={[styles.row, { marginTop: spacing.md }]}>
-          <Stat
-            label="Receivables"
-            value={
-              amountsVisible
-                ? `+${money(receivablesTotal)}`
-                : hiddenValue
-            }
-            icon="arrow-down-circle"
-            color="#209B70"
-            background="#E7F5EF"
-          />
-
-          <Stat
-            label="Payables"
-            value={
-              amountsVisible
-                ? `-${money(payablesTotal)}`
-                : hiddenValue
-            }
-            icon="arrow-up-circle"
-            color="#D65353"
-            background="#FBECEC"
-          />
-        </View>
-
-        {/* Income and Expense */}
-        <View style={[styles.row, { marginTop: spacing.md }]}>
-          <Stat
-            label="Income"
-            value={
-              amountsVisible
-                ? `+${money(income)}`
-                : hiddenValue
-            }
-            icon="trending-up"
-            color="#209B70"
-            background="#E7F5EF"
-          />
-
-          <Stat
-            label="Expense"
-            value={
-              amountsVisible
-                ? `-${money(Math.abs(expense))}`
-                : hiddenValue
-            }
-            icon="trending-down"
-            color="#D65353"
-            background="#FBECEC"
-          />
-        </View>
-
-        {/* Loans Remaining - full width at the bottom */}
-        <View style={[styles.row, { marginTop: spacing.md }]}>
-          <Stat
-            label="Loans Remaining"
-            value={
-              amountsVisible
-                ? `-${money(loansRemainingTotal)}`
-                : hiddenValue
-            }
-            icon="card"
-            color="#B98218"
-            background="#FBF3E2"
-            fullWidth
-          />
+        <View style={styles.networkGrid}>
+          {networkItems.map((item) => (
+            <NetworkCard
+              key={item.key}
+              item={item}
+              currency={baseCurrency}
+              visible={networkVisibility[item.key]}
+              onToggleVisibility={() =>
+                toggleNetworkVisibility(item.key)
+              }
+              onPress={() => onNetworkPress(item.key)}
+            />
+          ))}
         </View>
 
         {missingCount > 0 ? (
@@ -292,7 +488,6 @@ export function TotalCard({
         ) : null}
       </Card>
 
-      {/* Base currency picker */}
       <Modal
         visible={currencyPickerOpen}
         transparent
@@ -385,9 +580,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   netWorthIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: '#EAF1FC',
     alignItems: 'center',
     justifyContent: 'center',
@@ -397,11 +592,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   netWorthAmount: {
-    fontSize: 28.5,
+    fontSize: 28,
     fontWeight: '700',
   },
   visibilityButton: {
-    padding: 5,
+    padding: 6,
   },
   balanceRow: {
     flexDirection: 'row',
@@ -428,45 +623,90 @@ const styles = StyleSheet.create({
   currencyCode: {
     fontWeight: '700',
   },
-  row: {
-    flexDirection: 'row',
-    gap: 10,
+  networkDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#E5E7EB',
+    marginTop: 20,
   },
-  stat: {
+  shortcutsHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  shortcutsCount: {
+    fontSize: 11,
+    color: '#8A91A2',
+    fontWeight: '600',
+  },
+  networkGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 10,
+  },
+  networkCard: {
+    width: '48.5%',
+    minHeight: 116,
+    borderWidth: 1,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  networkCardBody: {
     flex: 1,
     minWidth: 0,
-    minHeight: 70,
-    borderRadius: 12,
-    backgroundColor: '#F7F8FC',
-    paddingHorizontal: 9,
-    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 5,
+  },
+  networkMain: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  fullWidthStat: {
-    flex: 1,
-    width: '100%',
-  },
-  statIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+  networkIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statContent: {
+  networkInfo: {
     flex: 1,
     minWidth: 0,
+    gap: 4,
   },
-  statLabel: {
+  networkLabel: {
+    fontSize: 13,
     fontWeight: '800',
-    fontSize: 14,
   },
-  statValue: {
-    fontWeight: '700',
-    fontSize: 15,
-    marginTop: 5,
+  networkDescription: {
+    fontSize: 10,
+    color: '#555F75',
+    lineHeight: 14,
+  },
+  networkAmount: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  networkEye: {
+    alignSelf: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 5,
   },
   modalBackdrop: {
     flex: 1,

@@ -1,7 +1,12 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, View } from 'react-native';
+import {
+  Alert,
+  Animated,
+  Pressable,
+  View,
+} from 'react-native';
 
 import { AppButton, AppInput, AppText } from '@/components/ui';
 import { FormModal } from '@/features/finance/components/FormModal';
@@ -13,6 +18,11 @@ import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { parseAmount } from '@/features/finance/utils/money';
 import type { RefreshResult } from '@/services/liveRates';
 import { moduleColors, useTheme } from '@/theme';
+
+import type {
+  MetalKey,
+  RateSource,
+} from '@/features/finance/store/useCurrencyStore';
 
 interface RatesModalProps {
   visible: boolean;
@@ -36,25 +46,69 @@ function isValidRate(value: number | undefined): value is number {
   );
 }
 
+function hasDisplayValueChanged(
+  currentValue: string,
+  originalValue: string,
+): boolean {
+  const current = currentValue.trim();
+  const original = originalValue.trim();
+
+  if (current === '' || original === '') {
+    return current !== original;
+  }
+
+  const currentNumber = parseAmount(current);
+  const originalNumber = parseAmount(original);
+
+  if (currentNumber === null || originalNumber === null) {
+    return current !== original;
+  }
+
+  return Math.abs(currentNumber - originalNumber) > 0.0000001;
+}
+
 function formatLocalDate(value: string | null): string {
   if (!value) return 'Not available';
 
   const date = new Date(value);
 
   if (!Number.isFinite(date.getTime())) {
-    return 'Invalid date';
+    return 'Not available';
   }
 
-  return date.toLocaleString(undefined, {
+  const datePart = date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
     year: 'numeric',
-    month: 'short',
-    day: 'numeric',
+  });
+
+  const timePart = date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
+    hour12: true,
   });
+
+  return `${datePart} – ${timePart}`;
 }
 
-/** Displays and edits rates relative to the selected base currency. */
+const SOURCE_LABELS: Record<RateSource, string> = {
+  live: 'LIVE',
+  manual: 'MANUAL',
+  default: 'N/C',
+};
+
+const SOURCE_BACKGROUNDS: Record<RateSource, string> = {
+  live: '#E7F5E9',
+  manual: '#E8F0FE',
+  default: '#FCE8E8',
+};
+
+const SOURCE_BORDERS: Record<RateSource, string> = {
+  live: '#A5D6A7',
+  manual: '#AFC7F5',
+  default: '#F0B4B4',
+};
+
 export function RatesModal({
   visible,
   onClose,
@@ -68,18 +122,19 @@ export function RatesModal({
   const metals = useCurrencyStore((s) => s.metals);
   const baseCurrency = useCurrencyStore((s) => s.baseCurrency);
   const updatedAt = useCurrencyStore((s) => s.updatedAt);
-
   const lastLiveUpdatedAt = useCurrencyStore(
     (s) => s.lastLiveUpdatedAt,
   );
 
-  const lastManualUpdatedAt = useCurrencyStore(
-    (s) => s.lastManualUpdatedAt,
-  );
+  const rateSources = useCurrencyStore((s) => s.rateSources);
+  const metalSources = useCurrencyStore((s) => s.metalSources);
 
-  const source = useCurrencyStore((s) => s.source);
-  const setRate = useCurrencyStore((s) => s.setRate);
-  const setMetalPrice = useCurrencyStore((s) => s.setMetalPrice);
+  const setManualRates = useCurrencyStore(
+    (s) => s.setManualRates,
+  );
+  const setMetalPrice = useCurrencyStore(
+    (s) => s.setMetalPrice,
+  );
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [gold, setGold] = useState('');
@@ -89,6 +144,20 @@ export function RatesModal({
     useState<RefreshResult | null>(null);
 
   const rotation = useRef(new Animated.Value(0)).current;
+
+  // Diagnostic: component mount and unmount.
+  useEffect(() => {
+    console.log('[RatesModal] COMPONENT MOUNTED');
+
+    return () => {
+      console.log('[RatesModal] COMPONENT UNMOUNTED');
+    };
+  }, []);
+
+  // Diagnostic: track visibility changes.
+  useEffect(() => {
+    console.log('[RatesModal] VISIBLE CHANGED:', visible);
+  }, [visible]);
 
   const baseRate = rates[baseCurrency];
 
@@ -140,7 +209,6 @@ export function RatesModal({
     }
   }, [lastResult]);
 
-  // Convert stored EGP-based rates into the selected display currency.
   useEffect(() => {
     if (!visible || !isValidRate(baseRate)) return;
 
@@ -173,72 +241,97 @@ export function RatesModal({
     metals,
   ]);
 
-  // Detect changes that have not been saved yet.
+  const getCurrencySource = (code: string): RateSource =>
+    rateSources[code] ?? 'default';
+
+  const getMetalSource = (kind: MetalKey): RateSource =>
+    metalSources[kind] ?? 'default';
+
+  const getInputStatusStyle = (source: RateSource) => ({
+    backgroundColor: SOURCE_BACKGROUNDS[source],
+    borderColor: SOURCE_BORDERS[source],
+    borderWidth: 1,
+  });
+
   const hasUnsavedChanges = (() => {
     if (!isValidRate(baseRate)) return false;
 
     for (const currency of displayedCurrencies) {
       if (currency.code === RATE_ANCHOR) continue;
 
-      const displayValue = parseAmount(
-        drafts[currency.code] ?? '',
+      const originalDisplay = showRate(
+        (rates[currency.code] ?? 0) / baseRate,
       );
 
-      if (displayValue === null || displayValue <= 0) {
-        return true;
-      }
-
-      const storedValue = displayValue * baseRate;
-      const currentValue = rates[currency.code] ?? 0;
-
       if (
-        Math.abs(storedValue - currentValue) > 0.0000001
+        hasDisplayValueChanged(
+          drafts[currency.code] ?? '',
+          originalDisplay,
+        )
       ) {
         return true;
       }
     }
 
-    if (gold.trim() !== '') {
-      const goldValue = parseAmount(gold);
+    const originalGoldDisplay =
+      metals.gold24PerGram === null
+        ? ''
+        : showMetal(metals.gold24PerGram / baseRate);
 
-      if (goldValue === null || goldValue <= 0) {
-        return true;
-      }
-
-      const storedGold = goldValue * baseRate;
-
-      if (
-        metals.gold24PerGram === null ||
-        Math.abs(storedGold - metals.gold24PerGram) > 0.0000001
-      ) {
-        return true;
-      }
+    if (hasDisplayValueChanged(gold, originalGoldDisplay)) {
+      return true;
     }
 
-    if (silver.trim() !== '') {
-      const silverValue = parseAmount(silver);
+    const originalSilverDisplay =
+      metals.silverPerGram === null
+        ? ''
+        : showMetal(metals.silverPerGram / baseRate);
 
-      if (silverValue === null || silverValue <= 0) {
-        return true;
-      }
-
-      const storedSilver = silverValue * baseRate;
-
-      if (
-        metals.silverPerGram === null ||
-        Math.abs(storedSilver - metals.silverPerGram) > 0.0000001
-      ) {
-        return true;
-      }
+    if (hasDisplayValueChanged(silver, originalSilverDisplay)) {
+      return true;
     }
 
     return false;
   })();
 
+  const handleClose = () => {
+    console.log('[RatesModal] HANDLE CLOSE CALLED');
+    console.log('[RatesModal] Unsaved changes:', hasUnsavedChanges);
+
+    if (!hasUnsavedChanges) {
+      console.log('[RatesModal] Calling onClose directly');
+      onClose();
+      return;
+    }
+
+    Alert.alert(
+      'Unsaved changes',
+      'You have unsaved rate changes. Do you want to discard them?',
+      [
+        {
+          text: 'Keep editing',
+          style: 'cancel',
+        },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            console.log('[RatesModal] Discard confirmed; calling onClose');
+            onClose();
+          },
+        },
+      ],
+    );
+  };
+
   const handleRefresh = async () => {
+    console.log('[RatesModal] REFRESH STARTED');
+
     setRefreshMessage(null);
 
     const result = await refreshRates();
+
+    console.log('[RatesModal] REFRESH FINISHED:', result);
 
     if (result) {
       setRefreshMessage(result);
@@ -246,14 +339,18 @@ export function RatesModal({
   };
 
   const save = () => {
+    console.log('[RatesModal] SAVE STARTED');
+    console.log('[RatesModal] Visible at save:', visible);
+
     setError(undefined);
 
     if (!isValidRate(baseRate)) {
+      console.log('[RatesModal] SAVE STOPPED: invalid base rate');
       setError(`No valid exchange rate found for ${baseCurrency}.`);
       return;
     }
 
-    const parsed: Record<string, number> = {};
+    const changedRates: Record<string, number> = {};
 
     for (const currency of displayedCurrencies) {
       if (currency.code === RATE_ANCHOR) continue;
@@ -263,11 +360,31 @@ export function RatesModal({
       );
 
       if (displayValue === null || displayValue <= 0) {
+        console.log('[RatesModal] SAVE STOPPED: invalid currency', currency.code);
         setError(`Enter a valid rate for ${currency.code}.`);
         return;
       }
 
-      parsed[currency.code] = displayValue * baseRate;
+      const storedValue = displayValue * baseRate;
+
+      if (!Number.isFinite(storedValue) || storedValue <= 0) {
+        console.log('[RatesModal] SAVE STOPPED: invalid converted rate', currency.code);
+        setError(`Invalid converted rate for ${currency.code}.`);
+        return;
+      }
+
+      const originalDisplayValue = showRate(
+        (rates[currency.code] ?? 0) / baseRate,
+      );
+
+      if (
+        hasDisplayValueChanged(
+          drafts[currency.code] ?? '',
+          originalDisplayValue,
+        )
+      ) {
+        changedRates[currency.code] = storedValue;
+      }
     }
 
     const goldDisplay =
@@ -280,7 +397,10 @@ export function RatesModal({
       gold.trim() !== '' &&
       (goldDisplay === null || goldDisplay <= 0)
     ) {
-      setError('Enter a valid gold price.');
+      console.log('[RatesModal] SAVE STOPPED: invalid gold price');
+      setError(
+        'Enter a valid gold price or leave it empty to clear it.',
+      );
       return;
     }
 
@@ -288,95 +408,168 @@ export function RatesModal({
       silver.trim() !== '' &&
       (silverDisplay === null || silverDisplay <= 0)
     ) {
-      setError('Enter a valid silver price.');
+      console.log('[RatesModal] SAVE STOPPED: invalid silver price');
+      setError(
+        'Enter a valid silver price or leave it empty to clear it.',
+      );
       return;
     }
 
-    let saveFailed = false;
+    const goldStored =
+      goldDisplay === null ? null : goldDisplay * baseRate;
 
-    Object.entries(parsed).forEach(([code, value]) => {
-      const current = rates[code] ?? 0;
+    const silverStored =
+      silverDisplay === null ? null : silverDisplay * baseRate;
 
-      if (
-        Math.abs(value - current) > 0.0000001 &&
-        !setRate(code, value)
-      ) {
-        saveFailed = true;
-      }
-    });
-
-    if (goldDisplay !== null) {
-      const goldStored = goldDisplay * baseRate;
-
-      if (
-        metals.gold24PerGram === null ||
-        Math.abs(goldStored - metals.gold24PerGram) > 0.0000001
-      ) {
-        if (!setMetalPrice('gold24PerGram', goldStored)) {
-          saveFailed = true;
-        }
-      }
-    }
-
-    if (silverDisplay !== null) {
-      const silverStored = silverDisplay * baseRate;
-
-      if (
-        metals.silverPerGram === null ||
-        Math.abs(silverStored - metals.silverPerGram) > 0.0000001
-      ) {
-        if (!setMetalPrice('silverPerGram', silverStored)) {
-          saveFailed = true;
-        }
-      }
-    }
-
-    if (saveFailed) {
-      setError('Some rates could not be saved.');
+    if (
+      (goldStored !== null &&
+        (!Number.isFinite(goldStored) || goldStored <= 0)) ||
+      (silverStored !== null &&
+        (!Number.isFinite(silverStored) || silverStored <= 0))
+    ) {
+      console.log('[RatesModal] SAVE STOPPED: invalid metal prices');
+      setError('One or more metal prices are invalid.');
       return;
     }
 
-    onClose();
+    const originalGoldDisplay =
+      metals.gold24PerGram === null
+        ? ''
+        : showMetal(metals.gold24PerGram / baseRate);
+
+    const originalSilverDisplay =
+      metals.silverPerGram === null
+        ? ''
+        : showMetal(metals.silverPerGram / baseRate);
+
+    const goldChanged = hasDisplayValueChanged(
+      gold,
+      originalGoldDisplay,
+    );
+
+    const silverChanged = hasDisplayValueChanged(
+      silver,
+      originalSilverDisplay,
+    );
+
+    console.log('[RatesModal] Changed currencies:', Object.keys(changedRates));
+    console.log('[RatesModal] Gold changed:', goldChanged);
+    console.log('[RatesModal] Silver changed:', silverChanged);
+
+    if (Object.keys(changedRates).length > 0) {
+      console.log('[RatesModal] Saving currency rates');
+
+      const saved = setManualRates(changedRates, {
+        gold24PerGram: null,
+        silverPerGram: null,
+      });
+
+      if (!saved) {
+        console.log('[RatesModal] SAVE FAILED: currency rates');
+        setError('Currency rates could not be saved.');
+        return;
+      }
+    }
+
+    if (goldChanged) {
+      console.log('[RatesModal] Saving gold price');
+
+      const saved = setMetalPrice('gold24PerGram', goldStored);
+
+      if (!saved) {
+        console.log('[RatesModal] SAVE FAILED: gold price');
+        setError('Gold price could not be saved.');
+        return;
+      }
+    }
+
+    if (silverChanged) {
+      console.log('[RatesModal] Saving silver price');
+
+      const saved = setMetalPrice('silverPerGram', silverStored);
+
+      if (!saved) {
+        console.log('[RatesModal] SAVE FAILED: silver price');
+        setError('Silver price could not be saved.');
+        return;
+      }
+    }
+
+    console.log('[RatesModal] SAVE FINISHED');
+    console.log('[RatesModal] No onClose call was made by save');
+    console.log('[RatesModal] Visible after save:', visible);
+
+    // Intentionally keep the Rates window open after saving.
   };
-
-  const sourceLabel = {
-    live: 'Live',
-    manual: 'Manual',
-    default: 'Default',
-  }[source];
 
   const cardStyle = {
     flex: 1,
     minWidth: 0,
-    padding: spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   } as const;
 
+  const statusLegend = (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexWrap: 'wrap',
+        gap: spacing.md,
+      }}
+    >
+      {(['live', 'manual', 'default'] as RateSource[]).map(
+        (status) => (
+          <View
+            key={status}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <View
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 5,
+                backgroundColor: SOURCE_BORDERS[status],
+              }}
+            />
+            <AppText variant="caption" color="textSecondary">
+              {SOURCE_LABELS[status]}
+            </AppText>
+          </View>
+        ),
+      )}
+    </View>
+  );
+
   return (
-    <FormModal visible={visible} title="Exchange rates" onClose={onClose}>
-      <View style={{ gap: spacing.xs }}>
+    <FormModal
+      visible={visible}
+      title="Exchange rates"
+      onClose={handleClose}
+    >
+      <View style={{ gap: spacing.sm }}>
+        {statusLegend}
+
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 10,
+            gap: spacing.sm,
           }}
         >
-          <View style={{ flex: 1, gap: 4 }}>
+          <View style={{ flex: 1 }}>
             <AppText variant="caption" color="textSecondary">
-              Current source: {sourceLabel}
-            </AppText>
-
-            <AppText variant="caption" color="textSecondary">
-              Last live update: {formatLocalDate(lastLiveUpdatedAt)}
-            </AppText>
-
-            <AppText variant="caption" color="textSecondary">
-              Last manual change: {formatLocalDate(lastManualUpdatedAt)}
+              Last Update: {formatLocalDate(lastLiveUpdatedAt)}
             </AppText>
           </View>
 
@@ -403,7 +596,7 @@ export function RatesModal({
               <Ionicons
                 name="refresh-circle"
                 size={27}
-                color={moduleColors.finance}
+                color="#2E9D50"
               />
             </Animated.View>
           </Pressable>
@@ -419,6 +612,7 @@ export function RatesModal({
           <AppText
             variant="caption"
             color={refreshMessage.ok ? 'success' : 'danger'}
+            style={{ flexShrink: 1, fontSize: 11 }}
           >
             {refreshMessage.message}
           </AppText>
@@ -440,12 +634,13 @@ export function RatesModal({
           >
             {row.map((currency) => {
               const isAnchor = currency.code === RATE_ANCHOR;
+              const status = getCurrencySource(currency.code);
 
               return (
                 <View key={currency.code} style={cardStyle}>
                   <View
                     style={{
-                      minHeight: 28,
+                      minHeight: 17,
                       flexDirection: 'row',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -482,6 +677,7 @@ export function RatesModal({
                       textAlign: 'center',
                       fontSize: 13,
                       paddingHorizontal: 2,
+                      ...getInputStatusStyle(status),
                     }}
                     containerStyle={{ width: '100%' }}
                   />
@@ -493,8 +689,8 @@ export function RatesModal({
 
         {baseCurrency !== RATE_ANCHOR ? (
           <AppText variant="caption" color="textSecondary">
-            {RATE_ANCHOR} is shown as a calculated reference rate and cannot
-            be edited directly.
+            {RATE_ANCHOR} is shown as a calculated reference rate and
+            cannot be edited directly.
           </AppText>
         ) : null}
       </View>
@@ -530,7 +726,11 @@ export function RatesModal({
               onChangeText={setGold}
               keyboardType="decimal-pad"
               placeholder="not set"
-              style={{ textAlign: 'center', fontSize: 14 }}
+              style={{
+                textAlign: 'center',
+                fontSize: 14,
+                ...getInputStatusStyle(getMetalSource('gold24PerGram')),
+              }}
               containerStyle={{ width: '100%' }}
             />
           </View>
@@ -560,15 +760,20 @@ export function RatesModal({
               onChangeText={setSilver}
               keyboardType="decimal-pad"
               placeholder="not set"
-              style={{ textAlign: 'center', fontSize: 14 }}
+              style={{
+                textAlign: 'center',
+                fontSize: 14,
+                ...getInputStatusStyle(getMetalSource('silverPerGram')),
+              }}
               containerStyle={{ width: '100%' }}
             />
           </View>
         </View>
 
         <AppText variant="caption" color="textSecondary">
-          Other gold karats are calculated from the 24K price. Local market
-          prices are usually higher than spot.
+          Leave a metal price empty to clear the saved price. Other gold
+          karats are calculated from the 24K price. Local market prices
+          may differ from spot prices.
         </AppText>
       </View>
 

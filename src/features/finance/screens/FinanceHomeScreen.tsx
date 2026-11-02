@@ -4,13 +4,14 @@ import { useRouter } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Platform,
-    Pressable,
-    StyleSheet,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
 } from 'react-native';
 
 import { AppButton, AppText, Screen } from '@/components/ui';
@@ -21,68 +22,62 @@ import { AddAssetModal } from '@/features/finance/components/AddAssetModal';
 import { AddTransactionModal } from '@/features/finance/components/AddTransactionModal';
 import { AssetEntriesModal } from '@/features/finance/components/AssetEntriesModal';
 import { RatesModal } from '@/features/finance/components/RatesModal';
-import { TotalCard } from '@/features/finance/components/TotalCard';
+import {
+  TotalCard,
+  type FinanceNetworkKey,
+} from '@/features/finance/components/TotalCard';
 import { TransactionsSection } from '@/features/finance/components/TransactionsSection';
 import { TransferModal } from '@/features/finance/components/TransferModal';
 import { useAutoRefreshRates } from '@/features/finance/hooks/useAutoRefreshRates';
 import { useFinanceSummary } from '@/features/finance/hooks/useFinanceSummary';
 import {
-    useCurrencyHydrated,
-    useCurrencyStore,
+  useCurrencyHydrated,
+  useCurrencyStore,
 } from '@/features/finance/store/useCurrencyStore';
 import {
-    useFinanceHydrated,
-    useFinanceStore,
+  useFinanceHydrated,
+  useFinanceStore,
 } from '@/features/finance/store/useFinanceStore';
 import {
-    useLedgerHydrated,
-    useLedgerStore,
+  useLedgerHydrated,
+  useLedgerStore,
 } from '@/features/finance/store/useLedgerStore';
 import type { Asset } from '@/features/finance/types/finance';
 import type {
-    Account,
-    AccountType,
-    Transaction,
-    Transfer,
+  Account,
+  AccountType,
+  Transaction,
+  Transfer,
 } from '@/features/finance/types/ledger';
 import {
-    getAssetBalance,
-    roundMoney,
-    todayISO,
+  getAssetBalance,
+  roundMoney,
+  todayISO,
 } from '@/features/finance/utils/finance';
+import {
+  formatMoney,
+  formatNumber,
+} from '@/features/finance/utils/money';
+import { getAssetValueInBase } from '@/features/finance/utils/valuation';
 import { moduleColors, useTheme } from '@/theme';
 
 type AddMenuAction = 'transaction' | 'transfer' | 'account' | 'asset';
 type MenuIconName = ComponentProps<typeof Ionicons>['name'];
 
-type FinanceNetworkKey =
-  | 'accounts'
-  | 'assets'
-  | 'receivable'
-  | 'payable'
-  | 'income'
-  | 'expenses'
-  | 'loans'
-  | 'cheques'
-  | 'categories';
-
-interface NetworkItem {
+const NETWORK_ITEMS: {
   key: FinanceNetworkKey;
   title: string;
-  icon: MenuIconName;
-  color: string;
-}
-
-const NETWORK_ITEMS: NetworkItem[] = [
-  { key: 'accounts', title: 'Accounts', icon: 'wallet-outline', color: '#34D399' },
-  { key: 'assets', title: 'Assets', icon: 'diamond-outline', color: '#A78BFA' },
-  { key: 'receivable', title: 'Receivable', icon: 'arrow-down-circle-outline', color: '#38BDF8' },
-  { key: 'payable', title: 'Payable', icon: 'arrow-up-circle-outline', color: '#FB923C' },
-  { key: 'income', title: 'Income', icon: 'trending-up-outline', color: '#4ADE80' },
-  { key: 'expenses', title: 'Expenses', icon: 'trending-down-outline', color: '#F87171' },
-  { key: 'loans', title: 'Loans', icon: 'hand-left-outline', color: '#FBBF24' },
-  { key: 'cheques', title: 'Cheques', icon: 'document-text-outline', color: '#60A5FA' },
-  { key: 'categories', title: 'Categories', icon: 'grid-outline', color: '#C084FC' },
+}[] = [
+  { key: 'accounts', title: 'Accounts' },
+  { key: 'assets', title: 'Assets' },
+  { key: 'receivable', title: 'Receivable' },
+  { key: 'payable', title: 'Payable' },
+  { key: 'income', title: 'Income' },
+  { key: 'expenses', title: 'Expenses' },
+  { key: 'loans', title: 'Loans' },
+  { key: 'cheques', title: 'Cheques' },
+  { key: 'categories', title: 'Categories' },
+  { key: 'transfers', title: 'Transfers' },
 ];
 
 export default function FinanceHomeScreen() {
@@ -115,6 +110,12 @@ export default function FinanceHomeScreen() {
   const clearAssets = useFinanceStore((state) => state.clearAssets);
 
   const baseCurrency = useCurrencyStore((state) => state.baseCurrency);
+  const rates = useCurrencyStore((state) => state.rates);
+  const verifiedCurrencies = useCurrencyStore(
+    (state) => state.verifiedCurrencies,
+  );
+  const metals = useCurrencyStore((state) => state.metals);
+  const metalSources = useCurrencyStore((state) => state.metalSources);
 
   const addAccount = useLedgerStore((state) => state.addAccount);
   const updateAccount = useLedgerStore((state) => state.updateAccount);
@@ -139,6 +140,8 @@ export default function FinanceHomeScreen() {
 
   const [assetOpen, setAssetOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+
+  const [assetsOpen, setAssetsOpen] = useState(false);
 
   const [entriesOpen, setEntriesOpen] = useState(false);
   const [entriesAsset, setEntriesAsset] = useState<Asset | null>(null);
@@ -181,18 +184,77 @@ export default function FinanceHomeScreen() {
     setEntriesAsset(null);
   };
 
-  const handleNetworkPress = (key: FinanceNetworkKey) => {
-    if (key === 'accounts') {
-      router.push('/finance/accounts');
-      return;
-    }
+  const getAssetValuation = (asset: Asset): number | null => {
+    const goldPrice =
+      metalSources.gold24PerGram !== 'default'
+        ? metals.gold24PerGram
+        : null;
 
-    const item = NETWORK_ITEMS.find((network) => network.key === key);
+    const silverPrice =
+      metalSources.silverPerGram !== 'default'
+        ? metals.silverPerGram
+        : null;
 
-    Alert.alert(
-      'Coming soon',
-      `${item?.title ?? 'This'} page is being prepared.`,
+    return getAssetValueInBase(
+      asset,
+      baseCurrency,
+      rates,
+      goldPrice,
+      silverPrice,
+      verifiedCurrencies,
     );
+  };
+
+  const openAssetEntries = (asset: Asset) => {
+    setEntriesAsset(asset);
+    setEntriesOpen(true);
+    setAssetsOpen(false);
+  };
+
+  const openAssetForEditing = (asset: Asset) => {
+    setAssetsOpen(false);
+    openAsset(asset);
+  };
+
+  const handleNetworkPress = (key: FinanceNetworkKey) => {
+    switch (key) {
+      case 'assets':
+        setAssetsOpen(true);
+        break;
+
+      case 'accounts':
+        router.push('/finance/accounts');
+        break;
+
+      case 'receivable':
+        router.push({
+          pathname: '/finance/debts',
+          params: { direction: 'receivable' },
+        });
+        break;
+
+      case 'payable':
+        router.push({
+          pathname: '/finance/debts',
+          params: { direction: 'payable' },
+        });
+        break;
+
+      case 'transfers':
+        openTransfer(null);
+        break;
+
+      default: {
+        const item = NETWORK_ITEMS.find(
+          (network) => network.key === key,
+        );
+
+        Alert.alert(
+          'Coming soon',
+          `${item?.title ?? 'This'} page is being prepared.`,
+        );
+      }
+    }
   };
 
   const handleAddMenuAction = (action: AddMenuAction) => {
@@ -464,6 +526,7 @@ export default function FinanceHomeScreen() {
         loansRemainingTotal={summary.loansRemainingTotal}
         receivablesTotal={summary.receivablesTotal}
         payablesTotal={summary.payablesTotal}
+        chequesTotal={summary.chequesTotal}
         missing={summary.missing}
         income={summary.income}
         expense={summary.expense}
@@ -471,7 +534,61 @@ export default function FinanceHomeScreen() {
         onToggleAmounts={() =>
           setAmountsVisible((current) => !current)
         }
+        onNetworkPress={handleNetworkPress}
       />
+
+      {!summary.isComplete && (
+        <View
+          style={{
+            marginTop: spacing.md,
+            padding: spacing.md,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: '#D97706',
+            backgroundColor: colors.surface,
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: spacing.sm,
+          }}
+        >
+          <Ionicons
+            name="warning-outline"
+            size={21}
+            color="#D97706"
+          />
+
+          <View style={{ flex: 1 }}>
+            <AppText style={{ color: '#D97706', fontWeight: '700' }}>
+              Incomplete financial summary
+            </AppText>
+
+            <AppText
+              color="textSecondary"
+              style={{ marginTop: 4 }}
+            >
+              {summary.missing} item(s) could not be converted because
+              a verified exchange rate is unavailable. The displayed
+              totals are partial. Review your exchange rates to complete
+              the calculations.
+            </AppText>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setRatesOpen(true)}
+              style={{ marginTop: 10, alignSelf: 'flex-start' }}
+            >
+              <AppText
+                style={{
+                  color: moduleColors.finance,
+                  fontWeight: '700',
+                }}
+              >
+                Review exchange rates
+              </AppText>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       <View style={[styles.actionRow, { marginTop: spacing.lg }]}>
         <View style={styles.transactionButton}>
@@ -508,8 +625,6 @@ export default function FinanceHomeScreen() {
           </AppText>
         </Pressable>
       </View>
-
-      <FinanceNetworks onPress={handleNetworkPress} />
 
       <TransactionsSection
         amountsVisible={amountsVisible}
@@ -614,6 +729,224 @@ export default function FinanceHomeScreen() {
         }}
       />
 
+      <Modal
+        visible={assetsOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAssetsOpen(false)}
+      >
+        <View style={styles.assetsBackdrop}>
+          <View
+            style={[
+              styles.assetsContainer,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View style={styles.assetsHeader}>
+              <View style={{ flex: 1 }}>
+                <AppText variant="h3">My assets</AppText>
+                <AppText color="textSecondary">
+                  {assets.length} asset(s)
+                </AppText>
+              </View>
+
+              <Pressable
+                onPress={() => setAssetsOpen(false)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Close assets"
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.assetsList}
+            >
+              {assets.length === 0 ? (
+                <View style={styles.emptyAssets}>
+                  <Ionicons
+                    name="diamond-outline"
+                    size={38}
+                    color={colors.textSecondary}
+                  />
+
+                  <AppText color="textSecondary">
+                    No assets added yet.
+                  </AppText>
+
+                  <AppButton
+                    title="Add your first asset"
+                    accentColor={accent}
+                    onPress={() => {
+                      setAssetsOpen(false);
+                      openAsset(null);
+                    }}
+                  />
+                </View>
+              ) : (
+                assets.map((asset) => {
+                  const balance = getAssetBalance(asset);
+
+                  const isMetal =
+                    asset.category === 'gold' ||
+                    asset.category === 'silver';
+
+                  const originalBalance = isMetal
+                    ? `${formatNumber(balance, 3)} g`
+                    : `${formatMoney(balance, asset.currencyCode)} ${asset.currencyCode}`;
+
+                  const valuation = getAssetValuation(asset);
+
+                  const convertedValue =
+                    valuation === null
+                      ? 'Valuation unavailable'
+                      : `${formatMoney(valuation, baseCurrency)} ${baseCurrency}`;
+
+                  const categoryLabel =
+                    asset.category === 'local_currency'
+                      ? 'Local currency'
+                      : asset.category === 'foreign_currency'
+                        ? 'Foreign currency'
+                        : asset.category === 'gold'
+                          ? `Gold · ${asset.karat}K`
+                          : 'Silver';
+
+                  return (
+                    <View
+                      key={asset.id}
+                      style={[
+                        styles.assetListCard,
+                        { borderColor: colors.border },
+                      ]}
+                    >
+                      <Pressable
+                        onPress={() => openAssetEntries(asset)}
+                        style={({ pressed }) => ({
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                      >
+                        <View style={styles.assetListTop}>
+                          <View style={{ flex: 1 }}>
+                            <AppText variant="bodyStrong">
+                              {asset.name}
+                            </AppText>
+
+                            <AppText
+                              color="textSecondary"
+                              style={{ marginTop: 3 }}
+                            >
+                              {categoryLabel}
+                            </AppText>
+                          </View>
+
+                          <Ionicons
+                            name="chevron-forward"
+                            size={20}
+                            color={colors.textSecondary}
+                          />
+                        </View>
+
+                        <View style={styles.assetListValues}>
+                          <View style={{ flex: 1 }}>
+                            <AppText color="textSecondary">
+                              Original balance
+                            </AppText>
+
+                            <AppText variant="bodyStrong">
+                              {originalBalance}
+                            </AppText>
+                          </View>
+
+                          <View style={{ flex: 1 }}>
+                            <AppText color="textSecondary">
+                              Value in {baseCurrency}
+                            </AppText>
+
+                            <AppText
+                              variant="bodyStrong"
+                              style={{
+                                color:
+                                  valuation === null
+                                    ? colors.textSecondary
+                                    : accent,
+                              }}
+                            >
+                              {convertedValue}
+                            </AppText>
+                          </View>
+                        </View>
+                      </Pressable>
+
+                      <View
+                        style={[
+                          styles.assetListActions,
+                          { borderTopColor: colors.border },
+                        ]}
+                      >
+                        <Pressable
+                          onPress={() => openAssetEntries(asset)}
+                          style={styles.assetListAction}
+                          accessibilityRole="button"
+                        >
+                          <Ionicons
+                            name="list-outline"
+                            size={17}
+                            color={accent}
+                          />
+
+                          <AppText style={{ color: accent }}>
+                            Movements
+                          </AppText>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => openAssetForEditing(asset)}
+                          style={styles.assetListAction}
+                          accessibilityRole="button"
+                        >
+                          <Ionicons
+                            name="create-outline"
+                            size={17}
+                            color={accent}
+                          />
+
+                          <AppText style={{ color: accent }}>
+                            Edit
+                          </AppText>
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            {assets.length > 0 && (
+              <AppButton
+                title="Add asset"
+                accentColor={accent}
+                leftIcon={
+                  <Ionicons
+                    name="add"
+                    size={19}
+                    color={colors.onPrimary}
+                  />
+                }
+                onPress={() => {
+                  setAssetsOpen(false);
+                  openAsset(null);
+                }}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
       <RatesModal
         visible={ratesOpen}
         onClose={() => setRatesOpen(false)}
@@ -697,61 +1030,6 @@ export default function FinanceHomeScreen() {
   );
 }
 
-interface FinanceNetworksProps {
-  onPress: (key: FinanceNetworkKey) => void;
-}
-
-function FinanceNetworks({ onPress }: FinanceNetworksProps) {
-  const { colors, spacing } = useTheme();
-
-  return (
-    <View style={{ marginTop: spacing.xl }}>
-      <View style={styles.networksHeading}>
-        <AppText variant="h3">Networks</AppText>
-        <AppText variant="caption" color="textSecondary">
-          Finance sections
-        </AppText>
-      </View>
-
-      <View style={styles.networkGrid}>
-        {NETWORK_ITEMS.map((item) => (
-          <Pressable
-            key={item.key}
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${item.title}`}
-            onPress={() => onPress(item.key)}
-            style={({ pressed }) => [
-              styles.networkItem,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.networkIcon,
-                { backgroundColor: `${item.color}20` },
-              ]}
-            >
-              <Ionicons
-                name={item.icon}
-                size={23}
-                color={item.color}
-              />
-            </View>
-
-            <AppText style={styles.networkTitle}>
-              {item.title}
-            </AppText>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
-
 interface MenuOptionProps {
   icon: MenuIconName;
   title: string;
@@ -821,42 +1099,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  networksHeading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  networkGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  networkItem: {
-    width: '31%',
-    minHeight: 104,
-    flexGrow: 1,
-    flexBasis: '28%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    gap: 9,
-  },
-  networkIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  networkTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
   clearDataButton: {
     marginTop: 24,
     marginBottom: 24,
@@ -920,5 +1162,64 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  assetsBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    padding: 14,
+  },
+  assetsContainer: {
+    width: '100%',
+    maxWidth: 520,
+    maxHeight: '88%',
+    alignSelf: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 20,
+    padding: 16,
+  },
+  assetsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 12,
+  },
+  assetsList: {
+    gap: 10,
+    paddingBottom: 12,
+  },
+  emptyAssets: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 35,
+    gap: 12,
+  },
+  assetListCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    padding: 12,
+    gap: 12,
+  },
+  assetListTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  assetListValues: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  assetListActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 10,
+  },
+  assetListAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
   },
 });

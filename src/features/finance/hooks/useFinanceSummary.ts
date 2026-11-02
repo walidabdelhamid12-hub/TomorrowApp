@@ -17,6 +17,10 @@ import { getAssetValueInBase } from '@/features/finance/utils/valuation';
 export function useFinanceSummary() {
   const baseCurrency = useCurrencyStore((s) => s.baseCurrency);
   const rates = useCurrencyStore((s) => s.rates);
+  const verifiedCurrencies = useCurrencyStore(
+    (s) => s.verifiedCurrencies
+  );
+
   const gold24PerGram = useCurrencyStore(
     (s) => s.metals.gold24PerGram
   );
@@ -31,6 +35,7 @@ export function useFinanceSummary() {
   const assets = useFinanceStore((s) => s.assets);
   const loans = useFinanceStore((s) => s.loans);
   const debts = useFinanceStore((s) => s.debts);
+  const cheques = useFinanceStore((s) => s.cheques);
 
   const activeAccounts = useMemo(
     () => accounts.filter((account) => !account.archived),
@@ -43,6 +48,7 @@ export function useFinanceSummary() {
     let loansRemainingTotal = 0;
     let receivablesTotal = 0;
     let payablesTotal = 0;
+    let chequesTotal = 0;
     let missing = 0;
 
     for (const account of activeAccounts) {
@@ -56,7 +62,8 @@ export function useFinanceSummary() {
         balance,
         account.currencyCode,
         baseCurrency,
-        rates
+        rates,
+        verifiedCurrencies
       );
 
       if (converted === null) {
@@ -72,7 +79,8 @@ export function useFinanceSummary() {
         baseCurrency,
         rates,
         gold24PerGram,
-        silverPerGram
+        silverPerGram,
+        verifiedCurrencies
       );
 
       if (value === null) {
@@ -105,7 +113,8 @@ export function useFinanceSummary() {
         remainingAmount,
         loan.currencyCode,
         baseCurrency,
-        rates
+        rates,
+        verifiedCurrencies
       );
 
       if (converted === null) {
@@ -138,7 +147,8 @@ export function useFinanceSummary() {
         remainingAmount,
         debt.currencyCode,
         baseCurrency,
-        rates
+        rates,
+        verifiedCurrencies
       );
 
       if (converted === null) {
@@ -153,12 +163,43 @@ export function useFinanceSummary() {
       }
     }
 
+    // Only outstanding cheques are included in this separate total.
+    // Paid, bounced, and cancelled cheques are excluded.
+    for (const cheque of cheques) {
+      if (cheque.status !== 'pending') {
+        continue;
+      }
+
+      if (
+        typeof cheque.amount !== 'number' ||
+        !Number.isFinite(cheque.amount)
+      ) {
+        missing += 1;
+        continue;
+      }
+
+      const converted = convertAmount(
+        cheque.amount,
+        cheque.currencyCode,
+        baseCurrency,
+        rates,
+        verifiedCurrencies
+      );
+
+      if (converted === null) {
+        missing += 1;
+      } else {
+        chequesTotal += converted;
+      }
+    }
+
     return {
       accountsTotal,
       assetsTotal,
       loansRemainingTotal,
       receivablesTotal,
       payablesTotal,
+      chequesTotal,
       missing,
     };
   }, [
@@ -166,10 +207,12 @@ export function useFinanceSummary() {
     assets,
     loans,
     debts,
+    cheques,
     transactions,
     transfers,
     baseCurrency,
     rates,
+    verifiedCurrencies,
     gold24PerGram,
     silverPerGram,
   ]);
@@ -186,6 +229,7 @@ export function useFinanceSummary() {
   const month = useMemo(() => {
     let income = 0;
     let expense = 0;
+    let missing = 0;
 
     const key = getMonthKey(todayISO());
 
@@ -194,10 +238,12 @@ export function useFinanceSummary() {
         transaction.amount,
         transaction.currencyCode,
         baseCurrency,
-        rates
+        rates,
+        verifiedCurrencies
       );
 
       if (converted === null) {
+        missing += 1;
         continue;
       }
 
@@ -213,8 +259,16 @@ export function useFinanceSummary() {
     return {
       income,
       expense: Math.max(expense, 0),
+      missing,
     };
-  }, [transactions, baseCurrency, rates]);
+  }, [
+    transactions,
+    baseCurrency,
+    rates,
+    verifiedCurrencies,
+  ]);
+
+  const missing = totals.missing + month.missing;
 
   return {
     baseCurrency,
@@ -226,10 +280,13 @@ export function useFinanceSummary() {
     loansRemainingTotal: totals.loansRemainingTotal,
     receivablesTotal: totals.receivablesTotal,
     payablesTotal: totals.payablesTotal,
+    chequesTotal: totals.chequesTotal,
     total: netWorth,
     netWorth,
-    missing: totals.missing,
+    missing,
+    isComplete: missing === 0,
     income: month.income,
     expense: month.expense,
+    monthlyMissing: month.missing,
   };
 }

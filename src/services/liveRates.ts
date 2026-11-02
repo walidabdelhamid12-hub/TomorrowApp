@@ -4,7 +4,10 @@ import {
   RATE_ANCHOR,
 } from '@/features/finance/constants/currencies';
 import { TROY_OUNCE_GRAMS } from '@/features/finance/constants/metals';
-import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
+import {
+  MetalKey,
+  useCurrencyStore,
+} from '@/features/finance/store/useCurrencyStore';
 
 // Exchange rates: units per 1 USD.
 const FX_URL = 'https://open.er-api.com/v6/latest/USD';
@@ -18,6 +21,12 @@ const TIMEOUT_MS = 8000;
 export interface RefreshResult {
   ok: boolean;
   message: string;
+}
+
+interface FxParseResult {
+  rates: Record<string, number>;
+  egpPerUsd: number;
+  failedCurrencyCodes: string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -52,10 +61,10 @@ async function fetchJson(url: string): Promise<unknown> {
 }
 
 /**
- * Converts "units per 1 USD" into "EGP per 1 unit".
- * Every supported currency must be present for a complete update.
+ * Converts currencies into EGP per 1 unit.
+ * Valid currencies are retained even if another currency is missing.
  */
-function parseFx(json: unknown): Record<string, number> | null {
+function parseFx(json: unknown): FxParseResult | null {
   if (!isRecord(json) || !isRecord(json.rates)) {
     return null;
   }
@@ -66,9 +75,11 @@ function parseFx(json: unknown): Record<string, number> | null {
     return null;
   }
 
-  const result: Record<string, number> = {
+  const rates: Record<string, number> = {
     [RATE_ANCHOR]: 1,
   };
+
+  const failedCurrencyCodes: string[] = [];
 
   for (const currency of CURRENCIES) {
     if (currency.code === RATE_ANCHOR) {
@@ -78,13 +89,25 @@ function parseFx(json: unknown): Record<string, number> | null {
     const unitsPerUsd = positive(json.rates[currency.code]);
 
     if (unitsPerUsd === null) {
-      return null;
+      failedCurrencyCodes.push(currency.code);
+      continue;
     }
 
-    result[currency.code] = egpPerUsd / unitsPerUsd;
+    const egpPerUnit = egpPerUsd / unitsPerUsd;
+
+    if (!Number.isFinite(egpPerUnit) || egpPerUnit <= 0) {
+      failedCurrencyCodes.push(currency.code);
+      continue;
+    }
+
+    rates[currency.code] = egpPerUnit;
   }
 
-  return result;
+  return {
+    rates,
+    egpPerUsd,
+    failedCurrencyCodes,
+  };
 }
 
 function parseMetal(json: unknown): number | null {
@@ -95,11 +118,17 @@ function parseMetal(json: unknown): number | null {
   return positive(json.price) ?? positive(json.priceUsd);
 }
 
+function getAllForeignCurrencyCodes(): string[] {
+  return CURRENCIES
+    .filter((currency) => currency.code !== RATE_ANCHOR)
+    .map((currency) => currency.code);
+}
+
 /**
- * Fetches all exchange and metal prices as one complete batch.
+ * Refreshes FX, gold and silver independently.
  *
- * If any source fails, returns invalid data, or the store rejects
- * the update, the previously saved prices remain unchanged.
+ * Successful sources are saved even if another source fails.
+ * Previous values are preserved when a source fails.
  */
 export async function refreshLiveRates(): Promise<RefreshResult> {
   const [fxResult, goldResult, silverResult] =
@@ -109,7 +138,7 @@ export async function refreshLiveRates(): Promise<RefreshResult> {
       fetchJson(SILVER_URL),
     ]);
 
-  const rates =
+  const fx =
     fxResult.status === 'fulfilled'
       ? parseFx(fxResult.value)
       : null;
@@ -124,52 +153,65 @@ export async function refreshLiveRates(): Promise<RefreshResult> {
       ? parseMetal(silverResult.value)
       : null;
 
-  if (
-    rates === null ||
-    goldOunceUsd === null ||
-    silverOunceUsd === null
-  ) {
-    return {
-      ok: false,
-      message:
-        'Rates update failed. All previous saved rates were kept.',
-    };
-  }
+  const currencyCodesToUnconfirm =
+    fx?.failedCurrencyCodes ?? getAllForeignCurrencyCodes();
 
-  const egpPerUsd = rates[RATE_ANCHOR];
+  const egpPerUsd = fx?.egpPerUsd ?? null;
 
-  if (!Number.isFinite(egpPerUsd) || egpPerUsd <= 0) {
-    return {
-      ok: false,
-      message:
-        'Rates update failed. All previous saved rates were kept.',
-    };
-  }
+  const metalKeysToUnconfirm: MetalKey[] = [];
 
   const gold24PerGram =
-    (goldOunceUsd / TROY_OUNCE_GRAMS) * egpPerUsd;
+    goldOunceUsd !== null && egpPerUsd !== null
+      ? (goldOunceUsd / TROY_OUNCE_GRAMS) * egpPerUsd
+      : null;
 
   const silverPerGram =
-    (silverOunceUsd / TROY_OUNCE_GRAMS) * egpPerUsd;
+    silverOunceUsd !== null && egpPerUsd !== null
+      ? (silverOunceUsd / TROY_OUNCE_GRAMS) * egpPerUsd
+      : null;
 
   if (
+    gold24PerGram === null ||
     !Number.isFinite(gold24PerGram) ||
-    gold24PerGram <= 0 ||
+    gold24PerGram <= 0
+  ) {
+    metalKeysToUnconfirm.push('gold24PerGram');
+  }
+
+  if (
+    silverPerGram === null ||
     !Number.isFinite(silverPerGram) ||
     silverPerGram <= 0
   ) {
-    return {
-      ok: false,
-      message:
-        'Invalid metal prices received. All previous saved rates were kept.',
-    };
+    metalKeysToUnconfirm.push('silverPerGram');
   }
 
-  const saved = useCurrencyStore.getState().applyLiveRates({
-    rates,
+  const validGold =
+    gold24PerGram !== null &&
+    Number.isFinite(gold24PerGram) &&
+    gold24PerGram > 0;
+
+  const validSilver =
+    silverPerGram !== null &&
+    Number.isFinite(silverPerGram) &&
+    silverPerGram > 0;
+
+  const validRates = fx?.rates ?? {};
+
+  const store = useCurrencyStore.getState();
+
+  // Preserve previous values while marking failed sources unconfirmed.
+  store.markRatesUnconfirmed(
+    currencyCodesToUnconfirm,
+    metalKeysToUnconfirm,
+  );
+
+  // Save only successfully retrieved and calculated values.
+  const saved = store.applyLiveRates({
+    rates: validRates,
     metals: {
-      gold24PerGram,
-      silverPerGram,
+      ...(validGold ? { gold24PerGram: gold24PerGram! } : {}),
+      ...(validSilver ? { silverPerGram: silverPerGram! } : {}),
     },
     updatedAt: new Date().toISOString(),
   });
@@ -177,13 +219,61 @@ export async function refreshLiveRates(): Promise<RefreshResult> {
   if (!saved) {
     return {
       ok: false,
-      message:
-        'Rates were received but could not be saved. Previous saved rates were kept.',
+      message: 'No new valid prices. Previous prices were preserved.',
+    };
+  }
+
+  const successfulParts: string[] = [];
+  const failedParts: string[] = [];
+
+  const hasUpdatedCurrencies = Object.keys(validRates).some(
+    (code) => code !== RATE_ANCHOR,
+  );
+
+  if (hasUpdatedCurrencies) {
+    successfulParts.push('currencies');
+  }
+
+  if (validGold) {
+    successfulParts.push('gold');
+  }
+
+  if (validSilver) {
+    successfulParts.push('silver');
+  }
+
+  if (fx === null) {
+    failedParts.push('currencies');
+  } else if (fx.failedCurrencyCodes.length > 0) {
+    failedParts.push(
+      `${fx.failedCurrencyCodes.length} currencies`,
+    );
+  }
+
+  if (!validGold) {
+    failedParts.push('gold');
+  }
+
+  if (!validSilver) {
+    failedParts.push('silver');
+  }
+
+  if (failedParts.length === 0) {
+    return {
+      ok: true,
+      message: 'Currencies, gold & silver updated.',
+    };
+  }
+
+  if (successfulParts.length === 0) {
+    return {
+      ok: false,
+      message: `Update failed: ${failedParts.join(', ')}.`,
     };
   }
 
   return {
     ok: true,
-    message: 'All currency, gold and silver rates updated successfully.',
+    message: `Updated ${successfulParts.join(', ')}. Failed: ${failedParts.join(', ')}.`,
   };
 }
