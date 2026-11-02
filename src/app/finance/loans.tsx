@@ -153,6 +153,8 @@ export default function LoansScreen() {
         Alert.alert('Update rejected', 'The loan store rejected the updated payment. The account transaction was restored.');
         return;
       }
+      const dueAfterEdit = Math.max(0, remaining(selectedLoan) + editingPayment.amount - amount);
+      updateLoan(selectedLoan.id, { status: dueAfterEdit <= 0.001 ? 'completed' : 'active' });
       closePayment();
       return;
     }
@@ -212,7 +214,7 @@ export default function LoansScreen() {
         if (payment.ledgerTransactionId) {
           try {
             removeTransaction(payment.ledgerTransactionId);
-            if (transactions.some(t => t.id === payment.ledgerTransactionId)) {
+            if (useLedgerStore.getState().transactions.some(t => t.id === payment.ledgerTransactionId)) {
               Alert.alert('Cannot delete', 'The linked account transaction is protected or could not be removed. The loan payment was kept.');
               return;
             }
