@@ -157,8 +157,23 @@ export default function LoansScreen() {
         Alert.alert('Update rejected', 'The loan store rejected the updated payment. The account transaction was restored.');
         return;
       }
-      const dueAfterEdit = Math.max(0, remaining(selectedLoan) + editingPayment.amount - amount);
-      updateLoan(selectedLoan.id, { status: dueAfterEdit <= 0.001 ? 'completed' : 'active' });
+      if (selectedLoan.settlementPaymentId === editingPayment.id) {
+        updateLoan(selectedLoan.id, {
+          status: 'settled',
+          settlementAmount: amount,
+          settlementDate: paymentDate,
+          settlementAccountId: account.id,
+          settlementNote: note.trim() || undefined,
+        });
+      } else {
+        const scheduled = selectedLoan.totalRepaymentAmount ??
+          selectedLoan.monthlyInstallment * selectedLoan.numberOfInstallments;
+        const paidAfterEdit = selectedLoan.payments.reduce(
+          (sum, p) => sum + (p.id === editingPayment.id ? amount : p.amount), 0
+        );
+        const dueAfterEdit = Math.max(0, scheduled - paidAfterEdit);
+        updateLoan(selectedLoan.id, { status: dueAfterEdit <= 0.001 ? 'completed' : 'active' });
+      }
       closePayment();
       return;
     }
@@ -188,7 +203,8 @@ export default function LoansScreen() {
     if (settlementMode) {
       updateLoan(selectedLoan.id, {
         status: 'settled', settlementAmount: amount, settlementDate: paymentDate,
-        settlementAccountId: account.id, settlementNote: note.trim() || undefined,
+        settlementAccountId: account.id, settlementPaymentId: paymentId,
+        settlementNote: note.trim() || undefined,
       });
     } else if (nextRemaining <= 0.001) {
       updateLoan(selectedLoan.id, { status: 'completed' });
@@ -225,7 +241,7 @@ export default function LoansScreen() {
           } catch { Alert.alert('Cannot delete', 'The linked transaction could not be removed.'); return; }
         }
         deleteLoanPayment(loan.id, payment.id);
-        if (loan.status === 'completed' || loan.status === 'settled') updateLoan(loan.id, { status: 'active', settlementAmount: undefined, settlementDate: undefined, settlementAccountId: undefined, settlementNote: undefined });
+        if (loan.status === 'completed' || loan.status === 'settled') updateLoan(loan.id, { status: 'active', settlementAmount: undefined, settlementDate: undefined, settlementAccountId: undefined, settlementPaymentId: undefined, settlementNote: undefined });
       }},
     ]);
   };
