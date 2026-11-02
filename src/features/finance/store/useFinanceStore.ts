@@ -12,7 +12,6 @@ import type {
   Cheque,
   ChequePatch,
   ChequeStatus,
-  CurrencyCode,
   Debt,
   DebtPatch,
   DebtPayment,
@@ -45,8 +44,6 @@ import {
 /* -------------------------------------------------------------------------- */
 
 interface FinanceActions {
-  setBaseCurrency: (code: CurrencyCode) => void;
-
   addAsset: (input: NewAssetInput) => EntityId;
   updateAsset: (id: EntityId, patch: AssetPatch) => void;
   deleteAsset: (id: EntityId) => void;
@@ -107,7 +104,6 @@ export type FinanceStore = FinanceData & FinanceActions;
 const STORAGE_VERSION = 2;
 
 const initialData: FinanceData = {
-  baseCurrency: 'USD',
   assets: [],
   debts: [],
   loans: [],
@@ -157,14 +153,7 @@ function migrateFinanceData(
 ): FinanceData {
   const saved = isRecord(persistedState) ? persistedState : {};
 
-  const baseCurrency =
-    typeof saved.baseCurrency === 'string' &&
-    saved.baseCurrency.trim().length > 0
-      ? saved.baseCurrency.trim().toUpperCase()
-      : initialData.baseCurrency;
-
   return {
-    baseCurrency: baseCurrency as CurrencyCode,
     assets: normalizeRecords<Asset>(saved.assets),
     debts: normalizeRecords<Debt>(saved.debts),
     loans: normalizeRecords<Loan>(saved.loans),
@@ -238,8 +227,6 @@ export const useFinanceStore = create<FinanceStore>()(
   persist(
     (set, get) => ({
       ...initialData,
-
-      setBaseCurrency: (code) => set({ baseCurrency: code }),
 
       /* Assets */
       addAsset: (input) => {
@@ -538,7 +525,6 @@ export const useFinanceStore = create<FinanceStore>()(
       storage: createJSONStorage(() => AsyncStorage),
 
       partialize: (state): FinanceData => ({
-        baseCurrency: state.baseCurrency,
         assets: state.assets,
         debts: state.debts,
         loans: state.loans,
