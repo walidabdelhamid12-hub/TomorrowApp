@@ -32,7 +32,9 @@ const remaining = (loan: Loan) => loan.status === 'settled' || loan.status === '
 export default function LoansScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
-  const ready = useFinanceHydrated() && useLedgerHydrated();
+  const financeReady = useFinanceHydrated();
+  const ledgerReady = useLedgerHydrated();
+  const ready = financeReady && ledgerReady;
   const loans = useFinanceStore(s => s.loans);
   const addLoan = useFinanceStore(s => s.addLoan);
   const updateLoan = useFinanceStore(s => s.updateLoan);
