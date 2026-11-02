@@ -208,7 +208,7 @@ export default function LoansScreen() {
     }
     const transactionId = addTransaction({
       type: 'expense', amount, accountId: account.id, categoryId: expenseCategory!.id,
-      purpose: 'loan_principal_payment', linkedEntityType: 'loan',
+      purpose: 'loan_payment', linkedEntityType: 'loan',
       linkedEntityId: selectedLoan.id, linkedPaymentId: paymentId,
       date: paymentDate, note: note.trim() || `Loan payment: ${selectedLoan.name}`,
     });
