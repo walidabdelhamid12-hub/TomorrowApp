@@ -181,6 +181,12 @@ export interface Loan extends Timestamps {
   /** Contractual total repayment amount (principal + interest). */
   totalRepaymentAmount?: number;
 
+  /** Account where the loan proceeds were received, when registered. */
+  depositAccountId?: EntityId;
+
+  /** Custom description when proceeds were received outside a registered account. */
+  depositMethodLabel?: string;
+
   /** Current lifecycle state; missing legacy values are treated as active. */
   status?: LoanStatus;
 
