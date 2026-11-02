@@ -655,8 +655,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   networkIcon: {
-    width: 29,
-    height: 29,
+    width: 38,
+    height: 38,
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
