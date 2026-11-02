@@ -60,6 +60,7 @@ export default function LoansScreen() {
   const [count, setCount] = useState('');
   const [firstDue, setFirstDue] = useState(today());
   const [currency, setCurrency] = useState(baseCurrency);
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(today());
@@ -67,6 +68,7 @@ export default function LoansScreen() {
   const [paymentMethod, setPaymentMethod] = useState<'account' | 'custom'>('account');
   const [customPaymentMethod, setCustomPaymentMethod] = useState('');
   const [showAddBank, setShowAddBank] = useState(false);
+  const [showPaymentPicker, setShowPaymentPicker] = useState(false);
   const [note, setNote] = useState('');
   const [settlementMode, setSettlementMode] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Loan['payments'][number] | null>(null);
@@ -273,9 +275,9 @@ export default function LoansScreen() {
               <Field label="Number of installments (months)" value={count} onChangeText={setCount} keyboardType="number-pad" />
               <Field label="First due date (YYYY-MM-DD)" value={firstDue} onChangeText={setFirstDue} />
               <AppText variant="caption" color="textSecondary">Loan currency</AppText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
-                {['OMR', 'EGP', 'SAR', 'AED', 'USD', 'EUR', 'GBP', 'JOD', 'QAR', 'KWD'].map(code => <Pressable key={code} onPress={() => setCurrency(code)} style={[styles.accountChoice, { paddingVertical: 7, paddingHorizontal: 12 }, currency === code && { borderColor: moduleColors.finance, backgroundColor: colors.surface }]}><AppText>{code}{currency === code ? ' ✓' : ''}</AppText></Pressable>)}
-              </ScrollView>
+              <Pressable onPress={() => setShowCurrencyPicker(true)} style={[styles.dropdown, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <AppText>{currency}</AppText><Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+              </Pressable>
             </ScrollView>
             <View style={styles.actions}>
               <AppButton title="Save loan" onPress={saveLoan} />
@@ -283,6 +285,38 @@ export default function LoansScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+      <Modal visible={showCurrencyPicker} transparent animationType="fade" onRequestClose={() => setShowCurrencyPicker(false)}>
+        <Pressable style={styles.pickerOverlay} onPress={() => setShowCurrencyPicker(false)}>
+          <View style={[styles.pickerPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <AppText variant="h2">Choose loan currency</AppText>
+            {['OMR', 'EGP', 'SAR', 'AED', 'USD', 'EUR', 'GBP', 'JOD', 'QAR', 'KWD'].map(code => (
+              <Pressable key={code} onPress={() => { setCurrency(code); setShowCurrencyPicker(false); }} style={styles.pickerOption}>
+                <AppText>{code}</AppText>{currency === code && <Ionicons name="checkmark" size={18} color={moduleColors.finance} />}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+      <Modal visible={showPaymentPicker} transparent animationType="fade" onRequestClose={() => setShowPaymentPicker(false)}>
+        <Pressable style={styles.pickerOverlay} onPress={() => setShowPaymentPicker(false)}>
+          <View style={[styles.pickerPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <AppText variant="h2">Choose payment method</AppText>
+            {activeAccounts.filter(a => a.currencyCode === selectedLoan?.currencyCode && a.type === 'bank').map(account => (
+              <Pressable key={account.id} onPress={() => { setAccountId(account.id); setPaymentMethod('account'); setShowPaymentPicker(false); }} style={styles.pickerOption}>
+                <AppText>{account.name} · {account.currencyCode}</AppText>{paymentMethod === 'account' && accountId === account.id && <Ionicons name="checkmark" size={18} color={moduleColors.finance} />}
+              </Pressable>
+            ))}
+            {activeAccounts.filter(a => a.currencyCode === selectedLoan?.currencyCode && a.type !== 'bank' && a.type !== 'credit_card').map(account => (
+              <Pressable key={account.id} onPress={() => { setAccountId(account.id); setPaymentMethod('account'); setShowPaymentPicker(false); }} style={styles.pickerOption}>
+                <AppText>{account.name} · {account.currencyCode}</AppText>{paymentMethod === 'account' && accountId === account.id && <Ionicons name="checkmark" size={18} color={moduleColors.finance} />}
+              </Pressable>
+            ))}
+            <Pressable onPress={() => { setPaymentMethod('custom'); setAccountId(''); setShowPaymentPicker(false); }} style={styles.pickerOption}>
+              <AppText>Custom / مخصص</AppText>{paymentMethod === 'custom' && <Ionicons name="checkmark" size={18} color={moduleColors.finance} />}
+            </Pressable>
+          </View>
+        </Pressable>
       </Modal>
       <Modal visible={!!closingLoan} transparent animationType="fade" onRequestClose={() => setClosingLoan(null)}>
         <View style={styles.overlay}><Card style={styles.modal}>
@@ -303,10 +337,11 @@ export default function LoansScreen() {
           <Field label="Payment date (YYYY-MM-DD)" value={paymentDate} onChangeText={setPaymentDate} />
           <Field label="Note" value={note} onChangeText={setNote} />
           <AppText style={{ fontWeight: '600' }}>Payment method</AppText>
-          {activeAccounts.filter(a => a.currencyCode === selectedLoan?.currencyCode && a.type === 'bank').map(account => <Pressable key={account.id} onPress={() => { setAccountId(account.id); setPaymentMethod('account'); }} style={[styles.accountChoice, paymentMethod === 'account' && accountId === account.id && { borderColor: moduleColors.finance, backgroundColor: colors.surface }]}><AppText>{account.name} · {account.currencyCode}{paymentMethod === 'account' && accountId === account.id ? ' ✓' : ''}</AppText></Pressable>)}
-          {activeAccounts.filter(a => a.currencyCode === selectedLoan?.currencyCode && a.type !== 'bank' && a.type !== 'credit_card').map(account => <Pressable key={account.id} onPress={() => { setAccountId(account.id); setPaymentMethod('account'); }} style={[styles.accountChoice, paymentMethod === 'account' && accountId === account.id && { borderColor: moduleColors.finance, backgroundColor: colors.surface }]}><AppText>{account.name} · {account.currencyCode}{paymentMethod === 'account' && accountId === account.id ? ' ✓' : ''}</AppText></Pressable>)}
-          <Pressable onPress={() => setShowAddBank(true)} style={styles.accountChoice}><AppText color="primary">+ Add bank account</AppText></Pressable>
-          <Pressable onPress={() => { setPaymentMethod('custom'); setAccountId(''); }} style={[styles.accountChoice, paymentMethod === 'custom' && { borderColor: moduleColors.finance, backgroundColor: colors.surface }]}><AppText>Custom / مخصص {paymentMethod === 'custom' ? '✓' : ''}</AppText></Pressable>
+          <Pressable onPress={() => setShowPaymentPicker(true)} style={[styles.dropdown, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+            <AppText>{paymentMethod === 'custom' ? (customPaymentMethod.trim() || 'Custom / مخصص') : (activeAccounts.find(a => a.id === accountId)?.name ?? 'Select a registered account')}</AppText>
+            <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+          </Pressable>
+          <Pressable onPress={() => setShowAddBank(true)} style={styles.addBankChoice}><AppText color="primary">+ Add bank account</AppText></Pressable>
           {paymentMethod === 'custom' && <Field label="Payment method name (e.g. Cash)" value={customPaymentMethod} onChangeText={setCustomPaymentMethod} />}
           <View style={styles.actions}><AppButton title={editingPayment ? 'Save changes' : settlementMode ? 'Confirm settlement' : 'Confirm payment'} onPress={confirmPayment} /><AppButton title="Cancel" variant="outline" onPress={closePayment} /></View>
         </Card></View>
@@ -339,4 +374,9 @@ const styles = StyleSheet.create({
   field: { gap: 5 },
   input: { minHeight: 42, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7 },
   accountChoice: { padding: 10, borderWidth: 1, borderColor: '#9996', borderRadius: 10 },
+  dropdown: { minHeight: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  addBankChoice: { paddingVertical: 8, paddingHorizontal: 4 },
+  pickerOverlay: { flex: 1, backgroundColor: '#0008', justifyContent: 'center', padding: 20 },
+  pickerPanel: { maxHeight: '75%', borderRadius: 16, padding: 14, borderWidth: StyleSheet.hairlineWidth },
+  pickerOption: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#9995' },
 });
