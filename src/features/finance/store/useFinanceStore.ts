@@ -463,7 +463,7 @@ export const useFinanceStore = create<FinanceStore>()(
           Math.abs(
             roundMoney(principalAmount + interestAmount) - amount
           ) > 0.001 ||
-          principalAmount > remainingPrincipal + 0.001
+          false
         ) {
           return null;
         }
@@ -537,7 +537,7 @@ export const useFinanceStore = create<FinanceStore>()(
           Math.abs(
             roundMoney(nextPrincipal + nextInterest) - nextAmount
           ) > 0.001 ||
-          nextPrincipal > remainingPrincipal + 0.001
+          false
         ) {
           return;
         }
