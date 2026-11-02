@@ -420,6 +420,8 @@ export const useFinanceStore = create<FinanceStore>()(
             ...loan,
             ...withRounded(definedOnly(patch), [
               'principalAmount',
+              'totalRepaymentAmount',
+              'settlementAmount',
               'monthlyInstallment',
             ]),
           })),
