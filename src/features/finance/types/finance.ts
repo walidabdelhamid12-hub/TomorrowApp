@@ -222,7 +222,6 @@ export type ChequePatch = Partial<
 /* -------------------------------------------------------------------------- */
 
 export interface FinanceData {
-  baseCurrency: CurrencyCode;
   assets: Asset[];
   debts: Debt[];
   loans: Loan[];
