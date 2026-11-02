@@ -60,6 +60,10 @@ export default function LoansScreen() {
   const [count, setCount] = useState('');
   const [firstDue, setFirstDue] = useState(today());
   const [currency, setCurrency] = useState(baseCurrency);
+  const [depositAccountId, setDepositAccountId] = useState('');
+  const [depositMethod, setDepositMethod] = useState<'account' | 'custom'>('account');
+  const [customDepositMethod, setCustomDepositMethod] = useState('');
+  const [showDepositPicker, setShowDepositPicker] = useState(false);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -80,12 +84,17 @@ export default function LoansScreen() {
     .filter(a => a.currencyCode === selectedLoan?.currencyCode)
     .sort((a, b) => Number(b.type === 'bank') - Number(a.type === 'bank')),
     [activeAccounts, selectedLoan?.currencyCode]);
+  const depositAccounts = useMemo(() => activeAccounts
+    .filter(a => a.currencyCode === currency && a.type !== 'credit_card')
+    .sort((a, b) => Number(b.type === 'bank') - Number(a.type === 'bank')),
+    [activeAccounts, currency]);
   const expenseCategory = categories.find(c => c.kind === 'expense' && c.id === 'cat_bills')
     ?? categories.find(c => c.kind === 'expense');
 
   const resetLoanForm = () => {
     setShowLoanForm(false); setLoanName(''); setLender(''); setPrincipal('');
     setTotal(''); setInstallment(''); setCount(''); setFirstDue(today()); setCurrency(baseCurrency);
+    setDepositAccountId(''); setDepositMethod('account'); setCustomDepositMethod('');
   };
 
   const saveLoan = () => {
@@ -101,6 +110,9 @@ export default function LoansScreen() {
       name: loanName.trim(), lenderName: lender.trim(), principalAmount: p,
       totalRepaymentAmount: t, monthlyInstallment: m, numberOfInstallments: n,
       firstDueDate: firstDue, currencyCode: currency, status: 'active',
+      ...(depositMethod === 'account' && depositAccountId
+        ? { depositAccountId }
+        : { depositMethodLabel: customDepositMethod.trim() || 'Custom' }),
     };
     addLoan(input);
     resetLoanForm();
@@ -265,6 +277,7 @@ export default function LoansScreen() {
         const id = addAccount({ name: data.accountName.trim(), type: 'bank', currencyCode: data.selectedCurrency, initialBalance: money(data.amount) });
         setShowAddBank(false);
         if (selectedLoan && data.selectedCurrency === selectedLoan.currencyCode) { setAccountId(id); setPaymentMethod('account'); }
+        else if (showLoanForm && data.selectedCurrency === currency) { setDepositAccountId(id); setDepositMethod('account'); }
       }} />
       <Modal visible={showLoanForm} transparent animationType="slide" onRequestClose={resetLoanForm}>
         <View style={styles.overlay}>
@@ -282,11 +295,46 @@ export default function LoansScreen() {
               <Pressable onPress={() => setShowCurrencyPicker(true)} style={[styles.dropdown, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                 <AppText>{currency}</AppText><Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
               </Pressable>
+              <AppText variant="caption" color="textSecondary">Deposit to account / Where did you receive the loan?</AppText>
+              <Pressable onPress={() => setShowDepositPicker(true)} style={[styles.dropdown, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <AppText>{depositMethod === 'custom'
+                  ? (customDepositMethod.trim() || 'Custom / مخصص')
+                  : (activeAccounts.find(a => a.id === depositAccountId)?.name ?? 'Select a matching account')}</AppText>
+                <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+              </Pressable>
+              <AppButton title="Add bank account" variant="outline" onPress={() => setShowAddBank(true)} />
+              {depositMethod === 'custom' && <Field label="Receipt method (e.g. Cash)" value={customDepositMethod} onChangeText={setCustomDepositMethod} />}
             </ScrollView>
             <View style={styles.actions}>
               <AppButton title="Save loan" onPress={saveLoan} />
               <AppButton title="Cancel" variant="outline" onPress={resetLoanForm} />
             </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={showDepositPicker} transparent animationType="fade" onRequestClose={() => setShowDepositPicker(false)}>
+        <View style={styles.pickerOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowDepositPicker(false)} />
+          <View style={[styles.pickerPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <AppText variant="h2">Choose deposit method</AppText>
+            <AppText variant="caption" color="textSecondary">Accounts in {currency}</AppText>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+              {depositAccounts.map(account => (
+                <Pressable key={account.id} onPress={() => {
+                  setDepositAccountId(account.id); setDepositMethod('account'); setShowDepositPicker(false);
+                }} style={styles.pickerOption}>
+                  <AppText>{account.name} · {account.currencyCode}{account.type === 'bank' ? ' · Bank' : ''}</AppText>
+                  {depositMethod === 'account' && depositAccountId === account.id && <Ionicons name="checkmark" size={18} color={moduleColors.finance} />}
+                </Pressable>
+              ))}
+              {depositAccounts.length === 0 && <AppText color="textSecondary">No active matching accounts.</AppText>}
+              <Pressable onPress={() => {
+                setDepositMethod('custom'); setDepositAccountId(''); setShowDepositPicker(false);
+              }} style={styles.pickerOption}>
+                <AppText>Custom / مخصص</AppText>
+                {depositMethod === 'custom' && <Ionicons name="checkmark" size={18} color={moduleColors.finance} />}
+              </Pressable>
+            </ScrollView>
           </View>
         </View>
       </Modal>
