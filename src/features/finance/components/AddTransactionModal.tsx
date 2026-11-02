@@ -19,6 +19,7 @@ import {
   DateField,
 } from '@/components/ui';
 import { FormModal } from '@/features/finance/components/FormModal';
+import { CalculatorPad } from '@/features/finance/components/CalculatorPad';
 import { ScanDocumentButton } from '@/features/finance/components/ScanDocumentButton';
 import { getCurrencyLabel } from '@/features/finance/constants/currencies';
 import type { ScanResult } from '@/features/finance/scanner/types';
@@ -93,6 +94,7 @@ export function AddTransactionModal({
   const [type, setType] = useState<TransactionType>('expense');
   const [entryMode, setEntryMode] = useState<EntryMode>('normal');
   const [amount, setAmount] = useState('');
+  const [calculatorVisible, setCalculatorVisible] = useState(false);
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [originalTransactionId, setOriginalTransactionId] = useState('');
@@ -661,6 +663,21 @@ export function AddTransactionModal({
                     : ''}
                 </AppText>
               }
+              rightElement={
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open calculator"
+                  onPress={() => setCalculatorVisible(true)}
+                  hitSlop={8}
+                  style={styles.calculatorTrigger}
+                >
+                  <Ionicons
+                    name="calculator-outline"
+                    size={21}
+                    color={moduleColors.finance}
+                  />
+                </Pressable>
+              }
             />
 
             <DateField value={date} onChange={setDate} />
@@ -693,6 +710,17 @@ export function AddTransactionModal({
           </>
         )}
       </FormModal>
+
+      <CalculatorPad
+        visible={visible && calculatorVisible}
+        initialValue={amount}
+        onClose={() => setCalculatorVisible(false)}
+        onApply={(value) => {
+          setAmount(value);
+          setError(undefined);
+          setCalculatorVisible(false);
+        }}
+      />
 
       {/* Category manager */}
       <Modal
@@ -1116,6 +1144,12 @@ interface AddTransactionModalProps {
 }
 
 const styles = StyleSheet.create({
+  calculatorTrigger: {
+    minWidth: 36,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   categoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
