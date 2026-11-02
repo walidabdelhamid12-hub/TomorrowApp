@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 
 import { AppButton, AppText, Card, Screen } from '@/components/ui';
-import { DEFAULT_CATEGORIES } from '@/features/finance/constants/defaultCategories';
 import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Loan, NewLoanInput } from '@/features/finance/types/finance';
@@ -31,7 +30,7 @@ const remaining = (loan: Loan) => loan.status === 'settled' || loan.status === '
 
 export default function LoansScreen() {
   const router = useRouter();
-  const { colors, spacing } = useTheme();
+  const { colors } = useTheme();
   const financeReady = useFinanceHydrated();
   const ledgerReady = useLedgerHydrated();
   const ready = financeReady && ledgerReady;
@@ -67,8 +66,7 @@ export default function LoansScreen() {
 
   const activeAccounts = useMemo(() => accounts.filter(a => !a.archived), [accounts]);
   const expenseCategory = categories.find(c => c.kind === 'expense' && c.id === 'cat_bills')
-    ?? categories.find(c => c.kind === 'expense')
-    ?? DEFAULT_CATEGORIES.find(c => c.kind === 'expense')!;
+    ?? categories.find(c => c.kind === 'expense');
 
   const resetLoanForm = () => {
     setShowLoanForm(false); setLoanName(''); setLender(''); setPrincipal('');
@@ -112,6 +110,10 @@ export default function LoansScreen() {
   const confirmPayment = () => {
     if (!selectedLoan) return;
     const amount = money(paymentAmount);
+    if (!editingPayment && !expenseCategory) {
+      Alert.alert('Expense category required', 'Add or restore an expense category before recording a loan payment. No payment has been recorded.');
+      return;
+    }
     const outstanding = remaining(selectedLoan) + (editingPayment?.amount ?? 0);
     const account = activeAccounts.find(a => a.id === accountId && a.currencyCode === selectedLoan.currencyCode);
     if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding + 0.001 ||
@@ -171,7 +173,7 @@ export default function LoansScreen() {
       return;
     }
     const transactionId = addTransaction({
-      type: 'expense', amount, accountId: account.id, categoryId: expenseCategory.id,
+      type: 'expense', amount, accountId: account.id, categoryId: expenseCategory!.id,
       purpose: 'loan_principal_payment', linkedEntityType: 'loan',
       linkedEntityId: selectedLoan.id, linkedPaymentId: paymentId,
       date: paymentDate, note: note.trim() || `Loan payment: ${selectedLoan.name}`,
@@ -285,7 +287,7 @@ export default function LoansScreen() {
           <Field label="Amount" value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" />
           <Field label="Payment date (YYYY-MM-DD)" value={paymentDate} onChangeText={setPaymentDate} />
           <Field label="Note" value={note} onChangeText={setNote} />
-          <AppText weight="semibold">Pay from account</AppText>
+          <AppText style={{ fontWeight: '600' }}>Pay from account</AppText>
           {activeAccounts.filter(a => a.currencyCode === selectedLoan?.currencyCode).map(account => <Pressable key={account.id} onPress={() => setAccountId(account.id)} style={[styles.accountChoice, accountId === account.id && { borderColor: moduleColors.finance, backgroundColor: colors.surface }]}><AppText>{account.name} · {account.currencyCode}{accountId === account.id ? ' ✓' : ''}</AppText></Pressable>)}
           <View style={styles.actions}><AppButton title={editingPayment ? 'Save changes' : settlementMode ? 'Confirm settlement' : 'Confirm payment'} onPress={confirmPayment} /><AppButton title="Cancel" variant="outline" onPress={closePayment} /></View>
         </Card></View>
