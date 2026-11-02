@@ -59,7 +59,7 @@ export default function LoansScreen() {
   const [installment, setInstallment] = useState('');
   const [count, setCount] = useState('');
   const [firstDue, setFirstDue] = useState(today());
-  const [currency, setCurrency] = useState('');
+  const [currency, setCurrency] = useState(baseCurrency);
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(today());
@@ -254,7 +254,7 @@ export default function LoansScreen() {
             </View>}
           </Card>;
         })}
-      <AddAccountModal visible={showAddBank} onClose={() => setShowAddBank(false)} onSave={(data: AddAccountFormData) => {
+      <AddAccountModal visible={showAddBank} initialType="Bank" onClose={() => setShowAddBank(false)} onSave={(data: AddAccountFormData) => {
         if (!data.accountName.trim() || data.selectedType !== 'Bank' || !Number.isFinite(money(data.amount))) { Alert.alert('Bank details required', 'Enter a valid bank account name and balance.'); return; }
         const id = addAccount({ name: data.accountName.trim(), type: 'bank', currencyCode: data.selectedCurrency, initialBalance: money(data.amount) });
         setShowAddBank(false);
