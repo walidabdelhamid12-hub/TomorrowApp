@@ -27,6 +27,7 @@ import {
   generateId,
   roundMoney,
 } from '@/features/finance/utils/finance';
+import { getAccountBalance } from '@/features/finance/utils/ledger';
 
 /* -------------------------------------------------------------------------- */
 /* Store contract                                                             */
@@ -696,7 +697,7 @@ export const useLedgerStore = create<LedgerStore>()(
       /* ------------------------------ Transfers ---------------------------- */
 
       addTransfer: (input) => {
-        const { accounts } = get();
+        const { accounts, transactions, transfers } = get();
 
         const fromAccount = accounts.find(
           (account) => account.id === input.fromAccountId
@@ -723,6 +724,20 @@ export const useLedgerStore = create<LedgerStore>()(
           return null;
         }
 
+        // Prevent transfers and card payments from exceeding the source balance.
+        const availableBalance = getAccountBalance(
+          fromAccount,
+          transactions,
+          transfers
+        );
+
+        if (
+          roundMoney(availableBalance) <
+          roundMoney(input.fromAmount)
+        ) {
+          return null;
+        }
+
         const timestamp = now();
 
         const transfer = buildTransfer(
@@ -739,7 +754,7 @@ export const useLedgerStore = create<LedgerStore>()(
       },
 
       updateTransfer: (id, patch) => {
-        const { accounts, transfers } = get();
+        const { accounts, transactions, transfers } = get();
 
         const current = transfers.find((item) => item.id === id);
 
@@ -812,6 +827,24 @@ export const useLedgerStore = create<LedgerStore>()(
             nextFromAccount,
             nextToAccount
           )
+        ) {
+          return false;
+        }
+
+        // Exclude the old transfer before validating the edited amount.
+        const transfersWithoutCurrent = transfers.filter(
+          (transfer) => transfer.id !== id
+        );
+
+        const availableBalance = getAccountBalance(
+          nextFromAccount,
+          transactions,
+          transfersWithoutCurrent
+        );
+
+        if (
+          roundMoney(availableBalance) <
+          roundMoney(nextInput.fromAmount)
         ) {
           return false;
         }

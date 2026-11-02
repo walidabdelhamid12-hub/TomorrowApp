@@ -5,55 +5,94 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppButton, AppText, Card } from '@/components/ui';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
-import type { Transaction } from '@/features/finance/types/ledger';
+import type {
+  Transaction,
+  Transfer,
+} from '@/features/finance/types/ledger';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { moduleColors, useTheme } from '@/theme';
 
 const PREVIEW_COUNT = 1;
 
 type GlyphName = keyof typeof Ionicons.glyphMap;
+
 const isGlyph = (name: string): name is GlyphName =>
   name in Ionicons.glyphMap;
 
 interface TransactionsSectionProps {
   onEdit: (transaction: Transaction) => void;
+  onEditTransfer: (transfer: Transfer) => void;
   onDelete: (transaction: Transaction) => void;
+  onDeleteTransfer: (transfer: Transfer) => void;
   amountsVisible: boolean;
 }
 
+type RecentItem =
+  | {
+      kind: 'transaction';
+      id: string;
+      date: string;
+      createdAt: string;
+      transaction: Transaction;
+    }
+  | {
+      kind: 'transfer';
+      id: string;
+      date: string;
+      createdAt: string;
+      transfer: Transfer;
+    };
+
 export function TransactionsSection({
   onEdit,
+  onEditTransfer,
   onDelete,
+  onDeleteTransfer,
   amountsVisible,
 }: TransactionsSectionProps) {
   const { colors, spacing } = useTheme();
 
   const transactions = useLedgerStore((s) => s.transactions);
+  const transfers = useLedgerStore((s) => s.transfers);
   const categories = useLedgerStore((s) => s.categories);
   const accounts = useLedgerStore((s) => s.accounts);
 
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
-  const sorted = useMemo(
-    () =>
-      [...transactions].sort(
-        (a, b) =>
-          b.date.localeCompare(a.date) ||
-          b.createdAt.localeCompare(a.createdAt),
-      ),
-    [transactions],
-  );
-
   const categoryById = useMemo(
-    () => new Map(categories.map((c) => [c.id, c])),
+    () => new Map(categories.map((category) => [category.id, category])),
     [categories],
   );
 
   const accountById = useMemo(
-    () => new Map(accounts.map((a) => [a.id, a])),
+    () => new Map(accounts.map((account) => [account.id, account])),
     [accounts],
   );
+
+  const sorted = useMemo<RecentItem[]>(() => {
+    const transactionItems: RecentItem[] = transactions.map((transaction) => ({
+      kind: 'transaction',
+      id: transaction.id,
+      date: transaction.date,
+      createdAt: transaction.createdAt,
+      transaction,
+    }));
+
+    const transferItems: RecentItem[] = transfers.map((transfer) => ({
+      kind: 'transfer',
+      id: transfer.id,
+      date: transfer.date,
+      createdAt: transfer.createdAt,
+      transfer,
+    }));
+
+    return [...transactionItems, ...transferItems].sort(
+      (a, b) =>
+        b.date.localeCompare(a.date) ||
+        b.createdAt.localeCompare(a.createdAt),
+    );
+  }, [transactions, transfers]);
 
   const visible = showAll
     ? sorted
@@ -104,16 +143,142 @@ export function TransactionsSection({
         ) : (
           <>
             <Card padded={false}>
-              {visible.map((tx, index) => {
+              {visible.map((item, index) => {
+                if (item.kind === 'transfer') {
+                  const transfer = item.transfer;
+                  const fromAccount = accountById.get(
+                    transfer.fromAccountId,
+                  );
+                  const toAccount = accountById.get(
+                    transfer.toAccountId,
+                  );
+
+                  const fromAmount =
+                    transfer.fromAmount ?? transfer.amount;
+                  const toAmount =
+                    transfer.toAmount ?? transfer.amount;
+
+                  const fromCurrency =
+                    transfer.fromCurrencyCode ?? transfer.currencyCode;
+                  const toCurrency =
+                    transfer.toCurrencyCode ?? transfer.currencyCode;
+
+                  const isCardPayment =
+                    transfer.type === 'credit_card_payment';
+
+                  const sameCurrency =
+                    fromCurrency === toCurrency;
+
+                  return (
+                    <View
+                      key={`transfer-${transfer.id}`}
+                      style={[
+                        styles.row,
+                        { padding: spacing.md },
+                        index > 0 && {
+                          borderTopWidth: StyleSheet.hairlineWidth,
+                          borderTopColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.iconCircle,
+                          styles.transferIcon,
+                          { marginEnd: spacing.md },
+                        ]}
+                      >
+                        <Ionicons
+                          name={
+                            isCardPayment
+                              ? 'card-outline'
+                              : 'swap-horizontal-outline'
+                          }
+                          size={20}
+                          color="#2563EB"
+                        />
+                      </View>
+
+                      <View style={styles.flex}>
+                        <AppText style={styles.name}>
+                          {isCardPayment
+                            ? 'Credit Card Payment'
+                            : 'Transfer'}
+                        </AppText>
+
+                        <AppText
+                          variant="caption"
+                          color="textSecondary"
+                          numberOfLines={2}
+                        >
+                          {`${item.date} · ${fromAccount?.name ?? '—'} → ${toAccount?.name ?? '—'}`}
+                        </AppText>
+                      </View>
+
+                      <AppText
+                        style={[
+                          styles.amount,
+                          { color: colors.text },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {amountsVisible
+                          ? sameCurrency
+                            ? `${formatAmount(fromAmount)} ${fromCurrency}`
+                            : `${formatAmount(fromAmount)} ${fromCurrency}\n→ ${formatAmount(toAmount)} ${toCurrency}`
+                          : '••••••'}
+                      </AppText>
+
+                      <View
+                        style={[
+                          styles.actions,
+                          { marginStart: spacing.sm },
+                        ]}
+                      >
+                        <Pressable
+                          onPress={() => onEditTransfer(transfer)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel="Edit transfer"
+                          style={styles.actionButton}
+                        >
+                          <Ionicons
+                            name="create-outline"
+                            size={17}
+                            color={moduleColors.finance}
+                          />
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => onDeleteTransfer(transfer)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel="Delete transfer"
+                          style={styles.actionButton}
+                        >
+                          <Ionicons
+                            name="trash-outline"
+                            size={15}
+                            color="#DC2626"
+                          />
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                }
+
+                const tx = item.transaction;
                 const category = categoryById.get(tx.categoryId);
                 const account = accountById.get(tx.accountId);
                 const isExpense = tx.type === 'expense';
+                const isRefund = tx.entryType === 'refund';
+
                 const icon = category?.icon ?? '';
                 const tint = category?.color ?? moduleColors.finance;
 
                 return (
                   <View
-                    key={tx.id}
+                    key={`transaction-${tx.id}`}
                     style={[
                       styles.row,
                       { padding: spacing.md },
@@ -138,7 +303,9 @@ export function TransactionsSection({
 
                     <View style={styles.flex}>
                       <AppText style={styles.name}>
-                        {category?.name ?? 'Uncategorized'}
+                        {isRefund
+                          ? `Refund · ${category?.name ?? 'Uncategorized'}`
+                          : category?.name ?? 'Uncategorized'}
                       </AppText>
 
                       <AppText variant="caption" color="textSecondary">
@@ -149,16 +316,27 @@ export function TransactionsSection({
                     <AppText
                       style={[
                         styles.amount,
-                        { color: isExpense ? '#DC2626' : '#16A34A' },
+                        {
+                          color: isRefund
+                            ? '#16A34A'
+                            : isExpense
+                              ? '#DC2626'
+                              : '#16A34A',
+                        },
                       ]}
                       numberOfLines={1}
                     >
                       {amountsVisible
-                        ? `${isExpense ? '-' : '+'}${formatAmount(tx.amount)} ${tx.currencyCode}`
+                        ? `${isExpense && !isRefund ? '-' : '+'}${formatAmount(tx.amount)} ${tx.currencyCode}`
                         : '••••••'}
                     </AppText>
 
-                    <View style={[styles.actions, { marginStart: spacing.sm }]}>
+                    <View
+                      style={[
+                        styles.actions,
+                        { marginStart: spacing.sm },
+                      ]}
+                    >
                       <Pressable
                         onPress={() => onEdit(tx)}
                         hitSlop={8}
@@ -246,12 +424,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(128,128,128,0.15)',
   },
+  transferIcon: {
+    backgroundColor: 'rgba(37,99,235,0.12)',
+  },
   name: {
     fontWeight: '600',
   },
   amount: {
     fontWeight: '600',
     flexShrink: 1,
+    textAlign: 'right',
   },
   actions: {
     flexDirection: 'row',

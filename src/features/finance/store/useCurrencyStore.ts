@@ -30,6 +30,8 @@ interface CurrencyData {
   rates: Record<string, number>;
   metals: MetalPrices;
   updatedAt: string | null;
+  lastLiveUpdatedAt: string | null;
+  lastManualUpdatedAt: string | null;
   source: RateSource;
 }
 
@@ -56,6 +58,8 @@ const initialData: CurrencyData = {
     silverPerGram: null,
   },
   updatedAt: null,
+  lastLiveUpdatedAt: null,
+  lastManualUpdatedAt: null,
   source: 'default',
 };
 
@@ -126,6 +130,9 @@ function migrateCurrencyData(
   const saved = isRecord(persistedState) ? persistedState : {};
   const savedMetals = isRecord(saved.metals) ? saved.metals : {};
 
+  const updatedAt = normalizeUpdatedAt(saved.updatedAt);
+  const source = normalizeSource(saved.source);
+
   return {
     baseCurrency: normalizeBaseCurrency(saved.baseCurrency),
     rates: normalizeRates(saved.rates),
@@ -137,8 +144,14 @@ function migrateCurrencyData(
         savedMetals.silverPerGram,
       ),
     },
-    updatedAt: normalizeUpdatedAt(saved.updatedAt),
-    source: normalizeSource(saved.source),
+    updatedAt,
+    source,
+    lastLiveUpdatedAt:
+      normalizeUpdatedAt(saved.lastLiveUpdatedAt) ??
+      (source === 'live' ? updatedAt : null),
+    lastManualUpdatedAt:
+      normalizeUpdatedAt(saved.lastManualUpdatedAt) ??
+      (source === 'manual' ? updatedAt : null),
   };
 }
 
@@ -149,7 +162,8 @@ function isCompleteLivePayload(
     !isRecord(payload.rates) ||
     !isRecord(payload.metals) ||
     typeof payload.updatedAt !== 'string' ||
-    payload.updatedAt.trim() === ''
+    payload.updatedAt.trim() === '' ||
+    !Number.isFinite(Date.parse(payload.updatedAt))
   ) {
     return false;
   }
@@ -197,13 +211,16 @@ export const useCurrencyStore = create<CurrencyStore>()(
           return false;
         }
 
+        const now = new Date().toISOString();
+
         set((state) => ({
           rates: normalizeRates({
             ...state.rates,
             [normalizedCode]: rate,
           }),
           source: 'manual',
-          updatedAt: new Date().toISOString(),
+          updatedAt: now,
+          lastManualUpdatedAt: now,
         }));
 
         return true;
@@ -214,13 +231,16 @@ export const useCurrencyStore = create<CurrencyStore>()(
           return false;
         }
 
+        const now = new Date().toISOString();
+
         set((state) => ({
           metals: {
             ...state.metals,
             [kind]: value,
           },
           source: 'manual',
-          updatedAt: new Date().toISOString(),
+          updatedAt: now,
+          lastManualUpdatedAt: now,
         }));
 
         return true;
@@ -239,6 +259,8 @@ export const useCurrencyStore = create<CurrencyStore>()(
           },
           source: 'live',
           updatedAt: payload.updatedAt,
+          lastLiveUpdatedAt: payload.updatedAt,
+          lastManualUpdatedAt: null,
         });
 
         return true;
@@ -252,6 +274,8 @@ export const useCurrencyStore = create<CurrencyStore>()(
             silverPerGram: null,
           },
           updatedAt: null,
+          lastLiveUpdatedAt: null,
+          lastManualUpdatedAt: null,
           source: 'default',
         }),
     }),
@@ -265,6 +289,8 @@ export const useCurrencyStore = create<CurrencyStore>()(
         rates: state.rates,
         metals: state.metals,
         updatedAt: state.updatedAt,
+        lastLiveUpdatedAt: state.lastLiveUpdatedAt,
+        lastManualUpdatedAt: state.lastManualUpdatedAt,
         source: state.source,
       }),
 

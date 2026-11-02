@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
-import { refreshLiveRates } from '@/services/liveRates';
+import { refreshLiveRates, type RefreshResult } from '@/services/liveRates';
 
 const CHECK_INTERVAL_MS = 60 * 1000;
+const RETRY_DELAY_MS = 5 * 60 * 1000;
 
 function getLatestDueSlot(now: Date): number {
   const slot = new Date(now);
@@ -24,10 +25,12 @@ function getLatestDueSlot(now: Date): number {
 }
 
 function isLatestSlotAlreadyUpdated(): boolean {
-  const updatedAt = useCurrencyStore.getState().updatedAt;
+  const updatedAt = useCurrencyStore.getState().lastLiveUpdatedAt;
+
   if (!updatedAt) return false;
 
   const lastUpdate = Date.parse(updatedAt);
+
   if (!Number.isFinite(lastUpdate)) return false;
 
   return lastUpdate >= getLatestDueSlot(new Date());
@@ -35,18 +38,39 @@ function isLatestSlotAlreadyUpdated(): boolean {
 
 export function useAutoRefreshRates(enabled: boolean) {
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const refreshingRef = useRef(false);
+  const [lastResult, setLastResult] = useState<RefreshResult | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (refreshingRef.current) return;
+  const refreshingRef = useRef(false);
+  const nextRetryAtRef = useRef(0);
+
+  const refresh = useCallback(async (): Promise<RefreshResult | null> => {
+    if (refreshingRef.current) return null;
 
     refreshingRef.current = true;
     setIsRefreshing(true);
 
     try {
-      await refreshLiveRates();
+      const result = await refreshLiveRates();
+
+      setLastResult(result);
+
+      if (result.ok) {
+        nextRetryAtRef.current = 0;
+      } else {
+        nextRetryAtRef.current = Date.now() + RETRY_DELAY_MS;
+      }
+
+      return result;
     } catch {
-      // Keep the previously saved rates if the request fails.
+      const result: RefreshResult = {
+        ok: false,
+        message: 'Rates update failed. Please check your internet connection.',
+      };
+
+      setLastResult(result);
+      nextRetryAtRef.current = Date.now() + RETRY_DELAY_MS;
+
+      return result;
     } finally {
       refreshingRef.current = false;
       setIsRefreshing(false);
@@ -55,6 +79,8 @@ export function useAutoRefreshRates(enabled: boolean) {
 
   const checkScheduledRefresh = useCallback(() => {
     if (!enabled || refreshingRef.current) return;
+
+    if (Date.now() < nextRetryAtRef.current) return;
 
     if (!isLatestSlotAlreadyUpdated()) {
       void refresh();
@@ -91,5 +117,6 @@ export function useAutoRefreshRates(enabled: boolean) {
   return {
     refresh,
     isRefreshing,
+    lastResult,
   };
 }

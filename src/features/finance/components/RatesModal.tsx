@@ -11,13 +11,15 @@ import {
 } from '@/features/finance/constants/currencies';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { parseAmount } from '@/features/finance/utils/money';
+import type { RefreshResult } from '@/services/liveRates';
 import { moduleColors, useTheme } from '@/theme';
 
 interface RatesModalProps {
   visible: boolean;
   onClose: () => void;
-  refreshRates: () => Promise<unknown>;
+  refreshRates: () => Promise<RefreshResult | null>;
   isRefreshing: boolean;
+  lastResult?: RefreshResult | null;
 }
 
 const showRate = (value: number): string =>
@@ -34,12 +36,31 @@ function isValidRate(value: number | undefined): value is number {
   );
 }
 
+function formatLocalDate(value: string | null): string {
+  if (!value) return 'Not available';
+
+  const date = new Date(value);
+
+  if (!Number.isFinite(date.getTime())) {
+    return 'Invalid date';
+  }
+
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 /** Displays and edits rates relative to the selected base currency. */
 export function RatesModal({
   visible,
   onClose,
   refreshRates,
   isRefreshing,
+  lastResult = null,
 }: RatesModalProps) {
   const { colors, spacing, radius } = useTheme();
 
@@ -47,6 +68,15 @@ export function RatesModal({
   const metals = useCurrencyStore((s) => s.metals);
   const baseCurrency = useCurrencyStore((s) => s.baseCurrency);
   const updatedAt = useCurrencyStore((s) => s.updatedAt);
+
+  const lastLiveUpdatedAt = useCurrencyStore(
+    (s) => s.lastLiveUpdatedAt,
+  );
+
+  const lastManualUpdatedAt = useCurrencyStore(
+    (s) => s.lastManualUpdatedAt,
+  );
+
   const source = useCurrencyStore((s) => s.source);
   const setRate = useCurrencyStore((s) => s.setRate);
   const setMetalPrice = useCurrencyStore((s) => s.setMetalPrice);
@@ -55,13 +85,13 @@ export function RatesModal({
   const [gold, setGold] = useState('');
   const [silver, setSilver] = useState('');
   const [error, setError] = useState<string | undefined>();
+  const [refreshMessage, setRefreshMessage] =
+    useState<RefreshResult | null>(null);
 
   const rotation = useRef(new Animated.Value(0)).current;
 
   const baseRate = rates[baseCurrency];
 
-  // The selected base currency is excluded from the displayed list.
-  // EGP appears whenever another currency is selected.
   const displayedCurrencies = CURRENCIES.filter(
     (currency) => currency.code !== baseCurrency,
   );
@@ -99,8 +129,16 @@ export function RatesModal({
 
   useEffect(() => {
     if (!visible) return;
+
     setError(undefined);
+    setRefreshMessage(null);
   }, [visible]);
+
+  useEffect(() => {
+    if (lastResult) {
+      setRefreshMessage(lastResult);
+    }
+  }, [lastResult]);
 
   // Convert stored EGP-based rates into the selected display currency.
   useEffect(() => {
@@ -110,7 +148,6 @@ export function RatesModal({
 
     displayedCurrencies.forEach((currency) => {
       const storedRate = rates[currency.code] ?? 0;
-
       initial[currency.code] = showRate(storedRate / baseRate);
     });
 
@@ -136,7 +173,81 @@ export function RatesModal({
     metals,
   ]);
 
+  // Detect changes that have not been saved yet.
+  const hasUnsavedChanges = (() => {
+    if (!isValidRate(baseRate)) return false;
+
+    for (const currency of displayedCurrencies) {
+      if (currency.code === RATE_ANCHOR) continue;
+
+      const displayValue = parseAmount(
+        drafts[currency.code] ?? '',
+      );
+
+      if (displayValue === null || displayValue <= 0) {
+        return true;
+      }
+
+      const storedValue = displayValue * baseRate;
+      const currentValue = rates[currency.code] ?? 0;
+
+      if (
+        Math.abs(storedValue - currentValue) > 0.0000001
+      ) {
+        return true;
+      }
+    }
+
+    if (gold.trim() !== '') {
+      const goldValue = parseAmount(gold);
+
+      if (goldValue === null || goldValue <= 0) {
+        return true;
+      }
+
+      const storedGold = goldValue * baseRate;
+
+      if (
+        metals.gold24PerGram === null ||
+        Math.abs(storedGold - metals.gold24PerGram) > 0.0000001
+      ) {
+        return true;
+      }
+    }
+
+    if (silver.trim() !== '') {
+      const silverValue = parseAmount(silver);
+
+      if (silverValue === null || silverValue <= 0) {
+        return true;
+      }
+
+      const storedSilver = silverValue * baseRate;
+
+      if (
+        metals.silverPerGram === null ||
+        Math.abs(storedSilver - metals.silverPerGram) > 0.0000001
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  })();
+
+  const handleRefresh = async () => {
+    setRefreshMessage(null);
+
+    const result = await refreshRates();
+
+    if (result) {
+      setRefreshMessage(result);
+    }
+  };
+
   const save = () => {
+    setError(undefined);
+
     if (!isValidRate(baseRate)) {
       setError(`No valid exchange rate found for ${baseCurrency}.`);
       return;
@@ -145,8 +256,6 @@ export function RatesModal({
     const parsed: Record<string, number> = {};
 
     for (const currency of displayedCurrencies) {
-      // EGP is the fixed internal reference currency.
-      // It is displayed as a calculated value, not edited directly.
       if (currency.code === RATE_ANCHOR) continue;
 
       const displayValue = parseAmount(
@@ -158,11 +267,12 @@ export function RatesModal({
         return;
       }
 
-      // Convert the entered display value back into EGP storage.
       parsed[currency.code] = displayValue * baseRate;
     }
 
-    const goldDisplay = gold.trim() === '' ? null : parseAmount(gold);
+    const goldDisplay =
+      gold.trim() === '' ? null : parseAmount(gold);
+
     const silverDisplay =
       silver.trim() === '' ? null : parseAmount(silver);
 
@@ -182,11 +292,16 @@ export function RatesModal({
       return;
     }
 
+    let saveFailed = false;
+
     Object.entries(parsed).forEach(([code, value]) => {
       const current = rates[code] ?? 0;
 
-      if (Math.abs(value - current) > 0.0000001) {
-        setRate(code, value);
+      if (
+        Math.abs(value - current) > 0.0000001 &&
+        !setRate(code, value)
+      ) {
+        saveFailed = true;
       }
     });
 
@@ -197,7 +312,9 @@ export function RatesModal({
         metals.gold24PerGram === null ||
         Math.abs(goldStored - metals.gold24PerGram) > 0.0000001
       ) {
-        setMetalPrice('gold24PerGram', goldStored);
+        if (!setMetalPrice('gold24PerGram', goldStored)) {
+          saveFailed = true;
+        }
       }
     }
 
@@ -208,17 +325,25 @@ export function RatesModal({
         metals.silverPerGram === null ||
         Math.abs(silverStored - metals.silverPerGram) > 0.0000001
       ) {
-        setMetalPrice('silverPerGram', silverStored);
+        if (!setMetalPrice('silverPerGram', silverStored)) {
+          saveFailed = true;
+        }
       }
+    }
+
+    if (saveFailed) {
+      setError('Some rates could not be saved.');
+      return;
     }
 
     onClose();
   };
 
-  const status =
-    source === 'default' || !updatedAt
-      ? 'Using default placeholder rates.'
-      : `Last update (${source}): ${updatedAt.slice(0, 16).replace('T', ' ')} UTC`;
+  const sourceLabel = {
+    live: 'Live',
+    manual: 'Manual',
+    default: 'Default',
+  }[source];
 
   const cardStyle = {
     flex: 1,
@@ -232,47 +357,72 @@ export function RatesModal({
 
   return (
     <FormModal visible={visible} title="Exchange rates" onClose={onClose}>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 10,
-        }}
-      >
-        <View style={{ flex: 1 }}>
-          <AppText variant="caption" color="textSecondary">
-            {status}
-          </AppText>
-        </View>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Refresh exchange rates"
-          accessibilityState={{ disabled: isRefreshing }}
-          disabled={isRefreshing}
-          onPress={() => void refreshRates()}
-          hitSlop={8}
+      <View style={{ gap: spacing.xs }}>
+        <View
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 18,
-            borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
+            flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
-            opacity: isRefreshing ? 0.7 : 1,
+            justifyContent: 'space-between',
+            gap: 10,
           }}
         >
-          <Animated.View style={{ transform: [{ rotate }] }}>
-            <Ionicons
-              name="refresh-circle"
-              size={27}
-              color={moduleColors.finance}
-            />
-          </Animated.View>
-        </Pressable>
+          <View style={{ flex: 1, gap: 4 }}>
+            <AppText variant="caption" color="textSecondary">
+              Current source: {sourceLabel}
+            </AppText>
+
+            <AppText variant="caption" color="textSecondary">
+              Last live update: {formatLocalDate(lastLiveUpdatedAt)}
+            </AppText>
+
+            <AppText variant="caption" color="textSecondary">
+              Last manual change: {formatLocalDate(lastManualUpdatedAt)}
+            </AppText>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Refresh exchange rates"
+            accessibilityState={{ disabled: isRefreshing }}
+            disabled={isRefreshing}
+            onPress={() => void handleRefresh()}
+            hitSlop={8}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: isRefreshing ? 0.7 : 1,
+            }}
+          >
+            <Animated.View style={{ transform: [{ rotate }] }}>
+              <Ionicons
+                name="refresh-circle"
+                size={27}
+                color={moduleColors.finance}
+              />
+            </Animated.View>
+          </Pressable>
+        </View>
+
+        {isRefreshing ? (
+          <AppText variant="caption" color="textSecondary">
+            Updating exchange rates...
+          </AppText>
+        ) : null}
+
+        {refreshMessage ? (
+          <AppText
+            variant="caption"
+            color={refreshMessage.ok ? 'success' : 'danger'}
+          >
+            {refreshMessage.message}
+          </AppText>
+        ) : null}
       </View>
 
       <View style={{ gap: spacing.xs }}>
@@ -430,13 +580,17 @@ export function RatesModal({
 
       <AppButton
         title="Save rates"
-        variant="secondary"
+        variant={hasUnsavedChanges ? 'primary' : 'secondary'}
+        accentColor={
+          hasUnsavedChanges ? moduleColors.finance : undefined
+        }
+        disabled={!hasUnsavedChanges}
         onPress={save}
       />
 
       <AppText variant="caption" color="textSecondary">
-        Currency rates by Exchange Rate API (exchangerate-api.com), updated
-        about once a day. Gold and silver spot prices by gold-api.com.
+        Currency rates by Exchange Rate API (exchangerate-api.com).
+        Gold and silver spot prices by gold-api.com.
       </AppText>
     </FormModal>
   );

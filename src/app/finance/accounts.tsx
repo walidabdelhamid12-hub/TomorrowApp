@@ -1,0 +1,312 @@
+
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Platform,
+    Pressable,
+    StyleSheet,
+    View,
+} from 'react-native';
+
+import { AppButton, AppText, Card, Screen } from '@/components/ui';
+import {
+    AddAccountModal,
+    type AddAccountFormData,
+} from '@/features/finance/components/AddAccountModal';
+import {
+    useLedgerHydrated,
+    useLedgerStore,
+} from '@/features/finance/store/useLedgerStore';
+import type { Account, AccountType } from '@/features/finance/types/ledger';
+import { formatAmount } from '@/features/finance/utils/amountFormat';
+import { getAccountBalance } from '@/features/finance/utils/ledger';
+import { moduleColors, useTheme } from '@/theme';
+
+const TYPE_LABELS: Record<AccountType, string> = {
+  cash: 'Cash',
+  bank: 'Bank',
+  wallet: 'Wallet',
+  savings: 'Savings',
+  credit_card: 'Credit card',
+};
+
+export default function AccountsScreen() {
+  const router = useRouter();
+  const { colors, spacing } = useTheme();
+  const ready = useLedgerHydrated();
+
+  const accounts = useLedgerStore((state) => state.accounts);
+  const transactions = useLedgerStore((state) => state.transactions);
+  const transfers = useLedgerStore((state) => state.transfers);
+
+  const addAccount = useLedgerStore((state) => state.addAccount);
+  const updateAccount = useLedgerStore((state) => state.updateAccount);
+  const deleteAccount = useLedgerStore((state) => state.deleteAccount);
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+
+  const openAdd = () => {
+    setEditingAccount(null);
+    setModalVisible(true);
+  };
+
+  const openEdit = (account: Account) => {
+    setEditingAccount(account);
+    setModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setEditingAccount(null);
+  };
+
+  const handleSave = (data: AddAccountFormData) => {
+    const amount = Number(data.amount);
+
+    if (
+      !data.accountName.trim() ||
+      !data.amount.trim() ||
+      !Number.isFinite(amount)
+    ) {
+      Alert.alert(
+        'Invalid account',
+        'Enter an account name and a valid starting balance.',
+      );
+      return;
+    }
+
+    const accountTypes: Record<
+      AddAccountFormData['selectedType'],
+      AccountType
+    > = {
+      Cash: 'cash',
+      Bank: 'bank',
+      Wallet: 'wallet',
+      Savings: 'savings',
+      'Credit card': 'credit_card',
+    };
+
+    const accountInput = {
+      name: data.accountName.trim(),
+      type: accountTypes[data.selectedType],
+      currencyCode: data.selectedCurrency,
+      initialBalance: amount,
+    };
+
+    if (editingAccount) {
+      updateAccount(editingAccount.id, accountInput);
+    } else {
+      addAccount(accountInput);
+    }
+
+    closeModal();
+  };
+
+  const confirmDelete = (account: Account) => {
+    const message =
+      'Deleting this account may also delete its linked transactions and transfers.';
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Delete "${account.name}"?\n\n${message}`)) {
+        deleteAccount(account.id);
+      }
+      return;
+    }
+
+    Alert.alert(`Delete "${account.name}"?`, message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deleteAccount(account.id),
+      },
+    ]);
+  };
+
+  if (!ready) {
+    return (
+      <Screen>
+        <View style={styles.center}>
+          <ActivityIndicator color={moduleColors.finance} />
+        </View>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen scroll>
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={23} color={colors.text} />
+        </Pressable>
+
+        <View style={styles.headerText}>
+          <AppText variant="h1">Accounts</AppText>
+          <AppText variant="caption" color="textSecondary">
+            {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
+          </AppText>
+        </View>
+      </View>
+
+      <AppButton
+        title="Add account"
+        accentColor={moduleColors.finance}
+        leftIcon={<Ionicons name="add" size={20} color={colors.onPrimary} />}
+        onPress={openAdd}
+      />
+
+      {accounts.length === 0 ? (
+        <Card variant="filled">
+          <AppText color="textSecondary" align="center">
+            No accounts yet. Add your first account.
+          </AppText>
+        </Card>
+      ) : (
+        <Card padded={false}>
+          {accounts.map((account, index) => {
+            const balance = getAccountBalance(
+              account,
+              transactions,
+              transfers,
+            );
+
+            return (
+              <View
+                key={account.id}
+                style={[
+                  styles.accountRow,
+                  { padding: spacing.md },
+                  index > 0 && {
+                    borderTopWidth: StyleSheet.hairlineWidth,
+                    borderTopColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.accountInfo}>
+                  <View style={styles.accountTitleRow}>
+                    <AppText style={styles.accountName}>
+                      {account.name}
+                    </AppText>
+                  </View>
+
+                  <AppText variant="caption" color="textSecondary">
+                    {TYPE_LABELS[account.type]} · {account.currencyCode}
+                  </AppText>
+
+                  <AppText
+                    style={[
+                      styles.balance,
+                      balance < 0 && { color: colors.danger },
+                    ]}
+                  >
+                    {formatAmount(balance)} {account.currencyCode}
+                  </AppText>
+                </View>
+
+                <View style={styles.actions}>
+                  <Pressable
+                    onPress={() => openEdit(account)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${account.name}`}
+                    hitSlop={8}
+                    style={styles.actionButton}
+                  >
+                    <Ionicons
+                      name="create-outline"
+                      size={20}
+                      color={moduleColors.finance}
+                    />
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => confirmDelete(account)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${account.name}`}
+                    hitSlop={8}
+                    style={styles.actionButton}
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={19}
+                      color={colors.textSecondary}
+                    />
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+        </Card>
+      )}
+
+      <AddAccountModal
+        visible={modalVisible}
+        account={editingAccount}
+        onClose={closeModal}
+        onSave={handleSave}
+      />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerText: {
+    flex: 1,
+    gap: 3,
+  },
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  accountInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 5,
+  },
+  accountTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  accountName: {
+    fontWeight: '600',
+  },
+  balance: {
+    fontWeight: '700',
+    marginTop: 3,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  actionButton: {
+    padding: 4,
+  },
+});

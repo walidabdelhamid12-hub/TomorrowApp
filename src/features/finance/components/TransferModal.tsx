@@ -1,19 +1,18 @@
-
 import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import {
-    AppButton,
-    AppInput,
-    AppText,
-    ChipSelect,
-    DateField,
+  AppButton,
+  AppInput,
+  AppText,
+  ChipSelect,
+  DateField,
 } from '@/components/ui';
 import { FormModal } from '@/features/finance/components/FormModal';
 import { getCurrencyLabel } from '@/features/finance/constants/currencies';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
-import type { TransferType } from '@/features/finance/types/ledger';
+import type { Transfer, TransferType } from '@/features/finance/types/ledger';
 import { todayISO } from '@/features/finance/utils/finance';
 import { parseAmount } from '@/features/finance/utils/money';
 import { moduleColors, useTheme } from '@/theme';
@@ -24,16 +23,19 @@ type TransferMode = 'internal' | 'credit_card_payment';
 interface TransferModalProps {
   visible: boolean;
   onClose: () => void;
+  transfer?: Transfer | null;
 }
 
 export function TransferModal({
   visible,
   onClose,
+  transfer = null,
 }: TransferModalProps) {
   const { colors, spacing } = useTheme();
 
   const accounts = useLedgerStore((state) => state.accounts);
   const addTransfer = useLedgerStore((state) => state.addTransfer);
+  const updateTransfer = useLedgerStore((state) => state.updateTransfer);
   const rates = useCurrencyStore((state) => state.rates);
 
   const [mode, setMode] = useState<TransferMode>('internal');
@@ -44,6 +46,9 @@ export function TransferModal({
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | undefined>();
+  const [preserveLoadedRate, setPreserveLoadedRate] = useState(false);
+
+  const isEditing = !!transfer;
 
   const activeAccounts = useMemo(
     () => accounts.filter((account) => !account.archived),
@@ -117,18 +122,45 @@ export function TransferModal({
       ? parsedFromAmount * parsedRate
       : null;
 
+  // Load the existing transfer when opening the modal in edit mode.
   useEffect(() => {
     if (!visible) return;
 
-    setMode('internal');
-    setFromAccountId('');
-    setToAccountId('');
-    setFromAmount('');
-    setExchangeRate('1');
-    setDate(todayISO());
-    setNote('');
+    if (transfer) {
+      setMode(transfer.type);
+      setFromAccountId(transfer.fromAccountId);
+      setToAccountId(transfer.toAccountId);
+
+      const originalFromAmount =
+        transfer.fromAmount ?? transfer.amount;
+
+      const originalToAmount =
+        transfer.toAmount ?? transfer.amount;
+
+      const originalRate =
+        transfer.exchangeRate ??
+        (originalFromAmount > 0
+          ? originalToAmount / originalFromAmount
+          : 1);
+
+      setFromAmount(String(originalFromAmount));
+      setExchangeRate(String(originalRate));
+      setDate(transfer.date);
+      setNote(transfer.note ?? '');
+      setPreserveLoadedRate(true);
+    } else {
+      setMode('internal');
+      setFromAccountId('');
+      setToAccountId('');
+      setFromAmount('');
+      setExchangeRate('1');
+      setDate(todayISO());
+      setNote('');
+      setPreserveLoadedRate(false);
+    }
+
     setError(undefined);
-  }, [visible]);
+  }, [visible, transfer]);
 
   useEffect(() => {
     if (!visible) return;
@@ -166,6 +198,12 @@ export function TransferModal({
   useEffect(() => {
     if (!visible || !selectedSource || !selectedDestination) return;
 
+    // Keep the original exchange rate when loading an existing transfer.
+    if (preserveLoadedRate) {
+      setPreserveLoadedRate(false);
+      return;
+    }
+
     if (mode === 'credit_card_payment' || sameCurrency) {
       setExchangeRate('1');
       return;
@@ -181,6 +219,7 @@ export function TransferModal({
     mode,
     sameCurrency,
     suggestedRate,
+    preserveLoadedRate,
   ]);
 
   const handleModeChange = (value: string) => {
@@ -290,7 +329,7 @@ export function TransferModal({
         ? 'credit_card_payment'
         : 'internal';
 
-    const result = addTransfer({
+    const transferData = {
       fromAccountId: source.id,
       toAccountId: destination.id,
       fromAmount: amount,
@@ -301,13 +340,26 @@ export function TransferModal({
       date,
       type: transferType,
       note: note.trim() || undefined,
-    });
+    };
 
-    if (result === null) {
-      setError(
-        'Could not save the transfer. Please check the account balances and details.',
-      );
-      return;
+    if (transfer) {
+      const updated = updateTransfer(transfer.id, transferData);
+
+      if (!updated) {
+        setError(
+          'Could not update the transfer. Please check the account balances and details.',
+        );
+        return;
+      }
+    } else {
+      const result = addTransfer(transferData);
+
+      if (result === null) {
+        setError(
+          'Could not save the transfer. Please check the account balances and details.',
+        );
+        return;
+      }
     }
 
     onClose();
@@ -316,7 +368,7 @@ export function TransferModal({
   return (
     <FormModal
       visible={visible}
-      title="Add transfer"
+      title={isEditing ? 'Edit transfer' : 'Add transfer'}
       onClose={onClose}
     >
       {activeAccounts.length === 0 ? (
@@ -476,9 +528,11 @@ export function TransferModal({
 
           <AppButton
             title={
-              mode === 'credit_card_payment'
-                ? 'Record card payment'
-                : 'Save transfer'
+              isEditing
+                ? 'Save changes'
+                : mode === 'credit_card_payment'
+                  ? 'Record card payment'
+                  : 'Save transfer'
             }
             accentColor={moduleColors.finance}
             onPress={submit}
