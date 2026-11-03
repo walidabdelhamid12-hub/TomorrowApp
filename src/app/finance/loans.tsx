@@ -4,7 +4,9 @@ import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,14 +33,6 @@ const money = (value: string) => parseAmount(value);
 const remaining = (loan: Loan) => loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed'
   ? 0
   : Math.max(0, (loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments) - loan.payments.reduce((s, p) => s + p.amount, 0));
-const remainingPrincipal = (loan: Loan) => Math.max(
-  0,
-  roundMoney(
-    (loan.receivedAmount ?? loan.principalAmount ?? 0) -
-    loan.payments.reduce((sum, payment) => sum + (payment.principalAmount ?? payment.amount), 0)
-  )
-);
-
 export default function LoansScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -76,8 +70,7 @@ export default function LoansScreen() {
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [principalPayment, setPrincipalPayment] = useState('');
-  const [interestPayment, setInterestPayment] = useState('0');
+  const [latePaymentFee, setLatePaymentFee] = useState('0');
   const [paymentDate, setPaymentDate] = useState(today());
   const [accountId, setAccountId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'account' | 'custom'>('account');
@@ -148,10 +141,8 @@ export default function LoansScreen() {
     setSelectedLoan(loan);
     setSettlementMode(early);
     const suggestedAmount = early ? remaining(loan) : Math.min(loan.monthlyInstallment, remaining(loan));
-    const suggestedPrincipal = Math.min(suggestedAmount, remainingPrincipal(loan));
     setPaymentAmount(String(suggestedAmount));
-    setPrincipalPayment(String(roundMoney(suggestedPrincipal)));
-    setInterestPayment(String(roundMoney(suggestedAmount - suggestedPrincipal)));
+    setLatePaymentFee('0');
     setPaymentDate(today());
     setAccountId(matching.find(a => a.type === 'bank')?.id ?? matching[0]?.id ?? '');
     setPaymentMethod('account');
@@ -159,7 +150,7 @@ export default function LoansScreen() {
     setNote('');
   };
 
-  const closePayment = () => { setSelectedLoan(null); setPaymentAmount(''); setPrincipalPayment(''); setInterestPayment('0'); setNote(''); setSettlementMode(false); setEditingPayment(null); setPaymentMethod('account'); setCustomPaymentMethod(''); };
+  const closePayment = () => { setSelectedLoan(null); setPaymentAmount(''); setLatePaymentFee('0'); setNote(''); setSettlementMode(false); setEditingPayment(null); setPaymentMethod('account'); setCustomPaymentMethod(''); };
 
   const openReceiveLoan = (loan: Loan) => {
     if (loan.receivedAt || loan.receiptTransactionId) {
@@ -256,8 +247,8 @@ export default function LoansScreen() {
   const confirmPayment = () => {
     if (!selectedLoan) return;
     const amount = money(paymentAmount);
-    const principalAmount = money(principalPayment);
-    const interestAmount = money(interestPayment);
+    const fee = latePaymentFee.trim() ? money(latePaymentFee) : 0;
+    const cashAmount = amount !== null && fee !== null ? roundMoney(amount + fee) : null;
     if (!editingPayment && paymentMethod === 'account' && !expenseCategory) {
       Alert.alert('Expense category required', 'Add or restore an expense category before recording a loan payment. No payment has been recorded.');
       return;
@@ -268,41 +259,42 @@ export default function LoansScreen() {
     const customLabel = customPaymentMethod.trim();
     if (
       amount === null || amount <= 0 || amount > outstanding + 0.001 ||
-      principalAmount === null || principalAmount < 0 ||
-      interestAmount === null || interestAmount < 0 ||
-      Math.abs(roundMoney(principalAmount + interestAmount) - amount) > 0.001 ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) ||
+      fee === null || !Number.isFinite(fee) || fee < 0 ||
+      cashAmount === null || !Number.isFinite(cashAmount) ||
+      !/^\\d{4}-\\d{2}-\\d{2}$/.test(paymentDate) ||
       (paymentMethod === 'account' && !account) ||
       (paymentMethod === 'custom' && !customLabel)
     ) {
-      Alert.alert('Invalid payment', 'The total must equal principal plus interest. Check the amounts, date and payment method.'); return;
+      Alert.alert('Invalid payment', 'Check the installment amount, late fee, date and payment method. The installment cannot exceed the remaining contract balance.');
+      return;
     }
     if (editingPayment) {
       const txId = editingPayment.ledgerTransactionId;
       if (txId && !account) { Alert.alert('Payment method locked', 'This payment is linked to an account. Keep a registered account selected.'); return; }
+      if (!txId && account) { Alert.alert('Payment method locked', 'This payment was recorded with a custom method. Keep the custom method selected when editing it.'); return; }
       const previous = txId ? transactions.find(t => t.id === txId) : undefined;
       if (txId && !previous) { Alert.alert('Update failed', 'The linked account transaction could not be found. No changes were made.'); return; }
       if (txId && account) {
-        const ok = updateTransaction(txId, { amount, accountId: account.id, date: paymentDate, note: note.trim() || `Loan payment: ${selectedLoan.name}` });
+        const ok = updateTransaction(txId, { amount: cashAmount, accountId: account.id, date: paymentDate, note: note.trim() || `Loan payment: ${selectedLoan.name}` });
         if (!ok) { Alert.alert('Update failed', 'The linked account transaction could not be updated.'); return; }
       }
 
       updateLoanPayment(selectedLoan.id, editingPayment.id, {
         amount,
+        latePaymentFee: fee,
+        paymentMode: 'simple',
         date: paymentDate,
         note: note.trim() || undefined,
         accountId: account?.id,
         paymentMethodLabel: account ? undefined : customLabel,
-        principalAmount,
-        interestAmount,
       });
       const saved = useFinanceStore.getState().loans
         .find(l => l.id === selectedLoan.id)?.payments
         .find(p => p.id === editingPayment.id);
       const paymentSaved = !!saved &&
         Math.abs(saved.amount - amount) <= 0.001 &&
-        Math.abs((saved.principalAmount ?? saved.amount) - principalAmount) <= 0.001 &&
-        Math.abs((saved.interestAmount ?? 0) - interestAmount) <= 0.001 &&
+        Math.abs((saved.latePaymentFee ?? 0) - fee) <= 0.001 &&
+        saved.paymentMode === 'simple' &&
         saved.date === paymentDate;
       if (!paymentSaved) {
         if (txId && previous) {
@@ -336,12 +328,44 @@ export default function LoansScreen() {
       }
       closePayment(); return;
     }
-    const paymentId = addLoanPayment(selectedLoan.id, { amount, date: paymentDate, note: note.trim() || (settlementMode ? 'Early settlement' : undefined), principalAmount, interestAmount, ...(account ? { accountId: account.id } : { paymentMethodLabel: customLabel }) });
+
+    const paymentId = addLoanPayment(selectedLoan.id, {
+      amount,
+      latePaymentFee: fee,
+      paymentMode: 'simple',
+      date: paymentDate,
+      note: note.trim() || (settlementMode ? 'Early settlement' : undefined),
+      ...(account ? { accountId: account.id } : { paymentMethodLabel: customLabel }),
+    });
     if (!paymentId) { Alert.alert('Payment not saved', 'The loan store rejected this payment.'); return; }
     if (account) {
-      const txId = addTransaction({ type: 'expense', amount, accountId: account.id, categoryId: expenseCategory!.id, purpose: 'loan_payment', linkedEntityType: 'loan', linkedEntityId: selectedLoan.id, linkedPaymentId: paymentId, date: paymentDate, note: note.trim() || `Loan payment: ${selectedLoan.name}` });
-      if (!txId) { deleteLoanPayment(selectedLoan.id, paymentId); Alert.alert('Payment not posted', 'The account transaction failed; payment was rolled back.'); return; }
+      const txId = addTransaction({
+        type: 'expense',
+        amount: cashAmount,
+        accountId: account.id,
+        categoryId: expenseCategory!.id,
+        purpose: 'loan_payment',
+        linkedEntityType: 'loan',
+        linkedEntityId: selectedLoan.id,
+        linkedPaymentId: paymentId,
+        date: paymentDate,
+        note: note.trim() || `Loan payment: ${selectedLoan.name}`,
+      });
+      if (!txId) {
+        deleteLoanPayment(selectedLoan.id, paymentId);
+        Alert.alert('Payment not posted', 'The account transaction failed; payment was rolled back.');
+        return;
+      }
       updateLoanPayment(selectedLoan.id, paymentId, { ledgerTransactionId: txId });
+      const linked = useFinanceStore.getState().loans
+        .find(l => l.id === selectedLoan.id)?.payments
+        .find(p => p.id === paymentId)?.ledgerTransactionId === txId;
+      if (!linked) {
+        removeTransaction(txId);
+        deleteLoanPayment(selectedLoan.id, paymentId);
+        Alert.alert('Payment not posted', 'The account link could not be saved; both records were rolled back.');
+        return;
+      }
     }
     if (settlementMode) updateLoan(selectedLoan.id, { status: 'settled', settlementAmount: amount, settlementDate: paymentDate, settlementAccountId: account?.id, settlementPaymentId: paymentId, settlementNote: note.trim() || undefined });
     else if (outstanding - amount <= 0.001) updateLoan(selectedLoan.id, { status: 'completed' });
@@ -352,8 +376,7 @@ export default function LoansScreen() {
     if (payment.ledgerTransactionId && !matching.length) { Alert.alert('Cannot edit payment', 'No active account in the payment currency is available.'); return; }
     setSelectedLoan(loan); setEditingPayment(payment); setSettlementMode(false);
     setPaymentAmount(String(payment.amount));
-    setPrincipalPayment(String(payment.principalAmount ?? payment.amount));
-    setInterestPayment(String(payment.interestAmount ?? 0));
+    setLatePaymentFee(String(payment.latePaymentFee ?? 0));
     setPaymentDate(payment.date);
     setAccountId(payment.accountId && matching.some(a => a.id === payment.accountId) ? payment.accountId : matching.find(a => a.type === 'bank')?.id ?? matching[0]?.id ?? '');
     setPaymentMethod(payment.ledgerTransactionId ? 'account' : 'custom'); setCustomPaymentMethod(payment.paymentMethodLabel ?? ''); setNote(payment.note ?? '');
@@ -433,7 +456,7 @@ export default function LoansScreen() {
             })()}
             {loan.payments.length > 0 && <View style={styles.history}><AppText style={{ fontWeight: '600' }}>Payment history</AppText>
               {loan.payments.map(payment => <View key={payment.id} style={styles.paymentRow}>
-                <View style={{ flex: 1 }}><AppText>{formatAmount(payment.amount)} {loan.currencyCode}</AppText><AppText variant="caption" color="textSecondary">{payment.date} · {payment.note || 'Installment'}</AppText></View>
+                <View style={{ flex: 1 }}><AppText>{formatAmount(payment.amount)} {loan.currencyCode}{(payment.latePaymentFee ?? 0) > 0 ? ` · Fee: ${formatAmount(payment.latePaymentFee!)} ${loan.currencyCode}` : ''}</AppText><AppText variant="caption" color="textSecondary">{payment.date} · {payment.note || 'Installment'}</AppText></View>
                 <View style={styles.row}><Pressable onPress={() => openEditPayment(loan, payment)} hitSlop={8}><Ionicons name="create-outline" size={16} color={moduleColors.finance} /></Pressable><Pressable onPress={() => confirmDeletePayment(loan, payment)} hitSlop={8}><Ionicons name="trash-outline" size={16} color={colors.danger} /></Pressable></View>
               </View>)}
             </View>}
@@ -604,24 +627,28 @@ export default function LoansScreen() {
         </Card></View>
       </Modal>
       <Modal visible={!!selectedLoan} transparent animationType="slide" onRequestClose={closePayment}>
-        <View style={styles.overlay}><Card style={styles.modal}>
-          <AppText variant="h2">{editingPayment ? 'Edit payment' : settlementMode ? 'Early settlement' : 'Record installment'}</AppText>
-          <AppText color="textSecondary">Outstanding: {selectedLoan ? formatAmount(remaining(selectedLoan)) + ' ' + selectedLoan.currencyCode : ''}</AppText>
-          <AppText color="textSecondary">Remaining principal: {selectedLoan ? formatAmount(remainingPrincipal(selectedLoan)) + ' ' + selectedLoan.currencyCode : ''}</AppText>
-          <Field label="Total payment" value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" />
-          <Field label="Principal portion" value={principalPayment} onChangeText={setPrincipalPayment} keyboardType="decimal-pad" />
-          <Field label="Interest portion" value={interestPayment} onChangeText={setInterestPayment} keyboardType="decimal-pad" />
-          <AppText variant="caption" color="textSecondary">Total payment must equal principal plus interest. Enter the split from your lender's repayment schedule.</AppText>
-          <DateField label="Payment date" value={paymentDate} onChange={setPaymentDate} />
-          <Field label="Note" value={note} onChangeText={setNote} />
-          <AppText style={{ fontWeight: '600' }}>Payment method</AppText>
-          <Pressable onPress={() => setShowPaymentPicker(true)} style={[styles.dropdown, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-            <AppText>{paymentMethod === 'custom' ? (customPaymentMethod.trim() || 'Custom / مخصص') : (activeAccounts.find(a => a.id === accountId)?.name ?? 'Select a registered account')}</AppText>
-            <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
-          </Pressable>
-          {paymentMethod === 'custom' && <Field label="Payment method name (e.g. Cash)" value={customPaymentMethod} onChangeText={setCustomPaymentMethod} />}
-          <View style={styles.actions}><AppButton title={editingPayment ? 'Save changes' : settlementMode ? 'Confirm settlement' : 'Confirm payment'} onPress={confirmPayment} /><AppButton title="Cancel" variant="outline" onPress={closePayment} /></View>
-        </Card></View>
+        <View style={styles.overlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.paymentKeyboard}>
+            <ScrollView style={styles.paymentScroll} contentContainerStyle={styles.paymentScrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator>
+              <Card style={styles.modal}>
+                <AppText variant="h2">{editingPayment ? 'Edit payment' : settlementMode ? 'Early settlement' : 'Record installment'}</AppText>
+                <AppText color="textSecondary">Outstanding: {selectedLoan ? formatAmount(remaining(selectedLoan)) + ' ' + selectedLoan.currencyCode : ''}</AppText>
+                <Field label={`Total payment (${selectedLoan?.currencyCode ?? ''})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" />
+                <Field label={`Late payment fee (${selectedLoan?.currencyCode ?? ''}) — optional`} value={latePaymentFee} onChangeText={setLatePaymentFee} keyboardType="decimal-pad" />
+                <AppText variant="caption" color="textSecondary">The late fee is added to the amount deducted from your account, but does not reduce the remaining loan balance.</AppText>
+                <DateField label="Payment date" value={paymentDate} onChange={setPaymentDate} />
+                <Field label="Note" value={note} onChangeText={setNote} />
+                <AppText style={{ fontWeight: '600' }}>Payment method</AppText>
+                <Pressable onPress={() => setShowPaymentPicker(true)} style={[styles.dropdown, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                  <AppText>{paymentMethod === 'custom' ? (customPaymentMethod.trim() || 'Custom / مخصص') : (activeAccounts.find(a => a.id === accountId)?.name ?? 'Select a registered account')}</AppText>
+                  <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+                </Pressable>
+                {paymentMethod === 'custom' && <Field label="Payment method name (e.g. Cash)" value={customPaymentMethod} onChangeText={setCustomPaymentMethod} />}
+                <View style={styles.actions}><AppButton title={editingPayment ? 'Save changes' : settlementMode ? 'Confirm settlement' : 'Confirm payment'} onPress={confirmPayment} /><AppButton title="Cancel" variant="outline" onPress={closePayment} /></View>
+              </Card>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </Screen>
   );
@@ -648,6 +675,9 @@ const styles = StyleSheet.create({
   formFields: { gap: 8, paddingVertical: 6 },
   loanFormModal: { width: '100%', maxHeight: '94%', flexShrink: 1, borderRadius: 18, padding: 14, gap: 8, borderWidth: StyleSheet.hairlineWidth },
   modal: { gap: 9 },
+  paymentKeyboard: { width: '100%', maxHeight: '94%', flexShrink: 1 },
+  paymentScroll: { flexGrow: 0, flexShrink: 1 },
+  paymentScrollContent: { flexGrow: 1, justifyContent: 'center', paddingVertical: 4 },
   field: { gap: 5 },
   input: { minHeight: 42, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7 },
   accountChoice: { padding: 10, borderWidth: 1, borderColor: '#9996', borderRadius: 10 },
