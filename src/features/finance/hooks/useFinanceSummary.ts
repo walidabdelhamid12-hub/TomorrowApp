@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
-import { todayISO } from '@/features/finance/utils/finance';
+import { roundMoney, todayISO } from '@/features/finance/utils/finance';
 import {
   filterByMonth,
   getAccountBalance,
@@ -207,13 +207,13 @@ export function useFinanceSummary() {
     }
 
     return {
-      accountsTotal,
-      assetsTotal,
-      loansRemainingTotal,
-      loansInstallmentsRemainingTotal,
-      receivablesTotal,
-      payablesTotal,
-      chequesTotal,
+      accountsTotal: roundMoney(accountsTotal),
+      assetsTotal: roundMoney(assetsTotal),
+      loansRemainingTotal: roundMoney(loansRemainingTotal),
+      loansInstallmentsRemainingTotal: roundMoney(loansInstallmentsRemainingTotal),
+      receivablesTotal: roundMoney(receivablesTotal),
+      payablesTotal: roundMoney(payablesTotal),
+      chequesTotal: roundMoney(chequesTotal),
       missing,
     };
   }, [
@@ -233,12 +233,13 @@ export function useFinanceSummary() {
 
   // Credit-card debt is already represented by the negative
   // account balance, so it must not be subtracted a second time.
-  const netWorth =
+  const netWorth = roundMoney(
     totals.accountsTotal +
-    totals.assetsTotal +
-    totals.receivablesTotal -
-    totals.payablesTotal -
-    totals.loansInstallmentsRemainingTotal;
+      totals.assetsTotal +
+      totals.receivablesTotal -
+      totals.payablesTotal -
+      totals.loansInstallmentsRemainingTotal
+  );
 
   const month = useMemo(() => {
     let income = 0;
@@ -271,8 +272,8 @@ export function useFinanceSummary() {
     }
 
     return {
-      income,
-      expense: Math.max(expense, 0),
+      income: roundMoney(income),
+      expense: roundMoney(Math.max(expense, 0)),
       missing,
     };
   }, [
