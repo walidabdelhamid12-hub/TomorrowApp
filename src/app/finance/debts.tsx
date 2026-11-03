@@ -242,7 +242,11 @@ export default function DebtsScreen() {
       return;
     }
 
-    const performDelete = () => deleteDebt(debt.id);
+    const performDelete = () => {
+      if (!deleteDebt(debt.id)) {
+        Alert.alert('Cannot delete debt', 'The debt may have payment history or linked account transactions, or its accounting data is not ready. Keep it to preserve its history.');
+      }
+    };
 
     if (Platform.OS === 'web') {
       if (window.confirm(message)) performDelete();

@@ -54,6 +54,12 @@ Account deletion now fails when the account has dependent transfers, protected
 transactions, or explicit loan/debt account references. Both account deletion UI
 paths display rejection. The Finance loan screen has no delete-loan action; direct
 store deletion now rejects historical, received, or ledger-referenced loans.
+Debt deletion also checks the current ledger and rejects explicit debt-ID
+references even when the legacy payment array is empty or transaction ownership
+metadata is incomplete/conflicting. It returns a result that the debt UI checks
+again after confirmation. Missing/unhydrated ledger data and duplicate debt IDs
+fail closed; a truly empty, unlinked debt can still be deleted. No relationship
+is inferred from matching amounts, dates, or notes.
 Ledger clear/reset rejects transfers, loans/debts, and protected transactions;
 Finance reset rejects existing loans/debts and protected ledger transactions.
 These operations fail closed until both stores are hydrated. A lazy registered

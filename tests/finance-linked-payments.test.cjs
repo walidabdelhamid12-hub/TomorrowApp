@@ -527,3 +527,83 @@ test('ledger clear/reset reject transfers even when no loan or debt exists', () 
   assert.equal(ledger.getState().resetLedger(), false);
   assert.deepEqual(fullSnapshot(), previous);
 });
+
+for (const evidence of [
+  { linkedEntityType: 'debt', linkedEntityId: 'debt', linkedPaymentId: 'missing-payment', purpose: 'debt_payment' },
+  { linkedEntityId: 'debt', purpose: 'debt_payment' },
+  { linkedEntityId: 'debt', purpose: 'debt_collection', type: 'income' },
+  { linkedEntityId: 'debt' },
+  { linkedEntityId: 'debt', linkedEntityType: 'loan' },
+]) {
+  test(`empty debt cannot be deleted with explicit stale/orphan ownership ${JSON.stringify(evidence)}`, () => {
+    changeDebt(d => ({ ...d, payments: [] }));
+    ledger.setState({ transactions: [{ ...stamps, id: 'orphan', amount: 50, type: 'expense',
+      accountId: 'a', categoryId: 'out', currencyCode: 'USD', date, ...evidence }] });
+    const previous = fullSnapshot();
+    const previousBalance = balance('a');
+    assert.equal(finance.getState().deleteDebt('debt'), false);
+    assert.deepEqual(fullSnapshot(), previous);
+    assert.equal(balance('a'), previousBalance);
+  });
+}
+
+test('direct debt deletion preserves existing payments and linked cash', () => {
+  const previous = fullSnapshot();
+  assert.equal(finance.getState().deleteDebt('debt'), false);
+  assert.deepEqual(fullSnapshot(), previous);
+});
+
+test('a truly empty unlinked debt can be deleted without changing other accounting', () => {
+  changeDebt(d => ({ ...d, payments: [] }));
+  changeTx('dt', t => ({ ...t, linkedEntityId: 'another-debt' }));
+  const previous = fullSnapshot();
+  assert.equal(finance.getState().deleteDebt('debt'), true);
+  assert.deepEqual(fullSnapshot(), { ...previous, debts: [] });
+});
+
+test('debt deletion rechecks ledger evidence added after opening confirmation', () => {
+  changeDebt(d => ({ ...d, payments: [] }));
+  ledger.setState({ transactions: [] });
+  const staleDebt = finance.getState().debts[0];
+  ledger.setState({ transactions: [tx('late-cash', 'debt', staleDebt.id, 'orphan-payment', 50, 'debt_payment')] });
+  const previous = fullSnapshot();
+  assert.equal(finance.getState().deleteDebt(staleDebt.id), false);
+  assert.deepEqual(fullSnapshot(), previous);
+});
+
+for (const store of [finance, ledger]) {
+  test(`debt deletion fails closed while ${store === finance ? 'Finance' : 'ledger'} hydrates`, () => {
+    changeDebt(d => ({ ...d, payments: [] }));
+    ledger.setState({ transactions: [] });
+    const previous = fullSnapshot();
+    const ready = store.persist.hasHydrated;
+    store.persist.hasHydrated = () => false;
+    try {
+      assert.equal(finance.getState().deleteDebt('debt'), false);
+      assert.deepEqual(fullSnapshot(), previous);
+    } finally { store.persist.hasHydrated = ready; }
+  });
+}
+
+test('debt deletion fails closed when the ledger protection reader is unavailable', () => {
+  changeDebt(d => ({ ...d, payments: [] }));
+  ledger.setState({ transactions: [] });
+  const protection = require('../src/features/finance/store/ledgerProtectionReader.ts');
+  const reader = protection.readLedgerProtection;
+  const previous = fullSnapshot();
+  protection.readLedgerProtection = () => undefined;
+  try {
+    assert.equal(finance.getState().deleteDebt('debt'), false);
+    assert.deepEqual(fullSnapshot(), previous);
+  } finally { protection.readLedgerProtection = reader; }
+});
+
+test('debt deletion refuses missing and duplicate IDs without deleting any parent', () => {
+  changeDebt(d => ({ ...d, payments: [] }));
+  ledger.setState({ transactions: [] });
+  finance.setState(s => ({ debts: [...s.debts, { ...s.debts[0] }] }));
+  const previous = fullSnapshot();
+  assert.equal(finance.getState().deleteDebt('missing'), false);
+  assert.equal(finance.getState().deleteDebt('debt'), false);
+  assert.deepEqual(fullSnapshot(), previous);
+});

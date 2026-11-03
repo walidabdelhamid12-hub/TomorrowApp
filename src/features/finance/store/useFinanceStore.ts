@@ -67,7 +67,7 @@ interface FinanceActions {
 
   addDebt: (input: NewDebtInput) => EntityId | null;
   updateDebt: (id: EntityId, patch: DebtPatch) => void;
-  deleteDebt: (id: EntityId) => void;
+  deleteDebt: (id: EntityId) => boolean;
   addDebtPayment: (
     debtId: EntityId,
     input: NewDebtPaymentInput
@@ -382,14 +382,19 @@ export const useFinanceStore = create<FinanceStore>()(
       },
 
       deleteDebt: (id) => {
-        const debt = get().debts.find((item) => item.id === id);
-        // Keep the debt record whenever it has payment history. Its payments
-        // may already be reflected in the ledger and must never be orphaned.
-        if (!debt || (debt.payments ?? []).length > 0) return;
+        const ledger = readLedgerProtection();
+        const matches = get().debts.filter(debt => debt.id === id);
+        // Empty legacy payment arrays do not prove that no cash was posted.
+        // An explicit debt ID is sufficient to block destruction even if the
+        // transaction's remaining ownership metadata is missing or conflicting.
+        if (!useFinanceStore.persist.hasHydrated() || !ledger?.hydrated || matches.length !== 1
+          || (matches[0].payments ?? []).length > 0
+          || ledger.transactions.some(transaction => transaction.linkedEntityId === id)) return false;
 
         set((state) => ({
           debts: state.debts.filter((item) => item.id !== id),
         }));
+        return true;
       },
 
       addDebtPayment: (debtId, input) => {
