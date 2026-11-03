@@ -137,6 +137,14 @@ export function getLoanPaidAmount(loan: Loan): number {
 
 /** Remaining contractual balance, never below zero. */
 export function getLoanRemainingAmount(loan: Loan): number {
+  if (
+    loan.status === 'settled' ||
+    loan.status === 'completed' ||
+    loan.status === 'closed'
+  ) {
+    return 0;
+  }
+
   return Math.max(roundMoney(getLoanTotal(loan) - getLoanPaidAmount(loan)), 0);
 }
 
