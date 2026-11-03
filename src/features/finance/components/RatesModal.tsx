@@ -777,10 +777,11 @@ export function RatesModal({
               placeholder="not set"
               style={{
                 textAlign: 'center',
-                fontSize: 14,
+                fontSize: 12,
+                paddingVertical: spacing.xs * 0.5,
                 ...getInputStatusStyle(getMetalSource('silverPerGram')),
               }}
-              fieldStyle={{ minHeight: sizes.inputHeight * 0.56 }}
+              fieldStyle={{ minHeight: sizes.inputHeight * 0.392 }}
               containerStyle={{ width: '100%' }}
             />
           </View>
