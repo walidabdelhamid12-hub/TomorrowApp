@@ -222,13 +222,10 @@ export default function AccountsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`Edit ${account.name}`}
                     hitSlop={8}
-                    style={styles.actionButton}
+                    style={[styles.actionButton, styles.editAction]}
                   >
-                    <Ionicons
-                      name="create-outline"
-                      size={20}
-                      color={moduleColors.finance}
-                    />
+                    <Ionicons name="create-outline" size={17} color="#27845B" />
+                    <AppText style={styles.actionLabel}>Edit</AppText>
                   </Pressable>
 
                   <Pressable
@@ -236,13 +233,10 @@ export default function AccountsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`Delete ${account.name}`}
                     hitSlop={8}
-                    style={styles.actionButton}
+                    style={[styles.actionButton, styles.deleteAction]}
                   >
-                    <Ionicons
-                      name="trash-outline"
-                      size={19}
-                      color={colors.textSecondary}
-                    />
+                    <Ionicons name="trash-outline" size={17} color="#D94B4B" />
+                    <AppText style={styles.actionLabel}>Delete</AppText>
                   </Pressable>
                 </View>
               </View>
@@ -308,9 +302,27 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 8,
   },
   actionButton: {
-    padding: 4,
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 9,
+  },
+  editAction: {
+    backgroundColor: '#E8F5EE',
+  },
+  deleteAction: {
+    backgroundColor: '#FCEEEE',
+  },
+  actionLabel: {
+    color: '#4B5563',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
