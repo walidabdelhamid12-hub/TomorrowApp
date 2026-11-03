@@ -35,6 +35,8 @@ import type {
 import {
   definedOnly,
   generateId,
+  getDebtPaid,
+  getDebtRemaining,
   getLoanPaidAmount,
   getLoanTotal,
   roundMoney,
@@ -349,9 +351,7 @@ export const useFinanceStore = create<FinanceStore>()(
 
         const cleanPatch = withRounded(definedOnly(patch), ['amount']);
         if (typeof cleanPatch.amount === 'number') {
-          const alreadyPaid = roundMoney(
-            (debt.payments ?? []).reduce((sum, payment) => sum + payment.amount, 0)
-          );
+          const alreadyPaid = getDebtPaid(debt);
           if (
             !Number.isFinite(cleanPatch.amount) ||
             cleanPatch.amount <= 0 ||
@@ -385,10 +385,8 @@ export const useFinanceStore = create<FinanceStore>()(
         if (!debt) return null;
 
         const amount = roundMoney(input.amount);
-        const alreadyPaid = roundMoney(
-          (debt.payments ?? []).reduce((sum, payment) => sum + payment.amount, 0)
-        );
-        const remaining = roundMoney(debt.amount - alreadyPaid);
+        const alreadyPaid = getDebtPaid(debt);
+        const remaining = getDebtRemaining(debt);
 
         if (
           !Number.isFinite(amount) ||
@@ -465,12 +463,14 @@ export const useFinanceStore = create<FinanceStore>()(
           typeof cleanPatch.amount === 'number'
             ? cleanPatch.amount
             : currentPayment.amount;
-        const otherPayments = roundMoney(
-          debt.payments
-            .filter((payment) => payment.id !== paymentId)
-            .reduce((sum, payment) => sum + payment.amount, 0)
-        );
-        const remainingForPayment = roundMoney(debt.amount - otherPayments);
+        const otherPayments = getDebtPaid({
+          ...debt,
+          payments: debt.payments.filter((payment) => payment.id !== paymentId),
+        });
+        const remainingForPayment = getDebtRemaining({
+          ...debt,
+          payments: debt.payments.filter((payment) => payment.id !== paymentId),
+        });
 
         if (
           !Number.isFinite(nextAmount) ||
