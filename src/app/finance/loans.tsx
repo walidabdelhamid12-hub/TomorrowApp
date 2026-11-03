@@ -19,7 +19,8 @@ import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/us
 import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Loan, NewLoanInput } from '@/features/finance/types/finance';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
-import { parseAmount, roundMoney } from '@/features/finance/utils/money';
+import { parseAmount } from '@/features/finance/utils/money';
+import { roundMoney } from '@/features/finance/utils/finance';
 import { moduleColors, useTheme } from '@/theme';
 
 const today = () => {
@@ -189,7 +190,7 @@ export default function LoansScreen() {
       : undefined;
     const label = receiptMethodLabel.trim();
     const originalPrincipal = receivingLoan.principalAmount;
-    if (!Number.isFinite(amount) || amount <= 0 ||
+    if (amount === null || !Number.isFinite(amount) || amount <= 0 ||
       (originalPrincipal !== undefined && amount > originalPrincipal + 0.001) ||
       !/^\d{4}-\d{2}-\d{2}$/.test(receivedDate) ||
       (receiptMethod === 'account' && !account) ||
