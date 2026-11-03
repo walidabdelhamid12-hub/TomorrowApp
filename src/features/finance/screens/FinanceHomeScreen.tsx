@@ -712,7 +712,7 @@ export default function FinanceHomeScreen() {
           if (
             !data.accountName.trim() ||
             !data.amount.trim() ||
-            !Number.isFinite(amount)
+            amount === null
           ) {
             Alert.alert(
               'Invalid account',
