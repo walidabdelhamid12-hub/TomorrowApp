@@ -206,14 +206,24 @@ export async function refreshLiveRates(): Promise<RefreshResult> {
     metalKeysToUnconfirm,
   );
 
-  // Save only successfully retrieved and calculated values.
+  // A scheduled slot is complete only when every source and currency succeeded.
+  const isCompleteRefresh =
+    fx !== null &&
+    fx.failedCurrencyCodes.length === 0 &&
+    validGold &&
+    validSilver;
+  const updatedAt = new Date().toISOString();
+
+  // Save successful values even when another source fails. Only a fully
+  // successful refresh advances the scheduler's completed-slot timestamp.
   const saved = store.applyLiveRates({
     rates: validRates,
     metals: {
       ...(validGold ? { gold24PerGram: gold24PerGram! } : {}),
       ...(validSilver ? { silverPerGram: silverPerGram! } : {}),
     },
-    updatedAt: new Date().toISOString(),
+    updatedAt,
+    ...(isCompleteRefresh ? { lastLiveUpdatedAt: updatedAt } : {}),
   });
 
   if (!saved) {
@@ -273,7 +283,7 @@ export async function refreshLiveRates(): Promise<RefreshResult> {
   }
 
   return {
-    ok: true,
-    message: `Updated ${successfulParts.join(', ')}. Failed: ${failedParts.join(', ')}.`,
+    ok: false,
+    message: `Updated ${successfulParts.join(', ')}. Failed: ${failedParts.join(', ')}. Will retry automatically.`,
   };
 }
