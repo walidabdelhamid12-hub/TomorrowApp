@@ -316,10 +316,14 @@ export default function LoansScreen() {
           settlementNote: note.trim() || undefined,
         });
       } else {
-        const paid = selectedLoan.payments.reduce(
-          (sum, p) => sum + (p.id === editingPayment.id ? amount : p.amount),
-          0
-        );
+        const paid = getLoanPaidAmount({
+          ...selectedLoan,
+          payments: selectedLoan.payments.map((payment) =>
+            payment.id === editingPayment.id
+              ? { ...payment, amount }
+              : payment
+          ),
+        });
         updateLoan(selectedLoan.id, {
           status: scheduledTotal - paid <= 0.001 ? 'completed' : 'active',
         });
@@ -443,9 +447,12 @@ export default function LoansScreen() {
             {loan.status === 'closed' && <AppText color="warning">Closed without payment on {loan.closureDate}: {loan.closureReason}</AppText>}
             {loan.status === 'settled' && (() => {
               const scheduled = getLoanTotal(loan);
-              const paidBeforeSettlement = loan.payments
-                .filter(payment => payment.id !== loan.settlementPaymentId)
-                .reduce((sum, payment) => sum + payment.amount, 0);
+              const paidBeforeSettlement = getLoanPaidAmount({
+                ...loan,
+                payments: loan.payments.filter(
+                  payment => payment.id !== loan.settlementPaymentId
+                ),
+              });
               const saved = Math.max(0, scheduled - paidBeforeSettlement - (loan.settlementAmount ?? 0));
               return <View style={{ gap: 4 }}>
                 <AppText color="success">Settlement: {formatAmount(loan.settlementAmount ?? 0)} {loan.currencyCode} on {loan.settlementDate}</AppText>
