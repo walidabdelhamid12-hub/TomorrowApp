@@ -116,7 +116,7 @@ export function RatesModal({
   isRefreshing,
   lastResult = null,
 }: RatesModalProps) {
-  const { colors, spacing, radius } = useTheme();
+  const { colors, spacing, radius, sizes } = useTheme();
 
   const rates = useCurrencyStore((s) => s.rates);
   const metals = useCurrencyStore((s) => s.metals);
@@ -677,8 +677,10 @@ export function RatesModal({
                       textAlign: 'center',
                       fontSize: 13,
                       paddingHorizontal: 2,
+                      paddingVertical: spacing.xs,
                       ...getInputStatusStyle(status),
                     }}
+                    fieldStyle={{ minHeight: sizes.inputHeight * 0.8 }}
                     containerStyle={{ width: '100%' }}
                   />
                 </View>
