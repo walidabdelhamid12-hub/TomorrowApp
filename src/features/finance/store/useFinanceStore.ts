@@ -76,7 +76,11 @@ interface FinanceActions {
     paymentId: EntityId,
     patch: DebtPaymentPatch
   ) => boolean;
-  deleteDebtPayment: (debtId: EntityId, paymentId: EntityId) => void;
+  deleteDebtPayment: (
+    debtId: EntityId,
+    paymentId: EntityId,
+    expectedLedgerTransactionId?: EntityId
+  ) => boolean;
 
   addLoan: (input: NewLoanInput) => EntityId | null;
   updateLoan: (id: EntityId, patch: LoanPatch) => void;
@@ -488,22 +492,33 @@ export const useFinanceStore = create<FinanceStore>()(
         return true;
       },
 
-      // This primitive is intentionally limited to unposted payment records.
-      // Posted payments must be reversed through their verified ledger entry.
-      deleteDebtPayment: (debtId, paymentId) => {
-        const payment = get().debts
-          .find((item) => item.id === debtId)
-          ?.payments.find((item) => item.id === paymentId);
-        if (!payment || payment.ledgerTransactionId) return;
+      // A posted payment can be deleted only after its matching ledger entry
+      // has been removed by the caller and its exact ID is supplied here.
+      deleteDebtPayment: (debtId, paymentId, expectedLedgerTransactionId) => {
+        const debt = get().debts.find((item) => item.id === debtId);
+        const payment = debt?.payments.find((item) => item.id === paymentId);
+        if (!debt || !payment) return false;
+
+        if (
+          payment.ledgerTransactionId &&
+          payment.ledgerTransactionId !== expectedLedgerTransactionId
+        ) {
+          return false;
+        }
+
+        if (!payment.ledgerTransactionId && expectedLedgerTransactionId) {
+          return false;
+        }
 
         set((state) => ({
-          debts: patchParent(state.debts, debtId, (debt) => ({
-            ...debt,
-            payments: debt.payments.filter(
+          debts: patchParent(state.debts, debtId, (currentDebt) => ({
+            ...currentDebt,
+            payments: currentDebt.payments.filter(
               (item) => item.id !== paymentId
             ),
           })),
         }));
+        return true;
       },
 
       /* Loans */
