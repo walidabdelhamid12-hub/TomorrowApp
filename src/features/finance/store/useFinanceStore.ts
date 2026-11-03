@@ -496,6 +496,7 @@ export const useFinanceStore = create<FinanceStore>()(
         const cleanPatch = withRounded(definedOnly(patch), [
           'principalAmount',
           'totalRepaymentAmount',
+          'receivedAmount',
           'settlementAmount',
           'monthlyInstallment',
         ]);
@@ -512,7 +513,8 @@ export const useFinanceStore = create<FinanceStore>()(
             0
           )
         );
-        const principalLimit = roundMoney(loan.receivedAmount ?? nextPrincipal ?? 0);
+        const nextReceivedAmount = cleanPatch.receivedAmount ?? loan.receivedAmount ?? nextPrincipal ?? 0;
+        const principalLimit = roundMoney(nextReceivedAmount);
 
         if (
           (nextPrincipal !== undefined &&
@@ -523,7 +525,9 @@ export const useFinanceStore = create<FinanceStore>()(
           !Number.isFinite(nextInstallment) || nextInstallment <= 0 ||
           !Number.isInteger(loan.numberOfInstallments) || loan.numberOfInstallments < 1 ||
           !Number.isFinite(principalLimit) ||
+          principalLimit < 0 ||
           paidPrincipal > principalLimit + 0.001 ||
+          (nextPrincipal !== undefined && principalLimit > nextPrincipal + 0.001) ||
           (cleanPatch.settlementAmount !== undefined &&
             (!Number.isFinite(cleanPatch.settlementAmount) || cleanPatch.settlementAmount <= 0)) ||
           (cleanPatch.receivedAmount !== undefined &&
@@ -566,6 +570,12 @@ export const useFinanceStore = create<FinanceStore>()(
             0
           )
         );
+        const totalLimit = roundMoney(
+          loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments
+        );
+        const totalAlreadyPaid = roundMoney(
+          loan.payments.reduce((sum, payment) => sum + payment.amount, 0)
+        );
 
         if (
           !Number.isFinite(amount) ||
@@ -575,6 +585,9 @@ export const useFinanceStore = create<FinanceStore>()(
           !Number.isFinite(interestAmount) ||
           interestAmount < 0 ||
           Math.abs(roundMoney(principalAmount + interestAmount) - amount) > 0.001 ||
+          !Number.isFinite(totalLimit) ||
+          totalLimit <= 0 ||
+          amount + totalAlreadyPaid > totalLimit + 0.001 ||
           !Number.isFinite(principalLimit) ||
           principalAmount + principalAlreadyPaid > principalLimit + 0.001
         ) {
@@ -635,6 +648,14 @@ export const useFinanceStore = create<FinanceStore>()(
               0
             )
         );
+        const totalLimit = roundMoney(
+          loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments
+        );
+        const otherTotalPaid = roundMoney(
+          loan.payments
+            .filter((payment) => payment.id !== paymentId)
+            .reduce((sum, payment) => sum + payment.amount, 0)
+        );
 
         if (
           !Number.isFinite(nextAmount) ||
@@ -644,6 +665,9 @@ export const useFinanceStore = create<FinanceStore>()(
           !Number.isFinite(nextInterest) ||
           nextInterest < 0 ||
           Math.abs(roundMoney(nextPrincipal + nextInterest) - nextAmount) > 0.001 ||
+          !Number.isFinite(totalLimit) ||
+          totalLimit <= 0 ||
+          nextAmount + otherTotalPaid > totalLimit + 0.001 ||
           !Number.isFinite(principalLimit) ||
           nextPrincipal + otherPrincipalPaid > principalLimit + 0.001
         ) {
