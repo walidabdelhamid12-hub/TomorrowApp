@@ -278,7 +278,7 @@ function isValidTransferAmounts(
   if (fromAccount.currencyCode === toAccount.currencyCode) {
     return (
       input.fromCurrencyCode === input.toCurrencyCode &&
-      Math.abs(fromAmount - toAmount) <= 0.01 &&
+      fromAmount === toAmount &&
       Math.abs(exchangeRate - 1) <= 0.000001
     );
   }
