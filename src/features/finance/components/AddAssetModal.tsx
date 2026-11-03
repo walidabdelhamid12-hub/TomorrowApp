@@ -6,6 +6,7 @@ import type {
   GoldKarat,
 } from '@/features/finance/types/finance';
 import { getAssetBalance } from '@/features/finance/utils/finance';
+import { parseAmount } from '@/features/finance/utils/money';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
@@ -182,7 +183,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
   };
 
   const handleSave = () => {
-    const parsedAmount = Number(amount);
+    const parsedAmount = parseAmount(amount);
 
     if (!assetName.trim()) {
       Alert.alert(
@@ -194,7 +195,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
 
     if (
       !amount.trim() ||
-      !Number.isFinite(parsedAmount) ||
+      parsedAmount === null ||
       parsedAmount < 0
     ) {
       Alert.alert(
