@@ -225,7 +225,7 @@ export function TransactionsSection({
                         {amountsVisible
                           ? sameCurrency
                             ? `${formatAmount(fromAmount, fromCurrency)} ${fromCurrency}`
-                            : `${formatAmount(fromAmount)} ${fromCurrency}\n→ ${formatAmount(toAmount, toCurrency)} ${toCurrency}`
+                            : `${formatAmount(fromAmount, fromCurrency)} ${fromCurrency}\n→ ${formatAmount(toAmount, toCurrency)} ${toCurrency}`
                           : '••••••'}
                       </AppText>
 
