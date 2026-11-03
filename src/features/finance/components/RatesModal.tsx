@@ -680,7 +680,7 @@ export function RatesModal({
                       paddingVertical: spacing.xs,
                       ...getInputStatusStyle(status),
                     }}
-                    fieldStyle={{ minHeight: sizes.inputHeight * 0.8 }}
+                    fieldStyle={{ minHeight: sizes.inputHeight * 0.72 }}
                     containerStyle={{ width: '100%' }}
                   />
                 </View>
@@ -733,6 +733,7 @@ export function RatesModal({
                 fontSize: 14,
                 ...getInputStatusStyle(getMetalSource('gold24PerGram')),
               }}
+              fieldStyle={{ minHeight: sizes.inputHeight * 0.7 }}
               containerStyle={{ width: '100%' }}
             />
           </View>
@@ -767,6 +768,7 @@ export function RatesModal({
                 fontSize: 14,
                 ...getInputStatusStyle(getMetalSource('silverPerGram')),
               }}
+              fieldStyle={{ minHeight: sizes.inputHeight * 0.7 }}
               containerStyle={{ width: '100%' }}
             />
           </View>
