@@ -525,7 +525,12 @@ export const useFinanceStore = create<FinanceStore>()(
           !Number.isFinite(principalLimit) ||
           paidPrincipal > principalLimit + 0.001 ||
           (cleanPatch.settlementAmount !== undefined &&
-            (!Number.isFinite(cleanPatch.settlementAmount) || cleanPatch.settlementAmount <= 0))
+            (!Number.isFinite(cleanPatch.settlementAmount) || cleanPatch.settlementAmount <= 0)) ||
+          (cleanPatch.receivedAmount !== undefined &&
+            (!Number.isFinite(cleanPatch.receivedAmount) ||
+              cleanPatch.receivedAmount <= 0 ||
+              (nextPrincipal !== undefined &&
+                cleanPatch.receivedAmount > nextPrincipal + 0.001)))
         ) return;
 
         set((state) => ({
