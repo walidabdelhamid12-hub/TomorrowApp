@@ -244,22 +244,22 @@ export default function AssetsScreen() {
                   </View>
                 </Pressable>
                 <View style={[styles.actions, { borderTopColor: colors.border }]}>
-                  <Pressable onPress={() => openEntries(asset)} style={styles.action} accessibilityRole="button">
-                    <Ionicons name="list-outline" size={17} color={accent} />
-                    <AppText style={{ color: accent }}>Movements</AppText>
+                  <Pressable onPress={() => openEntries(asset)} style={[styles.action, styles.movementAction]} accessibilityRole="button">
+                    <Ionicons name="list-outline" size={17} color="#3978C5" />
+                    <AppText style={styles.actionLabel}>Movements</AppText>
                   </Pressable>
-                  <Pressable onPress={() => openAsset(asset)} style={styles.action} accessibilityRole="button">
-                    <Ionicons name="create-outline" size={17} color={accent} />
-                    <AppText style={{ color: accent }}>Edit</AppText>
+                  <Pressable onPress={() => openAsset(asset)} style={[styles.action, styles.editAction]} accessibilityRole="button">
+                    <Ionicons name="create-outline" size={17} color="#27845B" />
+                    <AppText style={styles.actionLabel}>Edit</AppText>
                   </Pressable>
                   <Pressable
                     onPress={() => confirmDeleteAsset(asset)}
-                    style={styles.action}
+                    style={[styles.action, styles.deleteAction]}
                     accessibilityRole="button"
                     accessibilityLabel={`Delete ${asset.name}`}
                   >
-                    <Ionicons name="trash-outline" size={17} color="#DC2626" />
-                    <AppText style={{ color: '#DC2626' }}>Delete</AppText>
+                    <Ionicons name="trash-outline" size={17} color="#D94B4B" />
+                    <AppText style={styles.actionLabel}>Delete</AppText>
                   </Pressable>
                 </View>
               </View>
@@ -301,6 +301,10 @@ const styles = StyleSheet.create({
   assetTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   category: { marginTop: 3 },
   values: { flexDirection: 'row', gap: 12, marginTop: 12 },
-  actions: { flexDirection: 'row', gap: 22, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10 },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  actions: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10 },
+  action: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 9 },
+  movementAction: { backgroundColor: '#EAF1FC' },
+  editAction: { backgroundColor: '#E8F5EE' },
+  deleteAction: { backgroundColor: '#FCEEEE' },
+  actionLabel: { color: '#4B5563', fontSize: 12, fontWeight: '600' },
 });
