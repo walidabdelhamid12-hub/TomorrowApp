@@ -180,11 +180,13 @@ export default function LoansScreen() {
       ? activeAccounts.find(a => a.id === receiptAccountId && a.currencyCode === receivingLoan.currencyCode && !a.archived && a.type !== 'credit_card')
       : undefined;
     const label = receiptMethodLabel.trim();
+    const originalPrincipal = receivingLoan.principalAmount;
     if (!Number.isFinite(amount) || amount <= 0 ||
+      (originalPrincipal !== undefined && amount > originalPrincipal + 0.001) ||
       !/^\d{4}-\d{2}-\d{2}$/.test(receivedDate) ||
       (receiptMethod === 'account' && !account) ||
       (receiptMethod === 'custom' && !label)) {
-      Alert.alert('Check receipt details', 'Enter a valid received amount and date, then select a matching account or describe the receipt method.');
+      Alert.alert('Check receipt details', 'Enter a valid received amount no greater than the original loan principal, a valid date, and a matching account or receipt method.');
       return;
     }
     if (receiptMethod === 'account' && !incomeCategory) {
@@ -214,7 +216,12 @@ export default function LoansScreen() {
       ...(account ? { receiptTransactionId: transactionId } : { depositMethodLabel: label, depositAccountId: undefined }),
     });
     const saved = useFinanceStore.getState().loans.find(l => l.id === receivingLoan.id);
-    if (!saved?.receivedAt || (account && saved.receiptTransactionId !== transactionId)) {
+    if (
+      !saved?.receivedAt ||
+      Math.abs((saved.receivedAmount ?? 0) - amount) > 0.001 ||
+      (account && saved.receiptTransactionId !== transactionId) ||
+      (!account && saved.depositMethodLabel !== label)
+    ) {
       if (transactionId) removeTransaction(transactionId);
       Alert.alert('Receipt confirmation failed', 'The transaction was rolled back because the loan confirmation could not be saved.');
       return;
