@@ -516,7 +516,7 @@ export function RatesModal({
   const metalCardStyle = {
     flex: 0,
     width: '40%',
-    paddingVertical: spacing.xs * 0.8,
+    paddingVertical: spacing.xs * 0.56,
     paddingHorizontal: spacing.xs * 0.8,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -630,7 +630,7 @@ export function RatesModal({
         ) : null}
       </View>
 
-      <View style={{ gap: spacing.xs }}>
+      <View style={{ gap: spacing.xs, marginTop: -spacing.lg * 0.5 }}>
         <AppText variant="label" color="textSecondary">
           CURRENCIES — VALUE IN {baseCurrency}
         </AppText>
@@ -721,10 +721,10 @@ export function RatesModal({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: spacing.xs,
-                marginBottom: spacing.xs * 0.8,
+                marginBottom: spacing.xs * 0.56,
               }}
             >
-              <AppText style={{ fontSize: 16 }}>🥇</AppText>
+              <AppText style={{ fontSize: 11 }}>🥇</AppText>
               <AppText
                 variant="label"
                 color="text"
@@ -741,10 +741,11 @@ export function RatesModal({
               placeholder="not set"
               style={{
                 textAlign: 'center',
-                fontSize: 14,
+                fontSize: 12,
+                paddingVertical: spacing.xs * 0.5,
                 ...getInputStatusStyle(getMetalSource('gold24PerGram')),
               }}
-              fieldStyle={{ minHeight: sizes.inputHeight * 0.56 }}
+              fieldStyle={{ minHeight: sizes.inputHeight * 0.392 }}
               containerStyle={{ width: '100%' }}
             />
           </View>
@@ -759,7 +760,7 @@ export function RatesModal({
                 marginBottom: spacing.xs * 0.8,
               }}
             >
-              <AppText style={{ fontSize: 23 }}>🥈</AppText>
+              <AppText style={{ fontSize: 16 }}>🥈</AppText>
               <AppText
                 variant="label"
                 color="text"
@@ -789,7 +790,7 @@ export function RatesModal({
           <AppText variant="caption" color="textSecondary">
             Leave a metal price empty to clear the saved price.
           </AppText>
-          <AppText variant="caption" color="textSecondary">
+          <AppText variant="caption" color="textSecondary" style={{ fontSize: 10 }}>
             Other gold karats are calculated from the 24K price.
           </AppText>
           <AppText variant="caption" color="textSecondary">
@@ -815,10 +816,22 @@ export function RatesModal({
       />
 
       <View style={{ gap: 2 }}>
-        <AppText variant="caption" color="textSecondary">
+        <AppText
+          variant="caption"
+          color="textSecondary"
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+        >
           Currency rates by Exchange Rate API (exchangerate-api.com).
         </AppText>
-        <AppText variant="caption" color="textSecondary">
+        <AppText
+          variant="caption"
+          color="textSecondary"
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+        >
           Gold and silver spot prices by gold-api.com.
         </AppText>
       </View>
