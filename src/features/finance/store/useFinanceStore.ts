@@ -278,13 +278,17 @@ export const useFinanceStore = create<FinanceStore>()(
       clearAssets: () => set({ assets: [] }),
 
       addAssetEntry: (assetId, input) => {
-        if (!get().assets.some((asset) => asset.id === assetId)) {
+        const amount = roundMoney(input.amount);
+        if (
+          !get().assets.some((asset) => asset.id === assetId) ||
+          !Number.isFinite(amount)
+        ) {
           return null;
         }
 
         const entry: AssetEntry = {
           ...input,
-          amount: roundMoney(input.amount),
+          amount,
           id: generateId('ent'),
           createdAt: now(),
         };
@@ -299,20 +303,26 @@ export const useFinanceStore = create<FinanceStore>()(
         return entry.id;
       },
 
-      updateAssetEntry: (assetId, entryId, patch) =>
+      updateAssetEntry: (assetId, entryId, patch) => {
+        const cleanPatch = withRounded(definedOnly(patch), ['amount']);
+        if (
+          typeof cleanPatch.amount === 'number' &&
+          !Number.isFinite(cleanPatch.amount)
+        ) {
+          return;
+        }
+
         set((state) => ({
           assets: patchParent(state.assets, assetId, (asset) => ({
             ...asset,
             entries: asset.entries.map((entry) =>
               entry.id === entryId
-                ? {
-                    ...entry,
-                    ...withRounded(definedOnly(patch), ['amount']),
-                  }
+                ? { ...entry, ...cleanPatch }
                 : entry
             ),
           })),
-        })),
+        }));
+      },
 
       deleteAssetEntry: (assetId, entryId) =>
         set((state) => ({
@@ -781,12 +791,17 @@ export const useFinanceStore = create<FinanceStore>()(
 
       /* Cheques */
       addCheque: (input) => {
+        const amount = roundMoney(input.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          return '';
+        }
+
         const timestamp = now();
         const status = input.status ?? 'pending';
 
         const cheque: Cheque = {
           ...input,
-          amount: roundMoney(input.amount),
+          amount,
           status,
           paidDate: status === 'paid' ? todayISO() : undefined,
           id: generateId('chq'),
@@ -801,13 +816,22 @@ export const useFinanceStore = create<FinanceStore>()(
         return cheque.id;
       },
 
-      updateCheque: (id, patch) =>
+      updateCheque: (id, patch) => {
+        const cleanPatch = withRounded(definedOnly(patch), ['amount']);
+        if (
+          typeof cleanPatch.amount === 'number' &&
+          (!Number.isFinite(cleanPatch.amount) || cleanPatch.amount <= 0)
+        ) {
+          return;
+        }
+
         set((state) => ({
           cheques: patchParent(state.cheques, id, (cheque) => ({
             ...cheque,
-            ...withRounded(definedOnly(patch), ['amount']),
+            ...cleanPatch,
           })),
-        })),
+        }));
+      },
 
       deleteCheque: (id) =>
         set((state) => ({
