@@ -66,6 +66,11 @@ interface FinanceActions {
     debtId: EntityId,
     input: NewDebtPaymentInput
   ) => EntityId | null;
+  linkDebtPaymentTransaction: (
+    debtId: EntityId,
+    paymentId: EntityId,
+    transactionId: EntityId
+  ) => boolean;
   updateDebtPayment: (
     debtId: EntityId,
     paymentId: EntityId,
@@ -402,6 +407,42 @@ export const useFinanceStore = create<FinanceStore>()(
         }));
 
         return payment.id;
+      },
+
+      // Attach a newly created ledger transaction to an unlinked payment.
+      // This is deliberately separate from editing an already-posted payment.
+      linkDebtPaymentTransaction: (debtId, paymentId, transactionId) => {
+        if (!transactionId) return false;
+
+        const debt = get().debts.find((item) => item.id === debtId);
+        const payment = debt?.payments.find((item) => item.id === paymentId);
+
+        if (!debt || !payment || payment.ledgerTransactionId) {
+          return false;
+        }
+
+        const alreadyLinked = get().debts.some((item) =>
+          item.payments.some(
+            (candidate) =>
+              candidate.id !== paymentId &&
+              candidate.ledgerTransactionId === transactionId
+          )
+        );
+
+        if (alreadyLinked) return false;
+
+        set((state) => ({
+          debts: patchParent(state.debts, debtId, (currentDebt) => ({
+            ...currentDebt,
+            payments: currentDebt.payments.map((candidate) =>
+              candidate.id === paymentId
+                ? { ...candidate, ledgerTransactionId: transactionId }
+                : candidate
+            ),
+          })),
+        }));
+
+        return true;
       },
 
       updateDebtPayment: (debtId, paymentId, patch) => {
