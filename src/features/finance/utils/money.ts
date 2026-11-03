@@ -1,4 +1,5 @@
 
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { roundMoney } from '@/features/finance/utils/finance';
 import { normalizeDigits } from '@/utils/input';
 
@@ -35,7 +36,7 @@ export function parseAmount(text: string): number | null {
  * and the requested number of decimal places.
  */
 export function formatNumber(value: number, decimals: number): string {
-  if (!Number.isFinite(value)) return '0.00';
+  if (!Number.isFinite(value)) return (0).toFixed(decimals);
 
   const fixed = Math.abs(value).toFixed(decimals);
   const sign = value < 0 && Number(fixed) !== 0 ? '-' : '';
@@ -53,8 +54,8 @@ export function formatNumber(value: number, decimals: number): string {
  * This affects display only.
  * It does not change stored values or calculation precision.
  */
-export function formatMoney(value: number, _code: string): string {
-  return formatNumber(value, 2);
+export function formatMoney(value: number, code: string): string {
+  return formatNumber(value, getCurrencyDecimals(code));
 }
 
 /**
