@@ -549,6 +549,22 @@ export const useLedgerStore = create<LedgerStore>()(
           return null;
         }
 
+        // A debt/loan payment ID may be posted to the ledger only once.
+        // This protects against rapid repeated submissions and stale UI state.
+        if (
+          input.linkedEntityType &&
+          input.linkedEntityId &&
+          input.linkedPaymentId &&
+          transactions.some(
+            (item) =>
+              item.linkedEntityType === input.linkedEntityType &&
+              item.linkedEntityId === input.linkedEntityId &&
+              item.linkedPaymentId === input.linkedPaymentId
+          )
+        ) {
+          return null;
+        }
+
         const normalizedInput = {
           ...input,
           amount,
