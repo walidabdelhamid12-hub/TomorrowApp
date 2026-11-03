@@ -97,8 +97,8 @@ interface FinanceActions {
     loanId: EntityId,
     paymentId: EntityId,
     patch: LoanPaymentPatch
-  ) => void;
-  deleteLoanPayment: (loanId: EntityId, paymentId: EntityId) => void;
+  ) => boolean;
+  deleteLoanPayment: (loanId: EntityId, paymentId: EntityId) => boolean;
 
   addCheque: (input: NewChequeInput) => EntityId;
   updateCheque: (id: EntityId, patch: ChequePatch) => void;
@@ -460,6 +460,7 @@ export const useFinanceStore = create<FinanceStore>()(
       },
 
       updateDebtPayment: (debtId, paymentId, patch) => {
+        if ('ledgerTransactionId' in patch) return false;
         const debt = get().debts.find((item) => item.id === debtId);
         const currentPayment = debt?.payments.find((item) => item.id === paymentId);
         // Older payment records without a verified ledger link are read-only:
@@ -707,7 +708,9 @@ export const useFinanceStore = create<FinanceStore>()(
       updateLoanPayment: (loanId, paymentId, patch) => {
         const loan = get().loans.find((item) => item.id === loanId);
         const currentPayment = loan?.payments.find((item) => item.id === paymentId);
-        if (!loan || !currentPayment) return;
+        if (!loan || !currentPayment) return false;
+        if (currentPayment.ledgerTransactionId && 'ledgerTransactionId' in patch
+          && patch.ledgerTransactionId !== currentPayment.ledgerTransactionId) return false;
 
         const cleanPatch = withRounded(definedOnly(patch), [
           'amount',
@@ -755,7 +758,7 @@ export const useFinanceStore = create<FinanceStore>()(
             roundMoney(nextPrincipal + otherPrincipalPaid) > principalLimit
           ))
         ) {
-          return;
+          return false;
         }
 
         set((state) => ({
@@ -777,9 +780,11 @@ export const useFinanceStore = create<FinanceStore>()(
             ),
           })),
         }));
+        return true;
       },
 
-      deleteLoanPayment: (loanId, paymentId) =>
+      deleteLoanPayment: (loanId, paymentId) => {
+        if (!get().loans.find(l => l.id === loanId)?.payments.some(p => p.id === paymentId)) return false;
         set((state) => ({
           loans: patchParent(state.loans, loanId, (loan) => ({
             ...loan,
@@ -787,7 +792,9 @@ export const useFinanceStore = create<FinanceStore>()(
               (payment) => payment.id !== paymentId
             ),
           })),
-        })),
+        }));
+        return true;
+      },
 
       /* Cheques */
       addCheque: (input) => {

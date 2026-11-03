@@ -17,12 +17,14 @@ import {
 import { AppButton, AppText, Card, DateField, Screen } from '@/components/ui';
 import { AddAccountModal, type AddAccountFormData } from '@/features/finance/components/AddAccountModal';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
+import { confirmLoanReceipt, editLinkedPayment, postLinkedPayment, reverseLinkedPayment } from '@/features/finance/store/paymentOperations';
 import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Loan, NewLoanInput } from '@/features/finance/types/finance';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { parseAmount } from '@/features/finance/utils/money';
 import { getLoanPaidAmount, getLoanRemainingAmount, getLoanTotal, roundMoney } from '@/features/finance/utils/finance';
+import { resolvePayment } from '@/features/finance/utils/paymentTransactionOwnership';
 import { moduleColors, useTheme } from '@/theme';
 
 const today = () => {
@@ -45,15 +47,8 @@ export default function LoansScreen() {
   const baseCurrency = useCurrencyStore(s => s.baseCurrency);
   const addAccount = useLedgerStore(s => s.addAccount);
   const updateLoan = useFinanceStore(s => s.updateLoan);
-  const addLoanPayment = useFinanceStore(s => s.addLoanPayment);
-  const updateLoanPayment = useFinanceStore(s => s.updateLoanPayment);
-  const deleteLoanPayment = useFinanceStore(s => s.deleteLoanPayment);
   const accounts = useLedgerStore(s => s.accounts);
   const categories = useLedgerStore(s => s.categories);
-  const addTransaction = useLedgerStore(s => s.addTransaction);
-  const updateTransaction = useLedgerStore(s => s.updateTransaction);
-  const removeTransaction = useLedgerStore(s => s.removeTransaction);
-  const transactions = useLedgerStore(s => s.transactions);
 
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [loanName, setLoanName] = useState('');
@@ -194,39 +189,9 @@ export default function LoansScreen() {
       Alert.alert('Income category required', 'Add or restore an income category before confirming receipt. No account transaction has been created.');
       return;
     }
-    let transactionId: string | undefined;
-    if (account) {
-      transactionId = addTransaction({
-        type: 'income',
-        amount,
-        accountId: account.id,
-        categoryId: incomeCategory!.id,
-        linkedEntityType: 'loan',
-        linkedEntityId: receivingLoan.id,
-        date: receivedDate,
-        note: `Loan received: ${receivingLoan.name}`,
-      }) ?? undefined;
-      if (!transactionId) {
-        Alert.alert('Receipt not posted', 'The income transaction could not be created. The loan remains unconfirmed.');
-        return;
-      }
-    }
-    updateLoan(receivingLoan.id, {
-      receivedAt: receivedDate,
-      receivedAmount: amount,
-      ...(account ? { receiptTransactionId: transactionId } : { depositMethodLabel: label, depositAccountId: undefined }),
-    });
-    const saved = useFinanceStore.getState().loans.find(l => l.id === receivingLoan.id);
-    if (
-      !saved?.receivedAt ||
-      (saved.receivedAmount ?? 0) !== amount ||
-      (account && saved.receiptTransactionId !== transactionId) ||
-      (!account && saved.depositMethodLabel !== label)
-    ) {
-      if (transactionId) removeTransaction(transactionId);
-      Alert.alert('Receipt confirmation failed', 'The transaction was rolled back because the loan confirmation could not be saved.');
-      return;
-    }
+    const result = confirmLoanReceipt({ loanId: receivingLoan.id, amount, date: receivedDate,
+      accountId: account?.id, categoryId: incomeCategory?.id, methodLabel: label });
+    if (!result.ok) { Alert.alert('Receipt confirmation failed', result.reason); return; }
     setReceivingLoan(null);
   };
 
@@ -269,114 +234,19 @@ export default function LoansScreen() {
       Alert.alert('Invalid payment', 'Check the installment amount, late fee, date and payment method. The installment cannot exceed the remaining contract balance.');
       return;
     }
-    if (editingPayment) {
-      const txId = editingPayment.ledgerTransactionId;
-      if (txId && !account) { Alert.alert('Payment method locked', 'This payment is linked to an account. Keep a registered account selected.'); return; }
-      if (!txId && account) { Alert.alert('Payment method locked', 'This payment was recorded with a custom method. Keep the custom method selected when editing it.'); return; }
-      const previous = txId ? transactions.find(t => t.id === txId) : undefined;
-      if (txId && !previous) { Alert.alert('Update failed', 'The linked account transaction could not be found. No changes were made.'); return; }
-      if (txId && account) {
-        const ok = updateTransaction(txId, { amount: cashAmount, accountId: account.id, date: paymentDate, note: note.trim() || `Loan payment: ${selectedLoan.name}` });
-        if (!ok) { Alert.alert('Update failed', 'The linked account transaction could not be updated.'); return; }
-      }
-
-      updateLoanPayment(selectedLoan.id, editingPayment.id, {
-        amount,
-        latePaymentFee: fee,
-        paymentMode: 'simple',
-        date: paymentDate,
-        note: note.trim() || undefined,
-        accountId: account?.id,
-        paymentMethodLabel: account ? undefined : customLabel,
-      });
-      const saved = useFinanceStore.getState().loans
-        .find(l => l.id === selectedLoan.id)?.payments
-        .find(p => p.id === editingPayment.id);
-      const paymentSaved = !!saved &&
-        saved.amount === amount &&
-        (saved.latePaymentFee ?? 0) === fee &&
-        saved.paymentMode === 'simple' &&
-        saved.date === paymentDate;
-      if (!paymentSaved) {
-        if (txId && previous) {
-          updateTransaction(txId, {
-            amount: previous.amount,
-            accountId: previous.accountId,
-            date: previous.date,
-            note: previous.note,
-          });
-        }
-        Alert.alert('Update rejected', txId ? 'The account transaction was restored because the payment details were rejected.' : 'The payment details were rejected; the previous payment was kept.');
-        return;
-      }
-
-      if (selectedLoan.settlementPaymentId === editingPayment.id) {
-        updateLoan(selectedLoan.id, {
-          status: 'settled',
-          settlementAmount: amount,
-          settlementDate: paymentDate,
-          settlementAccountId: account?.id,
-          settlementNote: note.trim() || undefined,
-        });
-      } else {
-        const paid = getLoanPaidAmount({
-          ...selectedLoan,
-          payments: selectedLoan.payments.map((payment) =>
-            payment.id === editingPayment.id
-              ? { ...payment, amount }
-              : payment
-          ),
-        });
-        updateLoan(selectedLoan.id, {
-          status: scheduledTotal - paid <= 0 ? 'completed' : 'active',
-        });
-      }
-      closePayment(); return;
-    }
-
-    const paymentId = addLoanPayment(selectedLoan.id, {
-      amount,
-      latePaymentFee: fee,
-      paymentMode: 'simple',
-      date: paymentDate,
-      note: note.trim() || (settlementMode ? 'Early settlement' : undefined),
-      ...(account ? { accountId: account.id } : { paymentMethodLabel: customLabel }),
-    });
-    if (!paymentId) { Alert.alert('Payment not saved', 'The loan store rejected this payment.'); return; }
-    if (account) {
-      const txId = addTransaction({
-        type: 'expense',
-        amount: cashAmount,
-        accountId: account.id,
-        categoryId: expenseCategory!.id,
-        purpose: 'loan_payment',
-        linkedEntityType: 'loan',
-        linkedEntityId: selectedLoan.id,
-        linkedPaymentId: paymentId,
-        date: paymentDate,
-        note: note.trim() || `Loan payment: ${selectedLoan.name}`,
-      });
-      if (!txId) {
-        deleteLoanPayment(selectedLoan.id, paymentId);
-        Alert.alert('Payment not posted', 'The account transaction failed; payment was rolled back.');
-        return;
-      }
-      updateLoanPayment(selectedLoan.id, paymentId, { ledgerTransactionId: txId });
-      const linked = useFinanceStore.getState().loans
-        .find(l => l.id === selectedLoan.id)?.payments
-        .find(p => p.id === paymentId)?.ledgerTransactionId === txId;
-      if (!linked) {
-        removeTransaction(txId);
-        deleteLoanPayment(selectedLoan.id, paymentId);
-        Alert.alert('Payment not posted', 'The account link could not be saved; both records were rolled back.');
-        return;
-      }
-    }
-    if (settlementMode) updateLoan(selectedLoan.id, { status: 'settled', settlementAmount: amount, settlementDate: paymentDate, settlementAccountId: account?.id, settlementPaymentId: paymentId, settlementNote: note.trim() || undefined });
-    else if (outstanding - amount <= 0) updateLoan(selectedLoan.id, { status: 'completed' });
+    const ref = { entityType: 'loan' as const, entityId: selectedLoan.id, paymentId: editingPayment?.id ?? '' };
+    const details = { amount, latePaymentFee: fee, date: paymentDate, accountId: account?.id,
+      paymentMethodLabel: account ? undefined : customLabel, note: note.trim() || undefined };
+    const result = editingPayment
+      ? editLinkedPayment(ref, details)
+      : postLinkedPayment({ ...details, entityType: 'loan', entityId: selectedLoan.id,
+          categoryId: expenseCategory?.id, settlement: settlementMode });
+    if (!result.ok) { Alert.alert('Payment not saved', result.reason); return; }
     closePayment();
   };
   const openEditPayment = (loan: Loan, payment: Loan['payments'][number]) => {
+    const linked = resolvePayment({ entityType: 'loan', entityId: loan.id, paymentId: payment.id },
+      useFinanceStore.getState(), useLedgerStore.getState());
     const matching = activeAccounts.filter(a => a.currencyCode === loan.currencyCode && a.type !== 'credit_card');
     if (payment.ledgerTransactionId && !matching.length) { Alert.alert('Cannot edit payment', 'No active account in the payment currency is available.'); return; }
     setSelectedLoan(loan); setEditingPayment(payment); setSettlementMode(false);
@@ -384,30 +254,14 @@ export default function LoansScreen() {
     setLatePaymentFee(String(payment.latePaymentFee ?? 0));
     setPaymentDate(payment.date);
     setAccountId(payment.accountId && matching.some(a => a.id === payment.accountId) ? payment.accountId : matching.find(a => a.type === 'bank')?.id ?? matching[0]?.id ?? '');
-    setPaymentMethod(payment.ledgerTransactionId ? 'account' : 'custom'); setCustomPaymentMethod(payment.paymentMethodLabel ?? ''); setNote(payment.note ?? '');
+    setPaymentMethod(payment.ledgerTransactionId || linked ? 'account' : 'custom'); setCustomPaymentMethod(payment.paymentMethodLabel ?? ''); setNote(payment.note ?? '');
   };
   const confirmDeletePayment = (loan: Loan, payment: Loan['payments'][number]) => {
     Alert.alert('Delete payment?', 'The linked account transaction will also be removed. This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => {
-        if (payment.ledgerTransactionId) {
-          try {
-            removeTransaction(payment.ledgerTransactionId);
-            if (useLedgerStore.getState().transactions.some(t => t.id === payment.ledgerTransactionId)) {
-              Alert.alert('Cannot delete', 'The linked account transaction is protected or could not be removed. The loan payment was kept.');
-              return;
-            }
-          } catch { Alert.alert('Cannot delete', 'The linked transaction could not be removed.'); return; }
-        }
-        deleteLoanPayment(loan.id, payment.id);
-        if (loan.status === 'completed') {
-          updateLoan(loan.id, { status: 'active' });
-        } else if (loan.status === 'settled' && loan.settlementPaymentId === payment.id) {
-          updateLoan(loan.id, {
-            status: 'active', settlementAmount: undefined, settlementDate: undefined,
-            settlementAccountId: undefined, settlementPaymentId: undefined, settlementNote: undefined,
-          });
-        }
+        const result = reverseLinkedPayment({ entityType: 'loan', entityId: loan.id, paymentId: payment.id });
+        if (!result.ok) Alert.alert('Cannot delete payment', result.reason);
       }},
     ]);
   };

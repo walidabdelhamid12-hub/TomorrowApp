@@ -114,7 +114,9 @@ export type NewTransactionInput = Omit<
   'id' | 'currencyCode' | 'createdAt' | 'updatedAt'
 >;
 
-export type TransactionPatch = Partial<NewTransactionInput>;
+/** Ownership is established by payment posting, never by a generic edit. */
+export type TransactionPatch = Partial<Omit<NewTransactionInput,
+  'purpose' | 'linkedEntityType' | 'linkedEntityId' | 'linkedPaymentId'>>;
 
 /* -------------------------------- Transfers ------------------------------- */
 

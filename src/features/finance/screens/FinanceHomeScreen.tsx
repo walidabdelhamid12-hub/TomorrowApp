@@ -341,13 +341,18 @@ export default function FinanceHomeScreen() {
 
   const confirmDeleteTransaction = (transaction: Transaction) => {
     const message = 'This transaction will be permanently deleted.';
+    const performDelete = () => {
+      if (!removeTransaction(transaction.id)) {
+        Alert.alert('Cannot delete transaction', 'Linked loan/debt transactions must be managed from their payment screen. Transactions with refunds are also protected.');
+      }
+    };
 
     if (Platform.OS === 'web') {
       const confirmed = window.confirm(
         `Delete this transaction?\n\n${message}`,
       );
 
-      if (confirmed) removeTransaction(transaction.id);
+      if (confirmed) performDelete();
       return;
     }
 
@@ -356,7 +361,7 @@ export default function FinanceHomeScreen() {
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => removeTransaction(transaction.id),
+        onPress: performDelete,
       },
     ]);
   };

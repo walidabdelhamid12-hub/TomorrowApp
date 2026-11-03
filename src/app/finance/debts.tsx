@@ -1,3 +1,4 @@
+import { editLinkedPayment, postLinkedPayment, reverseLinkedPayment } from '@/features/finance/store/paymentOperations';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -127,30 +128,9 @@ export default function DebtsScreen() {
   const updateDebt = useFinanceStore((state) => state.updateDebt);
   const deleteDebt = useFinanceStore((state) => state.deleteDebt);
 
-  const addDebtPayment = useFinanceStore(
-    (state) => state.addDebtPayment,
-  );
-  const deleteDebtPayment = useFinanceStore(
-    (state) => state.deleteDebtPayment,
-  );
-  const updateDebtPayment = useFinanceStore(
-    (state) => state.updateDebtPayment,
-  );
-  const linkDebtPaymentTransaction = useFinanceStore(
-    (state) => state.linkDebtPaymentTransaction,
-  );
 
   const accounts = useLedgerStore((state) => state.accounts);
   const categories = useLedgerStore((state) => state.categories);
-  const addTransaction = useLedgerStore(
-    (state) => state.addTransaction,
-  );
-  const updateTransaction = useLedgerStore(
-    (state) => state.updateTransaction,
-  );
-  const removeTransaction = useLedgerStore(
-    (state) => state.removeTransaction,
-  );
 
   const [activeTab, setActiveTab] = useState<DebtTab>(
     params.direction === 'payable' ? 'payable' : 'receivable',
@@ -391,63 +371,10 @@ export default function DebtsScreen() {
       return;
     }
 
-    const paymentId = addDebtPayment(paymentDebt.id, {
-      date: cleanPaymentDate,
-      amount,
-      note: paymentNote.trim() || undefined,
-      accountId: account.id,
-    });
-
-    if (!paymentId) {
-      Alert.alert(
-        'Could not save payment',
-        'The debt payment could not be created. No account transaction was added.',
-      );
-      return;
-    }
-
-    const transactionId = addTransaction({
-      accountId: account.id,
-      categoryId: category.id,
-      amount,
-      type: categoryKind,
-      date: cleanPaymentDate,
-      purpose:
-        paymentDebt.direction === 'receivable'
-          ? 'debt_collection'
-          : 'debt_payment',
-      linkedEntityType: 'debt',
-      linkedEntityId: paymentDebt.id,
-      linkedPaymentId: paymentId,
-    });
-
-    if (!transactionId) {
-      deleteDebtPayment(paymentDebt.id, paymentId);
-
-      Alert.alert(
-        'Transaction not saved',
-        'The account transaction could not be created. The debt payment was rolled back.',
-      );
-      return;
-    }
-
-    const paymentLinked = linkDebtPaymentTransaction(
-      paymentDebt.id,
-      paymentId,
-      transactionId,
-    );
-
-    if (!paymentLinked) {
-      // Roll back both sides if the newly posted transaction cannot be linked.
-      removeTransaction(transactionId);
-      deleteDebtPayment(paymentDebt.id, paymentId);
-
-      Alert.alert(
-        'Payment link failed',
-        'The account transaction could not be linked to the debt payment. Both changes were rolled back.',
-      );
-      return;
-    }
+    const result = postLinkedPayment({ entityType: 'debt', entityId: paymentDebt.id,
+      amount, date: cleanPaymentDate, note: paymentNote.trim() || undefined,
+      accountId: account.id, categoryId: category.id });
+    if (!result.ok) { Alert.alert('Payment not saved', result.reason); return; }
 
     closePayment();
 
@@ -463,179 +390,13 @@ export default function DebtsScreen() {
     debt: Debt,
     payment: DebtPayment,
   ) => {
-    const transactions = useLedgerStore.getState().transactions;
-
-    // Recover a payment created by the earlier buggy flow only when there is
-    // exactly one ledger entry with the complete matching debt/payment identity.
-    const matchingTransactions = payment.ledgerTransactionId
-      ? transactions.filter((item) => item.id === payment.ledgerTransactionId)
-      : transactions.filter(
-          (item) =>
-            item.linkedEntityType === 'debt' &&
-            item.linkedEntityId === debt.id &&
-            item.linkedPaymentId === payment.id &&
-            item.accountId === payment.accountId &&
-            item.amount === payment.amount &&
-            item.date === payment.date &&
-            item.currencyCode === debt.currencyCode &&
-            item.type ===
-              (debt.direction === 'receivable' ? 'income' : 'expense') &&
-            item.purpose ===
-              (debt.direction === 'receivable'
-                ? 'debt_collection'
-                : 'debt_payment'),
-        );
-
-    if (matchingTransactions.length !== 1) {
-      Alert.alert(
-        'Cannot edit this payment',
-        'A unique matching account transaction could not be verified. No changes were made.',
-      );
-      return;
-    }
-
-    const transaction = matchingTransactions[0];
-
-    if (!transaction) {
-      Alert.alert(
-        'Cannot edit this payment',
-        'A unique matching account transaction could not be verified. No changes were made.',
-      );
-      return;
-    }
-
-    if (
-      transaction.linkedEntityType !== 'debt' ||
-      transaction.linkedEntityId !== debt.id ||
-      transaction.linkedPaymentId !== payment.id ||
-      transaction.accountId !== payment.accountId ||
-      transaction.amount !== payment.amount ||
-      transaction.date !== payment.date ||
-      transaction.currencyCode !== debt.currencyCode ||
-      transaction.type !==
-        (debt.direction === 'receivable' ? 'income' : 'expense')
-    ) {
-      Alert.alert(
-        'Payment link mismatch',
-        'The linked account transaction could not be verified. No changes were made.',
-      );
-      return;
-    }
-
-    if (!payment.ledgerTransactionId) {
-      const recovered = linkDebtPaymentTransaction(
-        debt.id,
-        payment.id,
-        transaction.id,
-      );
-
-      if (!recovered) {
-        Alert.alert(
-          'Payment link recovery failed',
-          'The account transaction was found but could not be safely linked. No changes were made.',
-        );
-        return;
-      }
-    }
-
-    setEditingPayment({
-      debt,
-      payment: {
-        ...payment,
-        ledgerTransactionId: transaction.id,
-      },
-    });
+    setEditingPayment({ debt, payment });
   };
 
   const confirmDeletePayment = (debt: Debt, payment: DebtPayment) => {
-    const transactions = useLedgerStore.getState().transactions;
-    const expectedType = debt.direction === 'receivable' ? 'income' : 'expense';
-    const expectedPurpose =
-      debt.direction === 'receivable' ? 'debt_collection' : 'debt_payment';
-
-    const matchingTransactions = payment.ledgerTransactionId
-      ? transactions.filter((item) => item.id === payment.ledgerTransactionId)
-      : transactions.filter(
-          (item) =>
-            item.linkedEntityType === 'debt' &&
-            item.linkedEntityId === debt.id &&
-            item.linkedPaymentId === payment.id &&
-            item.accountId === payment.accountId &&
-            item.amount === payment.amount &&
-            item.date === payment.date &&
-            item.currencyCode === debt.currencyCode &&
-            item.type === expectedType &&
-            item.purpose === expectedPurpose,
-        );
-
-    if (matchingTransactions.length !== 1) {
-      Alert.alert(
-        'Cannot delete payment',
-        'A unique matching account transaction could not be verified. Nothing was deleted.',
-      );
-      return;
-    }
-
-    const transaction = matchingTransactions[0];
-    if (
-      !transaction ||
-      transaction.linkedEntityType !== 'debt' ||
-      transaction.linkedEntityId !== debt.id ||
-      transaction.linkedPaymentId !== payment.id ||
-      transaction.accountId !== payment.accountId ||
-      transaction.amount !== payment.amount ||
-      transaction.date !== payment.date ||
-      transaction.currencyCode !== debt.currencyCode ||
-      transaction.type !== expectedType ||
-      transaction.purpose !== expectedPurpose
-    ) {
-      Alert.alert(
-        'Payment link mismatch',
-        'The linked account transaction could not be verified. Nothing was deleted.',
-      );
-      return;
-    }
-
-    if (!payment.ledgerTransactionId) {
-      const recovered = linkDebtPaymentTransaction(
-        debt.id,
-        payment.id,
-        transaction.id,
-      );
-      if (!recovered) {
-        Alert.alert(
-          'Payment link recovery failed',
-          'The account transaction was found but could not be safely linked. Nothing was deleted.',
-        );
-        return;
-      }
-    }
-
     const performDelete = () => {
-      // Remove the verified ledger entry first. The finance record is removed
-      // only after the ledger confirms success, so balances cannot be orphaned.
-      const transactionRemoved = removeTransaction(transaction.id);
-      if (!transactionRemoved) {
-        Alert.alert(
-          'Cannot delete payment',
-          'The linked account transaction could not be removed (it may have dependent refunds). The payment was kept.',
-        );
-        return;
-      }
-
-      const paymentRemoved = deleteDebtPayment(
-        debt.id,
-        payment.id,
-        transaction.id,
-      );
-      if (!paymentRemoved) {
-        Alert.alert(
-          'Payment deletion incomplete',
-          'The account transaction was removed, but the payment record could not be deleted. Please contact support before making further changes.',
-        );
-        return;
-      }
-
+      const result = reverseLinkedPayment({ entityType: 'debt', entityId: debt.id, paymentId: payment.id });
+      if (!result.ok) { Alert.alert('Cannot delete payment', result.reason); return; }
       Alert.alert('Deleted', 'The payment and its linked account transaction were deleted.');
     };
 
@@ -692,75 +453,9 @@ export default function DebtsScreen() {
       return;
     }
 
-    if (!payment.ledgerTransactionId) {
-      Alert.alert(
-        'Cannot edit payment',
-        'This payment has no linked account transaction.',
-      );
-      return;
-    }
-
-    // Read the latest transaction state before changing either store.
-    const transaction = useLedgerStore
-      .getState()
-      .transactions.find(
-        (item) => item.id === payment.ledgerTransactionId,
-      );
-
-    if (
-      !transaction ||
-      transaction.linkedEntityType !== 'debt' ||
-      transaction.linkedEntityId !== debt.id ||
-      transaction.linkedPaymentId !== payment.id ||
-      transaction.accountId !== payment.accountId ||
-      transaction.currencyCode !== debt.currencyCode
-    ) {
-      Alert.alert(
-        'Payment link mismatch',
-        'The account transaction could not be verified. No changes were made.',
-      );
-      return;
-    }
-
-    // Update the existing ledger entry. Never create a replacement transaction.
-    const transactionUpdated = updateTransaction(
-      transaction.id,
-      {
-        amount,
-        date: cleanDate,
-        note: note.trim() || undefined,
-      },
-    );
-
-    if (!transactionUpdated) {
-      Alert.alert(
-        'Update failed',
-        'The account transaction could not be updated. The debt payment was not changed.',
-      );
-      return;
-    }
-
-    // The payment record is updated only after its linked transaction succeeds.
-    const paymentUpdated = updateDebtPayment(debt.id, payment.id, {
-      amount,
-      date: cleanDate,
-      note: note.trim() || undefined,
-    });
-
-    if (!paymentUpdated) {
-      // Restore the already-updated ledger entry if the debt record rejected
-      // the change, keeping both persisted stores consistent.
-      updateTransaction(transaction.id, {
-        amount: transaction.amount,
-        date: transaction.date,
-        note: transaction.note,
-      });
-      Alert.alert(
-        'Update failed',
-        'The debt payment could not be updated. The account transaction was restored.',
-      );
-      return;
-    }
+    const result = editLinkedPayment({ entityType: 'debt', entityId: debt.id, paymentId: payment.id },
+      { amount, date: cleanDate, note: note.trim() || undefined });
+    if (!result.ok) { Alert.alert('Update failed', result.reason); return; }
 
     setEditingPayment(null);
 

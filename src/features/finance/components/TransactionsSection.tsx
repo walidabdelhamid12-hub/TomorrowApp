@@ -5,6 +5,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppButton, AppText, Card } from '@/components/ui';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
+import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
+import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
 import type {
   Transaction,
   Transfer,
@@ -56,6 +58,8 @@ export function TransactionsSection({
   const transfers = useLedgerStore((s) => s.transfers);
   const categories = useLedgerStore((s) => s.categories);
   const accounts = useLedgerStore((s) => s.accounts);
+  const loans = useFinanceStore((s) => s.loans);
+  const debts = useFinanceStore((s) => s.debts);
 
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -337,33 +341,39 @@ export function TransactionsSection({
                         { marginStart: spacing.sm },
                       ]}
                     >
-                      <Pressable
-                        onPress={() => onEdit(tx)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel="Edit transaction"
-                        style={styles.actionButton}
-                      >
-                        <Ionicons
-                          name="create-outline"
-                          size={17}
-                          color={moduleColors.finance}
-                        />
-                      </Pressable>
+                      {isProtectedTransaction(tx, { loans, debts }) ? (
+                        <AppText variant="caption" color="textSecondary">Manage in Loans / Debts</AppText>
+                      ) : (
+                        <>
+                          <Pressable
+                            onPress={() => onEdit(tx)}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel="Edit transaction"
+                            style={styles.actionButton}
+                          >
+                            <Ionicons
+                              name="create-outline"
+                              size={17}
+                              color={moduleColors.finance}
+                            />
+                          </Pressable>
 
-                      <Pressable
-                        onPress={() => onDelete(tx)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel="Delete transaction"
-                        style={styles.actionButton}
-                      >
-                        <Ionicons
-                          name="trash-outline"
-                          size={15}
-                          color={colors.textSecondary}
-                        />
-                      </Pressable>
+                          <Pressable
+                            onPress={() => onDelete(tx)}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel="Delete transaction"
+                            style={styles.actionButton}
+                          >
+                            <Ionicons
+                              name="trash-outline"
+                              size={15}
+                              color={colors.textSecondary}
+                            />
+                          </Pressable>
+                        </>
+                      )}
                     </View>
                   </View>
                 );

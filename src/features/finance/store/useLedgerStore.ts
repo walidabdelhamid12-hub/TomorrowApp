@@ -6,6 +6,8 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { DEFAULT_CATEGORIES } from '@/features/finance/constants/defaultCategories';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
+import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
+import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
 import type { EntityId } from '@/features/finance/types/finance';
 import type {
   Account,
@@ -168,6 +170,8 @@ function isValidRefund(
   ) {
     return false;
   }
+
+  if (isProtectedTransaction(original, useFinanceStore.getState())) return false;
 
   const account = accounts.find(
     (item) => item.id === input.accountId
@@ -547,6 +551,8 @@ export const useLedgerStore = create<LedgerStore>()(
       /* ---------------------------- Transactions --------------------------- */
 
       addTransaction: (input) => {
+        if (input.entryType === 'refund' &&
+          (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated())) return null;
         const { accounts, categories, transactions } = get();
 
         const account = accounts.find(
@@ -629,6 +635,7 @@ export const useLedgerStore = create<LedgerStore>()(
       },
 
       updateTransaction: (id, patch) => {
+        if (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated()) return false;
         const { accounts, categories, transactions } = get();
 
         const current = transactions.find((item) => item.id === id);
@@ -636,6 +643,11 @@ export const useLedgerStore = create<LedgerStore>()(
         if (!current || current.entryType === 'refund') {
           return false;
         }
+
+        const editableFields = ['type', 'amount', 'accountId', 'categoryId', 'entryType',
+          'relatedTransactionId', 'date', 'note'];
+        if (isProtectedTransaction(current, useFinanceStore.getState()) ||
+          Object.keys(patch).some(key => !editableFields.includes(key))) return false;
 
         const next = {
           ...current,
@@ -705,6 +717,7 @@ export const useLedgerStore = create<LedgerStore>()(
       },
 
       removeTransaction: (id) => {
+        if (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated()) return false;
         const { transactions } = get();
 
         const current = transactions.find(
@@ -714,6 +727,8 @@ export const useLedgerStore = create<LedgerStore>()(
         if (!current) {
           return false;
         }
+
+        if (isProtectedTransaction(current, useFinanceStore.getState())) return false;
 
         const hasRefunds = transactions.some(
           (transaction) =>
