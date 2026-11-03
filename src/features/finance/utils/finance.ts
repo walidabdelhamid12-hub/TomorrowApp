@@ -120,14 +120,22 @@ export function isDebtOverdue(debt: Debt, today: ISODate = todayISO()): boolean 
 
 /* -------------------------------- Loans ---------------------------------- */
 
+/** Contractual total; legacy loans fall back to installment × count. */
 export function getLoanTotal(loan: Loan): number {
-  return roundMoney(loan.monthlyInstallment * loan.numberOfInstallments);
+  const total =
+    loan.totalRepaymentAmount ??
+    loan.monthlyInstallment * loan.numberOfInstallments;
+  return roundMoney(total);
 }
 
+/** Recorded contractual payments; late fees are intentionally excluded. */
 export function getLoanPaidAmount(loan: Loan): number {
-  return roundMoney(loan.payments.reduce((sum, p) => sum + p.amount, 0));
+  return roundMoney(
+    (loan.payments ?? []).reduce((sum, payment) => sum + payment.amount, 0)
+  );
 }
 
+/** Remaining contractual balance, never below zero. */
 export function getLoanRemainingAmount(loan: Loan): number {
   return Math.max(roundMoney(getLoanTotal(loan) - getLoanPaidAmount(loan)), 0);
 }
