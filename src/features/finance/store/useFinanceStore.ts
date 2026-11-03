@@ -35,6 +35,8 @@ import type {
 import {
   definedOnly,
   generateId,
+  getLoanPaidAmount,
+  getLoanTotal,
   roundMoney,
   todayISO,
 } from '@/features/finance/utils/finance';
@@ -576,12 +578,9 @@ export const useFinanceStore = create<FinanceStore>()(
           'monthlyInstallment',
         ]);
         const nextPrincipal = cleanPatch.principalAmount ?? loan.principalAmount;
-        const nextTotal = cleanPatch.totalRepaymentAmount ?? loan.totalRepaymentAmount ??
-          roundMoney(loan.monthlyInstallment * loan.numberOfInstallments);
+        const nextTotal = getLoanTotal({ ...loan, ...cleanPatch });
         const nextInstallment = cleanPatch.monthlyInstallment ?? loan.monthlyInstallment;
-        const paidTotal = roundMoney(
-          loan.payments.reduce((sum, payment) => sum + payment.amount, 0)
-        );
+        const paidTotal = getLoanPaidAmount(loan);
         const paidPrincipal = roundMoney(
           loan.payments.reduce(
             (sum, payment) => sum + (
@@ -655,12 +654,8 @@ export const useFinanceStore = create<FinanceStore>()(
             0
           )
         );
-        const totalLimit = roundMoney(
-          loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments
-        );
-        const totalAlreadyPaid = roundMoney(
-          loan.payments.reduce((sum, payment) => sum + payment.amount, 0)
-        );
+        const totalLimit = getLoanTotal(loan);
+        const totalAlreadyPaid = getLoanPaidAmount(loan);
 
         if (
           !Number.isFinite(amount) || amount <= 0 ||
@@ -732,11 +727,10 @@ export const useFinanceStore = create<FinanceStore>()(
         const totalLimit = roundMoney(
           loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments
         );
-        const otherTotalPaid = roundMoney(
-          loan.payments
-            .filter((payment) => payment.id !== paymentId)
-            .reduce((sum, payment) => sum + payment.amount, 0)
-        );
+        const otherTotalPaid = getLoanPaidAmount({
+          ...loan,
+          payments: loan.payments.filter((payment) => payment.id !== paymentId),
+        });
 
         if (
           !Number.isFinite(nextAmount) || nextAmount <= 0 ||
