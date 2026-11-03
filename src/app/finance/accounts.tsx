@@ -212,7 +212,7 @@ export default function AccountsScreen() {
                       balance < 0 && { color: colors.danger },
                     ]}
                   >
-                    {formatAmount(balance)} {account.currencyCode}
+                    {formatAmount(balance, account.currencyCode)} {account.currencyCode}
                   </AppText>
                 </View>
 
