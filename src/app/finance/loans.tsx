@@ -183,7 +183,7 @@ export default function LoansScreen() {
     const label = receiptMethodLabel.trim();
     const originalPrincipal = receivingLoan.principalAmount;
     if (amount === null || !Number.isFinite(amount) || amount <= 0 ||
-      (originalPrincipal !== undefined && amount > originalPrincipal + 0.001) ||
+      (originalPrincipal !== undefined && amount > originalPrincipal) ||
       !/^\d{4}-\d{2}-\d{2}$/.test(receivedDate) ||
       (receiptMethod === 'account' && !account) ||
       (receiptMethod === 'custom' && !label)) {
@@ -219,7 +219,7 @@ export default function LoansScreen() {
     const saved = useFinanceStore.getState().loans.find(l => l.id === receivingLoan.id);
     if (
       !saved?.receivedAt ||
-      Math.abs((saved.receivedAmount ?? 0) - amount) > 0.001 ||
+      (saved.receivedAmount ?? 0) !== amount ||
       (account && saved.receiptTransactionId !== transactionId) ||
       (!account && saved.depositMethodLabel !== label)
     ) {
@@ -259,7 +259,7 @@ export default function LoansScreen() {
     const account = paymentMethod === 'account' ? activeAccounts.find(a => a.id === accountId && a.currencyCode === selectedLoan.currencyCode && a.type !== 'credit_card') : undefined;
     const customLabel = customPaymentMethod.trim();
     if (
-      amount === null || amount <= 0 || amount > outstanding + 0.001 ||
+      amount === null || amount <= 0 || amount > outstanding ||
       fee === null || !Number.isFinite(fee) || fee < 0 ||
       cashAmount === null || !Number.isFinite(cashAmount) ||
       !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) ||
@@ -293,8 +293,8 @@ export default function LoansScreen() {
         .find(l => l.id === selectedLoan.id)?.payments
         .find(p => p.id === editingPayment.id);
       const paymentSaved = !!saved &&
-        Math.abs(saved.amount - amount) <= 0.001 &&
-        Math.abs((saved.latePaymentFee ?? 0) - fee) <= 0.001 &&
+        saved.amount === amount &&
+        (saved.latePaymentFee ?? 0) === fee &&
         saved.paymentMode === 'simple' &&
         saved.date === paymentDate;
       if (!paymentSaved) {
@@ -328,7 +328,7 @@ export default function LoansScreen() {
           ),
         });
         updateLoan(selectedLoan.id, {
-          status: scheduledTotal - paid <= 0.001 ? 'completed' : 'active',
+          status: scheduledTotal - paid <= 0 ? 'completed' : 'active',
         });
       }
       closePayment(); return;
@@ -373,7 +373,7 @@ export default function LoansScreen() {
       }
     }
     if (settlementMode) updateLoan(selectedLoan.id, { status: 'settled', settlementAmount: amount, settlementDate: paymentDate, settlementAccountId: account?.id, settlementPaymentId: paymentId, settlementNote: note.trim() || undefined });
-    else if (outstanding - amount <= 0.001) updateLoan(selectedLoan.id, { status: 'completed' });
+    else if (outstanding - amount <= 0) updateLoan(selectedLoan.id, { status: 'completed' });
     closePayment();
   };
   const openEditPayment = (loan: Loan, payment: Loan['payments'][number]) => {
