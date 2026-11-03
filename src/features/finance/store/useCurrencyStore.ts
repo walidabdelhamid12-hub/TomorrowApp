@@ -23,6 +23,8 @@ export interface LiveRatesPayload {
   rates: Record<string, number>;
   metals: Partial<MetalPrices>;
   updatedAt: string;
+  /** Set only when currencies, gold and silver all refreshed successfully. */
+  lastLiveUpdatedAt?: string;
 }
 
 type MetalSources = Record<MetalKey, RateSource>;
@@ -536,7 +538,10 @@ export const useCurrencyStore = create<CurrencyStore>()(
           !isRecord(payload.rates) ||
           !isRecord(payload.metals) ||
           typeof payload.updatedAt !== 'string' ||
-          !isValidLiveTimestamp(payload.updatedAt)
+          !isValidLiveTimestamp(payload.updatedAt) ||
+          (payload.lastLiveUpdatedAt !== undefined &&
+            (typeof payload.lastLiveUpdatedAt !== 'string' ||
+              !isValidLiveTimestamp(payload.lastLiveUpdatedAt)))
         ) {
           return false;
         }
@@ -631,7 +636,12 @@ export const useCurrencyStore = create<CurrencyStore>()(
             metalSources,
             source: 'live',
             updatedAt: normalizedTimestamp,
-            lastLiveUpdatedAt: normalizedTimestamp,
+            lastLiveUpdatedAt:
+              payload.lastLiveUpdatedAt !== undefined
+                ? new Date(
+                    Date.parse(payload.lastLiveUpdatedAt),
+                  ).toISOString()
+                : state.lastLiveUpdatedAt,
           };
         });
 
