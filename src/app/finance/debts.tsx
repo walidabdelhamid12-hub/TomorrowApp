@@ -456,25 +456,49 @@ export default function DebtsScreen() {
     debt: Debt,
     payment: DebtPayment,
   ) => {
-    if (!payment.ledgerTransactionId) {
+    const transactions = useLedgerStore.getState().transactions;
+
+    // Recover a payment created by the earlier buggy flow only when there is
+    // exactly one ledger entry with the complete matching debt/payment identity.
+    const matchingTransactions = payment.ledgerTransactionId
+      ? transactions.filter((item) => item.id === payment.ledgerTransactionId)
+      : transactions.filter(
+          (item) =>
+            item.linkedEntityType === 'debt' &&
+            item.linkedEntityId === debt.id &&
+            item.linkedPaymentId === payment.id &&
+            item.accountId === payment.accountId &&
+            item.amount === payment.amount &&
+            item.date === payment.date &&
+            item.currencyCode === debt.currencyCode &&
+            item.type ===
+              (debt.direction === 'receivable' ? 'income' : 'expense') &&
+            item.purpose ===
+              (debt.direction === 'receivable'
+                ? 'debt_collection'
+                : 'debt_payment'),
+        );
+
+    if (matchingTransactions.length !== 1) {
       Alert.alert(
         'Cannot edit this payment',
-        'This payment has no linked account transaction. Editing it could make the debt and account balances inconsistent.',
+        'A unique matching account transaction could not be verified. No changes were made.',
       );
       return;
     }
 
-    const transaction = useLedgerStore
-      .getState()
-      .transactions.find(
-        (item) => item.id === payment.ledgerTransactionId,
-      );
+    const transaction = matchingTransactions[0];
 
     if (
-      !transaction ||
       transaction.linkedEntityType !== 'debt' ||
       transaction.linkedEntityId !== debt.id ||
-      transaction.linkedPaymentId !== payment.id
+      transaction.linkedPaymentId !== payment.id ||
+      transaction.accountId !== payment.accountId ||
+      transaction.amount !== payment.amount ||
+      transaction.date !== payment.date ||
+      transaction.currencyCode !== debt.currencyCode ||
+      transaction.type !==
+        (debt.direction === 'receivable' ? 'income' : 'expense')
     ) {
       Alert.alert(
         'Payment link mismatch',
@@ -483,7 +507,29 @@ export default function DebtsScreen() {
       return;
     }
 
-    setEditingPayment({ debt, payment });
+    if (!payment.ledgerTransactionId) {
+      const recovered = linkDebtPaymentTransaction(
+        debt.id,
+        payment.id,
+        transaction.id,
+      );
+
+      if (!recovered) {
+        Alert.alert(
+          'Payment link recovery failed',
+          'The account transaction was found but could not be safely linked. No changes were made.',
+        );
+        return;
+      }
+    }
+
+    setEditingPayment({
+      debt,
+      payment: {
+        ...payment,
+        ledgerTransactionId: transaction.id,
+      },
+    });
   };
 
   const closeEditPayment = () => {
