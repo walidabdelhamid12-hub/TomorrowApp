@@ -32,6 +32,7 @@ import type {
     NewDebtInput,
 } from '@/features/finance/types/finance';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
+import { parseAmount } from '@/features/finance/utils/money';
 import { moduleColors, useTheme } from '@/theme';
 
 type DebtTab = 'receivable' | 'payable';
@@ -304,9 +305,9 @@ export default function DebtsScreen() {
   const handleConfirmPayment = () => {
     if (!paymentDebt) return;
 
-    const amount = Number(paymentAmount.trim().replace(/,/g, ''));
+    const amount = parseAmount(paymentAmount);
 
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (amount === null || amount <= 0) {
       Alert.alert('Invalid amount', 'Enter an amount greater than zero.');
       return;
     }
@@ -477,10 +478,10 @@ export default function DebtsScreen() {
     if (!editingPayment) return;
 
     const { debt, payment } = editingPayment;
-    const amount = Number(amountText.trim().replace(/,/g, ''));
+    const amount = parseAmount(amountText);
     const cleanDate = date.trim();
 
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (amount === null || amount <= 0) {
       Alert.alert('Invalid amount', 'Enter an amount greater than zero.');
       return;
     }
