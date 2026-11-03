@@ -28,7 +28,7 @@ import {
 } from '@/features/finance/components/TotalCard';
 import { TransactionsSection } from '@/features/finance/components/TransactionsSection';
 import { TransferModal } from '@/features/finance/components/TransferModal';
-import { useAutoRefreshRates } from '@/features/finance/hooks/useAutoRefreshRates';
+import { useRatesAutoRefresh } from '@/features/finance/providers/RatesAutoRefreshProvider';
 import { useFinanceSummary } from '@/features/finance/hooks/useFinanceSummary';
 import {
   useCurrencyHydrated,
@@ -94,7 +94,7 @@ export default function FinanceHomeScreen() {
   const ready = ledgerReady && currencyReady && financeReady;
 
   const { refresh, isRefreshing, lastResult } =
-    useAutoRefreshRates(ready);
+    useRatesAutoRefresh();
 
   const summary = useFinanceSummary();
 
