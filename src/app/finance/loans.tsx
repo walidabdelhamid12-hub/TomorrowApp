@@ -22,7 +22,7 @@ import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useL
 import type { Loan, NewLoanInput } from '@/features/finance/types/finance';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { parseAmount } from '@/features/finance/utils/money';
-import { roundMoney } from '@/features/finance/utils/finance';
+import { getLoanPaidAmount, getLoanRemainingAmount, getLoanTotal } from '@/features/finance/utils/finance';
 import { moduleColors, useTheme } from '@/theme';
 
 const today = () => {
@@ -30,9 +30,7 @@ const today = () => {
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
 };
 const money = (value: string) => parseAmount(value);
-const remaining = (loan: Loan) => loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed'
-  ? 0
-  : Math.max(0, (loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments) - loan.payments.reduce((s, p) => s + p.amount, 0));
+const remaining = getLoanRemainingAmount;
 export default function LoansScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -253,8 +251,8 @@ export default function LoansScreen() {
       Alert.alert('Expense category required', 'Add or restore an expense category before recording a loan payment. No payment has been recorded.');
       return;
     }
-    const scheduledTotal = selectedLoan.totalRepaymentAmount ?? selectedLoan.monthlyInstallment * selectedLoan.numberOfInstallments;
-    const outstanding = editingPayment ? Math.max(0, scheduledTotal - selectedLoan.payments.filter(p => p.id !== editingPayment.id).reduce((sum, p) => sum + p.amount, 0)) : remaining(selectedLoan);
+    const scheduledTotal = getLoanTotal(selectedLoan);
+    const outstanding = editingPayment ? Math.max(0, scheduledTotal - getLoanPaidAmount({ ...selectedLoan, payments: selectedLoan.payments.filter(p => p.id !== editingPayment.id) })) : remaining(selectedLoan);
     const account = paymentMethod === 'account' ? activeAccounts.find(a => a.id === accountId && a.currencyCode === selectedLoan.currencyCode && a.type !== 'credit_card') : undefined;
     const customLabel = customPaymentMethod.trim();
     if (
@@ -421,7 +419,7 @@ export default function LoansScreen() {
       <AppButton title="Add loan" accentColor={moduleColors.finance} leftIcon={<Ionicons name="add" size={18} color={colors.onPrimary} />} onPress={() => setShowLoanForm(true)} />
       {loans.length === 0 ? <Card variant="filled"><AppText align="center" color="textSecondary">No loans recorded yet. Add your first loan.</AppText></Card> :
         loans.map(loan => {
-          const paid = loan.payments.reduce((s, p) => s + p.amount, 0);
+          const paid = getLoanPaidAmount(loan);
           const due = remaining(loan);
           return <Card key={loan.id} style={styles.loanCard}>
             <View style={styles.row}><View style={{ flex: 1 }}><AppText variant="h2">{loan.name}</AppText><AppText color="textSecondary" variant="caption">{loan.lenderName} · {loan.currencyCode}</AppText></View>
@@ -429,7 +427,7 @@ export default function LoansScreen() {
             </View>
             <View style={styles.metrics}>
               <View><AppText variant="caption" color="textSecondary">Original principal</AppText><AppText>{formatAmount(loan.principalAmount ?? 0)} {loan.currencyCode}</AppText></View>
-              <View><AppText variant="caption" color="textSecondary">Contract total</AppText><AppText>{formatAmount(loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments)} {loan.currencyCode}</AppText></View>
+              <View><AppText variant="caption" color="textSecondary">Contract total</AppText><AppText>{formatAmount(getLoanTotal(loan))} {loan.currencyCode}</AppText></View>
               <View><AppText variant="caption" color="textSecondary">Remaining</AppText><AppText style={styles.remaining}>{formatAmount(due)} {loan.currencyCode}</AppText></View>
             </View>
             <AppText variant="caption" color="textSecondary">Paid: {formatAmount(paid)} {loan.currencyCode} · Installment: {formatAmount(loan.monthlyInstallment)} {loan.currencyCode}</AppText>
@@ -444,7 +442,7 @@ export default function LoansScreen() {
             </View>}
             {loan.status === 'closed' && <AppText color="warning">Closed without payment on {loan.closureDate}: {loan.closureReason}</AppText>}
             {loan.status === 'settled' && (() => {
-              const scheduled = loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments;
+              const scheduled = getLoanTotal(loan);
               const paidBeforeSettlement = loan.payments
                 .filter(payment => payment.id !== loan.settlementPaymentId)
                 .reduce((sum, payment) => sum + payment.amount, 0);
