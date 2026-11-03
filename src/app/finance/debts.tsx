@@ -540,6 +540,113 @@ export default function DebtsScreen() {
     });
   };
 
+  const confirmDeletePayment = (debt: Debt, payment: DebtPayment) => {
+    const transactions = useLedgerStore.getState().transactions;
+    const expectedType = debt.direction === 'receivable' ? 'income' : 'expense';
+    const expectedPurpose =
+      debt.direction === 'receivable' ? 'debt_collection' : 'debt_payment';
+
+    const matchingTransactions = payment.ledgerTransactionId
+      ? transactions.filter((item) => item.id === payment.ledgerTransactionId)
+      : transactions.filter(
+          (item) =>
+            item.linkedEntityType === 'debt' &&
+            item.linkedEntityId === debt.id &&
+            item.linkedPaymentId === payment.id &&
+            item.accountId === payment.accountId &&
+            item.amount === payment.amount &&
+            item.date === payment.date &&
+            item.currencyCode === debt.currencyCode &&
+            item.type === expectedType &&
+            item.purpose === expectedPurpose,
+        );
+
+    if (matchingTransactions.length !== 1) {
+      Alert.alert(
+        'Cannot delete payment',
+        'A unique matching account transaction could not be verified. Nothing was deleted.',
+      );
+      return;
+    }
+
+    const transaction = matchingTransactions[0];
+    if (
+      !transaction ||
+      transaction.linkedEntityType !== 'debt' ||
+      transaction.linkedEntityId !== debt.id ||
+      transaction.linkedPaymentId !== payment.id ||
+      transaction.accountId !== payment.accountId ||
+      transaction.amount !== payment.amount ||
+      transaction.date !== payment.date ||
+      transaction.currencyCode !== debt.currencyCode ||
+      transaction.type !== expectedType ||
+      transaction.purpose !== expectedPurpose
+    ) {
+      Alert.alert(
+        'Payment link mismatch',
+        'The linked account transaction could not be verified. Nothing was deleted.',
+      );
+      return;
+    }
+
+    if (!payment.ledgerTransactionId) {
+      const recovered = linkDebtPaymentTransaction(
+        debt.id,
+        payment.id,
+        transaction.id,
+      );
+      if (!recovered) {
+        Alert.alert(
+          'Payment link recovery failed',
+          'The account transaction was found but could not be safely linked. Nothing was deleted.',
+        );
+        return;
+      }
+    }
+
+    const performDelete = () => {
+      // Remove the verified ledger entry first. The finance record is removed
+      // only after the ledger confirms success, so balances cannot be orphaned.
+      const transactionRemoved = removeTransaction(transaction.id);
+      if (!transactionRemoved) {
+        Alert.alert(
+          'Cannot delete payment',
+          'The linked account transaction could not be removed (it may have dependent refunds). The payment was kept.',
+        );
+        return;
+      }
+
+      const paymentRemoved = deleteDebtPayment(
+        debt.id,
+        payment.id,
+        transaction.id,
+      );
+      if (!paymentRemoved) {
+        Alert.alert(
+          'Payment deletion incomplete',
+          'The account transaction was removed, but the payment record could not be deleted. Please contact support before making further changes.',
+        );
+        return;
+      }
+
+      Alert.alert('Deleted', 'The payment and its linked account transaction were deleted.');
+    };
+
+    const message =
+      `Delete this ${debt.direction === 'receivable' ? 'collection' : 'payment'} of ` +
+      `${formatAmount(payment.amount)} ${debt.currencyCode}? The linked account balance will be reversed.`;
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) performDelete();
+      return;
+    }
+
+    Alert.alert('Delete payment?', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: performDelete },
+    ]);
+  };
+
   const closeEditPayment = () => {
     setEditingPayment(null);
   };
@@ -996,21 +1103,36 @@ export default function DebtsScreen() {
                               {formatAmount(payment.amount)} {debt.currencyCode}
                             </AppText>
 
-                            <Pressable
-                              onPress={() => openEditPayment(debt, payment)}
-                              style={styles.editPaymentButton}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Edit payment dated ${formatDate(payment.date)}`}
-                            >
-                              <Ionicons
-                                name="create-outline"
-                                size={16}
-                                color={moduleColors.finance}
-                              />
-                              <AppText style={styles.editPaymentText}>
-                                Edit
-                              </AppText>
-                            </Pressable>
+                            <View style={styles.paymentActionButtons}>
+                              <Pressable
+                                onPress={() => openEditPayment(debt, payment)}
+                                style={styles.editPaymentButton}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Edit payment dated ${formatDate(payment.date)}`}
+                              >
+                                <Ionicons
+                                  name="create-outline"
+                                  size={16}
+                                  color={moduleColors.finance}
+                                />
+                                <AppText style={styles.editPaymentText}>
+                                  Edit
+                                </AppText>
+                              </Pressable>
+
+                              <Pressable
+                                onPress={() => confirmDeletePayment(debt, payment)}
+                                style={styles.deletePaymentButton}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Delete payment dated ${formatDate(payment.date)}`}
+                              >
+                                <Ionicons
+                                  name="trash-outline"
+                                  size={16}
+                                  color="#DC2626"
+                                />
+                              </Pressable>
+                            </View>
                           </View>
                         </View>
                       ))}
@@ -2024,6 +2146,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 7,
   },
+  paymentActionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   editPaymentButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2038,6 +2165,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: moduleColors.finance,
+  },
+  deletePaymentButton: {
+    width: 31,
+    height: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    backgroundColor: '#FEF2F2',
   },
   actionRow: {
     flexDirection: 'row',
