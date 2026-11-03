@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
-import { roundMoney, todayISO } from '@/features/finance/utils/finance';
+import { getLoanRemainingAmount, roundMoney, todayISO } from '@/features/finance/utils/finance';
 import {
   filterByMonth,
   getAccountBalance,
@@ -104,25 +104,12 @@ export function useFinanceSummary() {
       // Net worth tracks the remaining contractual amount owed to the lender,
       // not only the cash principal received. Confirmed installments reduce
       // the contract balance; late fees are stored separately and are excluded.
-      const contractTotal =
-        loan.totalRepaymentAmount ??
-        loan.monthlyInstallment * loan.numberOfInstallments;
-      const totalPaid = (loan.payments ?? []).reduce(
-        (sum, payment) => sum + payment.amount,
-        0
-      );
+      const remainingContract = getLoanRemainingAmount(loan);
 
-      if (
-        !Number.isFinite(contractTotal) ||
-        contractTotal < 0 ||
-        !Number.isFinite(totalPaid) ||
-        totalPaid < 0
-      ) {
+      if (!Number.isFinite(remainingContract)) {
         missing += 1;
         continue;
       }
-
-      const remainingContract = Math.max(contractTotal - totalPaid, 0);
       const principalConverted = convertAmount(
         remainingContract,
         loan.currencyCode,
