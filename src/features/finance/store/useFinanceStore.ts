@@ -448,20 +448,34 @@ export const useFinanceStore = create<FinanceStore>()(
 
       /* Loans */
       addLoan: (input) => {
+        const principalAmount = input.principalAmount === undefined
+          ? undefined
+          : roundMoney(input.principalAmount);
+        const totalRepaymentAmount = roundMoney(
+          input.totalRepaymentAmount ??
+          input.monthlyInstallment * input.numberOfInstallments
+        );
+        const monthlyInstallment = roundMoney(input.monthlyInstallment);
+        if (
+          (principalAmount !== undefined &&
+            (!Number.isFinite(principalAmount) || principalAmount <= 0)) ||
+          !Number.isFinite(totalRepaymentAmount) ||
+          totalRepaymentAmount <= 0 ||
+          (principalAmount !== undefined && totalRepaymentAmount < principalAmount) ||
+          !Number.isFinite(monthlyInstallment) ||
+          monthlyInstallment <= 0 ||
+          !Number.isInteger(input.numberOfInstallments) ||
+          input.numberOfInstallments < 1
+        ) return null;
+
         const timestamp = now();
 
         const loan: Loan = {
           ...input,
-          principalAmount:
-            input.principalAmount === undefined
-              ? undefined
-              : roundMoney(input.principalAmount),
-          totalRepaymentAmount:
-            input.totalRepaymentAmount === undefined
-              ? roundMoney(input.monthlyInstallment * input.numberOfInstallments)
-              : roundMoney(input.totalRepaymentAmount),
+          principalAmount,
+          totalRepaymentAmount,
           status: input.status ?? 'active',
-          monthlyInstallment: roundMoney(input.monthlyInstallment),
+          monthlyInstallment,
           id: generateId('lon'),
           payments: [],
           createdAt: timestamp,
@@ -475,18 +489,52 @@ export const useFinanceStore = create<FinanceStore>()(
         return loan.id;
       },
 
-      updateLoan: (id, patch) =>
+      updateLoan: (id, patch) => {
+        const loan = get().loans.find((item) => item.id === id);
+        if (!loan) return;
+
+        const cleanPatch = withRounded(definedOnly(patch), [
+          'principalAmount',
+          'totalRepaymentAmount',
+          'settlementAmount',
+          'monthlyInstallment',
+        ]);
+        const nextPrincipal = cleanPatch.principalAmount ?? loan.principalAmount;
+        const nextTotal = cleanPatch.totalRepaymentAmount ?? loan.totalRepaymentAmount ??
+          roundMoney(loan.monthlyInstallment * loan.numberOfInstallments);
+        const nextInstallment = cleanPatch.monthlyInstallment ?? loan.monthlyInstallment;
+        const paidTotal = roundMoney(
+          loan.payments.reduce((sum, payment) => sum + payment.amount, 0)
+        );
+        const paidPrincipal = roundMoney(
+          loan.payments.reduce(
+            (sum, payment) => sum + (payment.principalAmount ?? payment.amount),
+            0
+          )
+        );
+        const principalLimit = roundMoney(loan.receivedAmount ?? nextPrincipal ?? 0);
+
+        if (
+          (nextPrincipal !== undefined &&
+            (!Number.isFinite(nextPrincipal) || nextPrincipal <= 0 || paidPrincipal > nextPrincipal + 0.001)) ||
+          !Number.isFinite(nextTotal) || nextTotal <= 0 ||
+          (nextPrincipal !== undefined && nextTotal < nextPrincipal) ||
+          paidTotal > nextTotal + 0.001 ||
+          !Number.isFinite(nextInstallment) || nextInstallment <= 0 ||
+          !Number.isInteger(loan.numberOfInstallments) || loan.numberOfInstallments < 1 ||
+          !Number.isFinite(principalLimit) ||
+          paidPrincipal > principalLimit + 0.001 ||
+          (cleanPatch.settlementAmount !== undefined &&
+            (!Number.isFinite(cleanPatch.settlementAmount) || cleanPatch.settlementAmount <= 0))
+        ) return;
+
         set((state) => ({
-          loans: patchParent(state.loans, id, (loan) => ({
-            ...loan,
-            ...withRounded(definedOnly(patch), [
-              'principalAmount',
-              'totalRepaymentAmount',
-              'settlementAmount',
-              'monthlyInstallment',
-            ]),
+          loans: patchParent(state.loans, id, (currentLoan) => ({
+            ...currentLoan,
+            ...cleanPatch,
           })),
-        })),
+        }));
+      },
 
       deleteLoan: (id) =>
         set((state) => ({
