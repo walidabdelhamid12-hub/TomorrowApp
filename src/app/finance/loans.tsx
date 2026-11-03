@@ -261,7 +261,7 @@ export default function LoansScreen() {
       amount === null || amount <= 0 || amount > outstanding + 0.001 ||
       fee === null || !Number.isFinite(fee) || fee < 0 ||
       cashAmount === null || !Number.isFinite(cashAmount) ||
-      !/^\\d{4}-\\d{2}-\\d{2}$/.test(paymentDate) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) ||
       (paymentMethod === 'account' && !account) ||
       (paymentMethod === 'custom' && !customLabel)
     ) {
