@@ -73,7 +73,7 @@ interface FinanceActions {
   ) => void;
   deleteDebtPayment: (debtId: EntityId, paymentId: EntityId) => void;
 
-  addLoan: (input: NewLoanInput) => EntityId;
+  addLoan: (input: NewLoanInput) => EntityId | null;
   updateLoan: (id: EntityId, patch: LoanPatch) => void;
   deleteLoan: (id: EntityId) => void;
   addLoanPayment: (
