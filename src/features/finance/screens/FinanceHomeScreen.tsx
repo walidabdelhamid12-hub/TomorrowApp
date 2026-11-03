@@ -1104,19 +1104,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  clearDataButton: {
-    marginTop: 24,
-    marginBottom: 24,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#DC2626',
-    alignItems: 'center',
-  },
-  clearDataButtonText: {
-    color: '#DC2626',
-    fontWeight: '600',
-  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
