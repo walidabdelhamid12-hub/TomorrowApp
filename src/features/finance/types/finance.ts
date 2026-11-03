@@ -149,13 +149,19 @@ export type LoanStatus = 'active' | 'completed' | 'settled' | 'closed';
 export interface LoanPayment {
   id: EntityId;
   date: ISODate;
-  /** Total cash amount paid for this installment (principal + interest). */
+  /** Contractual installment amount; late fees are stored separately. */
   amount: number;
 
-  /** Principal portion; absent on legacy records, where amount is treated as principal. */
+  /** Optional late fee charged by the lender; does not reduce the loan balance. */
+  latePaymentFee?: number;
+
+  /** New simple payments do not split the installment into principal and interest. */
+  paymentMode?: 'simple' | 'split';
+
+  /** Principal portion retained for compatibility with older split-payment records. */
   principalAmount?: number;
 
-  /** Interest portion; absent on legacy records and treated as zero. */
+  /** Interest portion retained for compatibility with older split-payment records. */
   interestAmount?: number;
 
   note?: string;
