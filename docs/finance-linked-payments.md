@@ -106,9 +106,23 @@ linked record using the existing safe resolver (or explains missing/ambiguous
 ownership). Display labels such as Loan payment, Debt collection, and Loan received
 come from explicit purpose or resolved ownership; ordinary descriptions can use
 their note/category. Labels never change category IDs, accounting types, or data.
-Preview still shows one record, now explicitly labeled "Showing 1 of N". View all
-is available in the section toolbar even while collapsed; Show less restores the
-preview. Cross-currency transfers show both cash values and both account names.
+The default collapsed list shows the one-record preview, explicitly labeled
+"Showing 1 of N". A static single-line Recent Transactions header uses the normal
+body-strong type size, with one right-hand View all (N)/down-chevron control that
+becomes Show less/up-chevron when expanded. There is no separate header toggle
+or duplicate bottom control. Empty/single-record lists keep that control disabled
+with accurate accessibility state. Title scaling is retained; extreme widths or
+font scales may ellipsize the visible title while its full accessibility label
+remains available. Monetary text is never ellipsized. Cross-currency transfers
+show both cash values and both account names.
+
+One outlined shared Card avoids list shadows/nested row cards and separates rows
+with theme-border hairlines. Actual outgoing expenses use theme expense color for
+amount and icon; incoming income and expense refunds use theme income color.
+Subtle icon backgrounds derive from the same semantic tokens. Transfers and
+credit-card payments use the informational token for both values and icon.
+Category color/name never overrides cash direction. These tokens come from the
+existing light/dark palettes; no stored category, type, or amount is changed.
 
 Manage actions resolve a unique existing parent from explicit entity/payment IDs
 or exact reverse transaction references. Conflicting, duplicated, or missing

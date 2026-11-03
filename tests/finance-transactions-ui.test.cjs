@@ -15,7 +15,7 @@ const hooks = { ...React, useMemo: fn => fn(), useState: initial => {
   if (!(key in states)) states[key] = initial;
   return [states[key], value => { states[key] = typeof value === 'function' ? value(states[key]) : value; }];
 } };
-const theme = { colors: { text: '#111', textSecondary: '#555', danger: '#b00', border: '#ccc' }, spacing: { xl: 24, md: 12 } };
+const theme = { colors: { text: '#111', textSecondary: '#555', danger: '#b00', border: '#ccc' }, spacing: { xl: 24, md: 12, sm: 8 } };
 function Icon(props) { return React.createElement('Icon', props); }
 Icon.glyphMap = { 'cash-outline': 1 };
 Module._load = function(id, parent, main) {
@@ -32,6 +32,7 @@ for (const ext of ['.ts', '.tsx']) require.extensions[ext] = (module, filename) 
   ts.transpileModule(fs.readFileSync(filename, 'utf8'), { fileName: filename,
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, filename);
+const { lightColors, darkColors } = require('../src/theme/colors.ts');
 const { TransactionsSection } = require('../src/features/finance/components/TransactionsSection.tsx');
 const { getTransactionDestination, focusLinkedRecords } = require('../src/features/finance/utils/transactionNavigation.ts');
 const { getTransactionDescription } = require('../src/features/finance/utils/transactionDescription.ts');
@@ -64,7 +65,7 @@ function styles(value) { return Object.assign({}, ...[value].flat(Infinity).filt
 const base = (id, day) => ({ id, amount: 123456789.12, currencyCode: 'USD', accountId: 'a', categoryId: 'c',
   date: '2026-11-' + day, createdAt: '2026-11-' + day, type: 'expense' });
 beforeEach(() => {
-  states = []; cursor = 0; calls = [];
+  states = []; cursor = 0; calls = []; theme.colors = lightColors;
   ledger = { transactions: [base('first', '04'), base('second', '03'), base('third', '02')],
     transfers: [{ id: 'transfer', date: '2026-11-01', createdAt: '2026-11-01', fromAccountId: 'a', toAccountId: 'b',
       fromAmount: 123456789.12, toAmount: 99999999.123, fromCurrencyCode: 'USD', toCurrencyCode: 'OMR', type: 'internal' }],
@@ -75,24 +76,24 @@ beforeEach(() => {
 });
 
 test('View all is accessible while collapsed and exposes all four records', () => {
-  assert.ok(texts().includes('4 total'));
-  assert.equal(nodes('Card').length, 0);
+  assert.ok(texts().includes('Showing 1 of 4'));
+  assert.equal(nodes('Card').length, 1);
   press('View all (4)');
   assert.ok(texts().includes('Showing 4 of 4'));
   assert.equal(texts().filter(t => t === 'Long category name for Android font scaling').length, 3);
   assert.ok(texts().includes('Transfer'));
 });
-test('preview explicitly shows one of four; show less and collapse retain existing behavior', () => {
-  press('Toggle recent transactions section');
+test('the single toggle expands all records and Show less restores the one-record preview', () => {
+
   assert.ok(texts().includes('Showing 1 of 4'));
   assert.equal(texts().filter(t => t === 'Long category name for Android font scaling').length, 1);
   press('View all (4)'); press('Show less');
   assert.ok(texts().includes('Showing 1 of 4'));
-  press('Toggle recent transactions section');
-  assert.equal(nodes('Card').length, 0);
+
+  assert.equal(nodes('Card').length, 1);
 });
 test('full amount, currency, category, date and account use uncapped scalable text', () => {
-  press('Toggle recent transactions section');
+
   for (const text of ['-123,456,789.12 USD', 'Long category name for Android font scaling',
     '2026-11-04 · An account with a very long display name']) {
     const element = nodes('AppText').find(n => n.props.children === text);
@@ -127,7 +128,7 @@ test('amount visibility hides both ordinary and transfer values', () => {
 });
 test('the entire protected row is the Manage action, with no separate action strip', () => {
   ledger.transactions = [{ ...base('linked', '04'), linkedEntityType: 'loan', linkedEntityId: 'loan' }]; ledger.transfers = [];
-  render(); press('Toggle recent transactions section'); press('Manage loan');
+  render(); press('Manage loan');
   assert.deepEqual(calls, [['manage', 'linked']]);
   const row = nodes('Card')[0].props.children[0];
   assert.equal(row.type, 'Pressable');
@@ -137,7 +138,7 @@ test('the entire protected row is the Manage action, with no separate action str
 });
 test('unresolved protected ownership offers explanation action, never generic edits', () => {
   ledger.transactions = [{ ...base('unknown', '04'), purpose: 'loan_payment' }]; ledger.transfers = [];
-  render(); press('Toggle recent transactions section'); press('Linked record unavailable');
+  render(); press('Linked record unavailable');
   assert.deepEqual(calls, [['manage', 'unknown']]);
   assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Edit transaction'), false);
 });
@@ -213,7 +214,7 @@ test('a protected loan payment renders a context label and no generic action con
   ledger.transactions = [{ ...base('linked', '04'), purpose: 'loan_payment', linkedEntityType: 'loan', linkedEntityId: 'loan' }];
   ledger.transfers = [];
   const previous = structuredClone({ ledger, finance });
-  render(); press('Toggle recent transactions section');
+  render();
   assert.ok(texts().includes('Loan payment'));
   press('Manage loan');
   assert.deepEqual(calls, [['manage', 'linked']]);
@@ -239,7 +240,7 @@ test('the action menu supports cancel and Android back without mutating records'
 
 test('ordinary three-decimal currency precision and dynamic sizing are preserved', () => {
   ledger.transactions = [{ ...base('precise', '04'), amount: 123.456, currencyCode: 'KWD' }]; ledger.transfers = [];
-  render(); press('Toggle recent transactions section');
+  render();
   const amount = nodes('AppText').find(n => n.props.children === '-123.456 KWD');
   assert.ok(amount); assert.equal(amount.props.numberOfLines, undefined);
   assert.equal(amount.props.adjustsFontSizeToFit, undefined); assert.notEqual(amount.props.allowFontScaling, false);
@@ -253,4 +254,106 @@ test('ordering stays newest date first, then creation time', () => {
   ]; ledger.transfers = [];
   render(); press('View all (3)');
   assert.deepEqual(texts().filter(t => ['Earlier', 'Later', 'Yesterday'].includes(t)), ['Later', 'Earlier', 'Yesterday']);
+});
+
+test('header has a single-line modest title and exactly one list toggle with accurate state and chevrons', () => {
+  const title = nodes('AppText').find(n => n.props.children === 'Recent Transactions');
+  assert.ok(title);
+  assert.equal(title.props.numberOfLines, 1);
+  assert.equal(title.props.variant, 'bodyStrong');
+  assert.equal(title.props.accessibilityRole, 'header');
+  assert.equal(title.props.accessibilityLabel, 'Recent Transactions');
+  assert.notEqual(title.props.allowFontScaling, false);
+  const controls = () => nodes('Pressable').filter(n => /^(View all \(\d+\)|Show less)$/.test(n.props.accessibilityLabel));
+  assert.equal(controls().length, 1);
+  assert.deepEqual(controls()[0].props.accessibilityState, { expanded: false, disabled: false });
+  assert.ok(nodes('Icon', controls()[0]).some(n => n.props.name === 'chevron-down'));
+  assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Toggle recent transactions section'), false);
+  press('View all (4)');
+  assert.equal(controls().length, 1);
+  assert.deepEqual(controls()[0].props.accessibilityState, { expanded: true, disabled: false });
+  assert.ok(nodes('Icon', controls()[0]).some(n => n.props.name === 'chevron-up'));
+  press('Show less');
+  assert.equal(controls().length, 1);
+  assert.ok(texts().includes('Showing 1 of 4'));
+});
+
+for (const [scheme, palette] of [['light', lightColors], ['dark', darkColors]]) {
+  for (const [movement, txType, entryType, colorKey] of [
+    ['outgoing expense', 'expense', 'normal', 'expense'],
+    ['incoming income', 'income', 'normal', 'income'],
+    ['incoming refund', 'expense', 'refund', 'income'],
+  ]) {
+    test(`${scheme} ${movement} amount, icon and background follow cash direction despite a misleading category color`, () => {
+      theme.colors = palette;
+      ledger.transactions = [{ ...base('colored', '04'), type: txType, entryType }];
+      ledger.transfers = [];
+      ledger.categories[0].name = colorKey === 'expense' ? 'Income' : 'Expenses';
+      ledger.categories[0].color = palette[colorKey === 'expense' ? 'income' : 'expense'];
+      const previous = structuredClone(ledger);
+      render();
+      const row = nodes('Card')[0].props.children[0];
+      const amount = nodes('AppText', row).find(n => n.props.children.includes?.('123,456,789.12 USD'));
+      assert.equal(amount.props.color, colorKey);
+      assert.equal(nodes('Icon', row)[0].props.color, palette[colorKey]);
+      assert.ok(nodes('View', row).some(n => styles(n.props.style).backgroundColor === palette[colorKey] + '18'));
+      assert.deepEqual(ledger, previous);
+    });
+  }
+  for (const type of ['internal', 'credit_card_payment']) {
+    test(`${scheme} ${type} uses informative tokens for both amounts and the icon`, () => {
+      theme.colors = palette; ledger.transactions = [];
+      ledger.transfers[0].type = type;
+      render();
+      const row = nodes('Card')[0].props.children[0];
+      const amounts = nodes('AppText', row).filter(n => n.props.textBreakStrategy === 'simple');
+      assert.equal(amounts.length, 2);
+      assert.ok(amounts.every(n => n.props.color === 'info'));
+      assert.equal(nodes('Icon', row)[0].props.color, palette.info);
+      assert.ok(nodes('View', row).some(n => styles(n.props.style).backgroundColor === palette.info + '18'));
+    });
+  }
+}
+
+test('one outlined card shares hairline dividers without nested cards or per-row shadows', () => {
+  press('View all (4)');
+  assert.equal(nodes('Card').length, 1);
+  const card = nodes('Card')[0];
+  assert.equal(card.props.variant, 'outlined');
+  assert.equal(card.props.padded, false);
+  const rows = card.props.children;
+  assert.equal(rows.length, 4);
+  rows.forEach((row, index) => {
+    const style = styles(typeof row.props.style === 'function' ? row.props.style({ pressed: false }) : row.props.style);
+    assert.equal(style.borderTopWidth, index ? 1 : undefined); // mocked hairlineWidth
+    if (index) assert.equal(style.borderTopColor, lightColors.border);
+    assert.equal(style.elevation, undefined);
+    assert.equal(style.shadowOpacity, undefined);
+  });
+});
+
+for (const count of [0, 1]) {
+  test(`${count} records preserve correct counts and disable the unnecessary expansion`, () => {
+    ledger.transactions = ledger.transactions.slice(0, count); ledger.transfers = [];
+    render();
+    const toggle = nodes('Pressable').find(n => n.props.accessibilityLabel === 'View all (' + count + ')');
+    assert.equal(toggle.props.disabled, true);
+    assert.deepEqual(toggle.props.accessibilityState, { expanded: false, disabled: true });
+    assert.ok(texts().includes('Showing ' + count + ' of ' + count));
+    assert.equal(nodes('Card').length, 1);
+  });
+}
+
+test('protected rows retain expense semantics and hide money in both text and accessibility when privacy is enabled', () => {
+  ledger.transactions = [{ ...base('linked', '04'), purpose: 'loan_payment', linkedEntityType: 'loan', linkedEntityId: 'loan' }];
+  ledger.transfers = [];
+  render({ amountsVisible: false });
+  const row = nodes('Card')[0].props.children[0];
+  assert.equal(row.type, 'Pressable');
+  assert.equal(nodes('Icon', row)[0].props.color, lightColors.expense);
+  assert.ok(!row.props.accessibilityLabel.includes('123,456,789'));
+  assert.ok(row.props.accessibilityLabel.includes('••••••'));
+  assert.equal(nodes('Pressable', row).length, 1);
+  row.props.onPress();
+  assert.deepEqual(calls, [['manage', 'linked']]);
 });

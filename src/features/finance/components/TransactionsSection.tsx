@@ -10,7 +10,7 @@ import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { getTransactionDescription } from '@/features/finance/utils/transactionDescription';
 import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
 import { getTransactionDestination } from '@/features/finance/utils/transactionNavigation';
-import { moduleColors, useTheme } from '@/theme';
+import { useTheme } from '@/theme';
 
 const PREVIEW_COUNT = 1;
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -28,7 +28,7 @@ function RowAction({ label, icon, onPress, danger = false }: {
   label: string; icon: IconName; onPress: () => void; danger?: boolean;
 }) {
   const { colors } = useTheme();
-  const tint = danger ? colors.danger : moduleColors.finance;
+  const tint = danger ? colors.danger : colors.primary;
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
       style={({ pressed }) => [styles.actionButton, { opacity: pressed ? 0.65 : 1 }]}>
@@ -48,7 +48,6 @@ export function TransactionsSection({
   const accounts = useLedgerStore(s => s.accounts);
   const loans = useFinanceStore(s => s.loans);
   const debts = useFinanceStore(s => s.debts);
-  const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [actionItem, setActionItem] = useState<{ kind: 'transaction' | 'transfer'; id: string } | null>(null);
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -60,8 +59,9 @@ export function TransactionsSection({
       date: transfer.date, createdAt: transfer.createdAt, transfer })),
   ].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)),
   [transactions, transfers]);
-  const visible = showAll ? sorted : sorted.slice(0, PREVIEW_COUNT);
-  const toggleAll = () => { setExpanded(true); setShowAll(value => !value); };
+  const expanded = showAll && sorted.length > PREVIEW_COUNT;
+  const visible = expanded ? sorted : sorted.slice(0, PREVIEW_COUNT);
+  const toggleAll = () => setShowAll(value => !value);
 
   const selectedTransaction = actionItem?.kind === 'transaction'
     ? transactions.find(tx => tx.id === actionItem.id) : undefined;
@@ -93,29 +93,33 @@ export function TransactionsSection({
   return (
     <View style={{ marginTop: spacing.xl }}>
       <View style={styles.toolbar}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Toggle recent transactions section"
-          accessibilityState={{ expanded }} style={styles.sectionHeader}
-          onPress={() => { setExpanded(value => !value); setShowAll(false); }}>
-          <Ionicons name="swap-horizontal-outline" size={20} color={moduleColors.finance} accessible={false} />
-          <View style={styles.headingText}>
-            <AppText variant="h3">Recent transactions</AppText>
-            <AppText variant="caption" color="textSecondary">
-              {expanded ? 'Showing ' + visible.length + ' of ' + sorted.length : sorted.length + ' total'}
-            </AppText>
-          </View>
-          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20}
-            color={colors.textSecondary} accessible={false} />
+        <View style={styles.sectionHeader}>
+          <Ionicons name="swap-horizontal-outline" size={20} color={colors.textSecondary} accessible={false} />
+          <AppText variant="bodyStrong" numberOfLines={1} ellipsizeMode="tail"
+            accessibilityRole="header" accessibilityLabel="Recent Transactions" style={styles.headingText}>
+            Recent Transactions
+          </AppText>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={expanded ? 'Show less' : 'View all (' + sorted.length + ')'}
+          accessibilityState={{ expanded, disabled: sorted.length <= PREVIEW_COUNT }} disabled={sorted.length <= PREVIEW_COUNT}
+          accessibilityHint={sorted.length <= PREVIEW_COUNT ? 'All transactions are already visible'
+            : expanded ? 'Return to the most recent transaction' : 'Show every transaction'}
+          onPress={toggleAll} style={({ pressed }) => [styles.listToggle, { opacity: pressed ? 0.65 : 1 }]}>
+          <AppText variant="caption" color={sorted.length <= PREVIEW_COUNT ? 'textSecondary' : 'primary'} style={styles.actionLabel}>
+            {expanded ? 'Show less' : 'View all (' + sorted.length + ')'}
+          </AppText>
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16}
+            color={sorted.length <= PREVIEW_COUNT ? colors.textSecondary : colors.primary} accessible={false} />
         </Pressable>
-        {sorted.length > PREVIEW_COUNT && (
-          <RowAction label={showAll ? 'Show less' : 'View all (' + sorted.length + ')'}
-            icon={showAll ? 'chevron-up' : 'list-outline'} onPress={toggleAll} />
-        )}
       </View>
+      <AppText variant="label" color="textSecondary" style={{ marginBottom: spacing.sm }}>
+        {'Showing ' + visible.length + ' of ' + sorted.length}
+      </AppText>
 
-      {expanded && (sorted.length === 0 ? (
+      {sorted.length === 0 ? (
         <Card variant="filled"><AppText color="textSecondary">No transactions yet. Tap "Add transaction" to start.</AppText></Card>
       ) : (
-        <Card padded={false}>
+        <Card padded={false} variant="outlined">
           {visible.map((item, index) => {
             const rowStyle = [styles.row,
               index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }];
@@ -126,19 +130,19 @@ export function TransactionsSection({
               const cardPayment = transfer.type === 'credit_card_payment';
               return (
                 <View key={'transfer-' + item.id} style={rowStyle}>
-                  <View style={styles.iconCircle}>
+                  <View style={[styles.iconCircle, { backgroundColor: colors.info + '18' }]}>
                     <Ionicons name={cardPayment ? 'card-outline' : 'swap-horizontal-outline'} size={20}
-                      color={moduleColors.finance} accessible={false} />
+                      color={colors.info} accessible={false} />
                   </View>
                   <View style={styles.details}>
                     <View style={styles.primary}>
                       <AppText variant="caption" style={styles.name}>{cardPayment ? 'Credit card payment' : 'Transfer'}</AppText>
-                      <AppText variant="caption" style={styles.amount} textBreakStrategy="simple">
+                      <AppText variant="caption" color="info" style={styles.amount} textBreakStrategy="simple">
                         {amountsVisible ? formatAmount(transfer.fromAmount ?? transfer.amount, fromCurrency) + ' ' + fromCurrency : '••••••'}
                       </AppText>
                     </View>
                     {fromCurrency !== toCurrency && (
-                      <AppText variant="caption" style={styles.amount} textBreakStrategy="simple">
+                      <AppText variant="caption" color="info" style={styles.amount} textBreakStrategy="simple">
                         {amountsVisible ? '→ ' + formatAmount(transfer.toAmount ?? transfer.amount, toCurrency) + ' ' + toCurrency : '••••••'}
                       </AppText>
                     )}
@@ -155,6 +159,7 @@ export function TransactionsSection({
             const category = categoryById.get(tx.categoryId);
             const account = accountById.get(tx.accountId);
             const expense = tx.type === 'expense' && tx.entryType !== 'refund';
+            const movementColor = expense ? colors.expense : colors.income;
             const icon = category?.icon ?? '';
             const protectedRecord = isProtectedTransaction(tx, { loans, debts });
             const destination = protectedRecord ? getTransactionDestination(tx, { loans, debts }) : null;
@@ -164,9 +169,9 @@ export function TransactionsSection({
             const metadata = tx.date + ' · ' + (account?.name ?? 'Unavailable account');
             const content = (
               <>
-                <View style={styles.iconCircle}>
+                <View style={[styles.iconCircle, { backgroundColor: movementColor + '18' }]}>
                   <Ionicons name={protectedRecord ? 'wallet-outline' : icon in Ionicons.glyphMap ? icon as IconName : 'receipt-outline'}
-                    size={20} color={category?.color ?? moduleColors.finance} accessible={false} />
+                    size={20} color={movementColor} accessible={false} />
                 </View>
                 <View style={styles.details}>
                   <View style={styles.primary}>
@@ -195,10 +200,10 @@ export function TransactionsSection({
             );
           })}
         </Card>
-      ))}
+      )}
       {actionItem && (
         <Modal transparent animationType="fade" visible onRequestClose={() => setActionItem(null)}>
-          <View style={styles.modalBackdrop}>
+          <View style={[styles.modalBackdrop, { backgroundColor: colors.overlay }]}>
             <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Close transaction actions"
               onPress={() => setActionItem(null)} />
             <View accessibilityViewIsModal style={[styles.actionSheet, { backgroundColor: colors.surface }]}>
@@ -218,27 +223,26 @@ export function TransactionsSection({
           </View>
         </Modal>
       )}
-      {expanded && showAll && sorted.length > PREVIEW_COUNT && (
-        <RowAction label="Show less" icon="chevron-up" onPress={toggleAll} />
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 8 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, flexGrow: 1, flexBasis: 200 },
-  headingText: { flex: 1, minWidth: 0 },
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 },
+  headingText: { flexShrink: 1, minWidth: 0 },
+  listToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 48, minWidth: 48,
+    paddingHorizontal: 4, paddingVertical: 8, maxWidth: '50%' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 8, minHeight: 60 },
   primary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 8 },
   details: { flex: 1, minWidth: 0, gap: 2 },
   iconCircle: { width: 24, height: 24, flexShrink: 0, alignSelf: 'flex-start', marginTop: 2, borderRadius: 12, alignItems: 'center',
-    justifyContent: 'center', backgroundColor: 'rgba(128,128,128,0.12)' },
+    justifyContent: 'center' },
   name: { fontWeight: '600', flexGrow: 1, flexShrink: 1, flexBasis: 72 },
   amount: { fontWeight: '600', fontVariant: ['tabular-nums'], maxWidth: '100%' },
   metadata: { letterSpacing: 0 },
   moreButton: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
-  modalBackdrop: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalBackdrop: { flex: 1, justifyContent: 'center', padding: 24 },
   actionSheet: { padding: 16, borderRadius: 16, gap: 8 },
   actionButton: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, minWidth: 48,
     paddingHorizontal: 8, paddingVertical: 8, maxWidth: '100%' },
