@@ -560,7 +560,6 @@ export default function FinanceHomeScreen() {
 
       <TotalCard
         baseCurrency={summary.baseCurrency}
-        total={summary.total}
         accountsTotal={summary.accountsTotal}
         assetsTotal={summary.assetsTotal}
         loansRemainingTotal={summary.loansRemainingTotal}
