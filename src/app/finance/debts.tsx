@@ -237,7 +237,7 @@ export default function DebtsScreen() {
       if (data.amount < alreadyPaid) {
         Alert.alert(
           'Invalid amount',
-          `The debt amount cannot be less than the amount already paid (${formatAmount(alreadyPaid)}).`,
+          `The debt amount cannot be less than the amount already paid (${formatAmount(alreadyPaid, editingDebt.currencyCode)}).`,
         );
         return;
       }
@@ -340,7 +340,7 @@ export default function DebtsScreen() {
     if (amount > remaining) {
       Alert.alert(
         'Amount too large',
-        `The remaining amount is ${formatAmount(remaining)} ${paymentDebt.currencyCode}.`,
+        `The remaining amount is ${formatAmount(remaining, paymentDebt.currencyCode)} ${paymentDebt.currencyCode}.`,
       );
       return;
     }
@@ -641,7 +641,7 @@ export default function DebtsScreen() {
 
     const message =
       `Delete this ${debt.direction === 'receivable' ? 'collection' : 'payment'} of ` +
-      `${formatAmount(payment.amount)} ${debt.currencyCode}? The linked account balance will be reversed.`;
+      `${formatAmount(payment.amount, debt.currencyCode)} ${debt.currencyCode}? The linked account balance will be reversed.`;
 
     if (Platform.OS === 'web') {
       if (window.confirm(message)) performDelete();
@@ -687,7 +687,7 @@ export default function DebtsScreen() {
     if (amount > maximumAllowed) {
       Alert.alert(
         'Amount too large',
-        `The maximum allowed for this payment is ${formatAmount(maximumAllowed)} ${debt.currencyCode}.`,
+        `The maximum allowed for this payment is ${formatAmount(maximumAllowed, debt.currencyCode)} ${debt.currencyCode}.`,
       );
       return;
     }
@@ -883,7 +883,7 @@ export default function DebtsScreen() {
           ) : (
             currencyTotals.map((item) => (
               <AppText key={item.currencyCode} style={styles.summaryAmount}>
-                {item.currencyCode} {formatAmount(item.total)}
+                {item.currencyCode} {formatAmount(item.total, item.currencyCode)}
               </AppText>
             ))
           )}
@@ -904,7 +904,7 @@ export default function DebtsScreen() {
                 key={item.currencyCode}
                 style={[styles.summaryAmount, { color: '#059669' }]}
               >
-                {item.currencyCode} {formatAmount(item.paid)}
+                {item.currencyCode} {formatAmount(item.paid, item.currencyCode)}
               </AppText>
             ))
           )}
@@ -937,7 +937,7 @@ export default function DebtsScreen() {
                   },
                 ]}
               >
-                {item.currencyCode} {formatAmount(item.remaining)}
+                {item.currencyCode} {formatAmount(item.remaining, item.currencyCode)}
               </AppText>
             ))
           )}
@@ -1023,7 +1023,7 @@ export default function DebtsScreen() {
                       Remaining
                     </AppText>
                     <AppText style={styles.remainingAmount}>
-                      {formatAmount(remaining)} {debt.currencyCode}
+                      {formatAmount(remaining, paymentDebt.currencyCode)} {debt.currencyCode}
                     </AppText>
                   </View>
 
@@ -1056,7 +1056,7 @@ export default function DebtsScreen() {
 
                 <View style={styles.progressLabels}>
                   <AppText variant="caption" color="textSecondary">
-                    Paid / collected: {formatAmount(paid)}
+                    Paid / collected: {formatAmount(paid, debt.currencyCode)}
                   </AppText>
                   <Ionicons
                     name={expanded ? 'chevron-up' : 'chevron-down'}
@@ -1102,7 +1102,7 @@ export default function DebtsScreen() {
 
                           <View style={styles.paymentActions}>
                             <AppText style={styles.paymentAmount}>
-                              {formatAmount(payment.amount)} {debt.currencyCode}
+                              {formatAmount(payment.amount, debt.currencyCode)} {debt.currencyCode}
                             </AppText>
 
                             <View style={styles.paymentActionButtons}>
@@ -1379,7 +1379,7 @@ function ModalPayment({
                 Remaining amount
               </AppText>
               <AppText style={styles.modalRemaining}>
-                {formatAmount(getRemainingAmount(debt))} {debt.currencyCode}
+                {formatAmount(getRemainingAmount(debt), debt.currencyCode)} {debt.currencyCode}
               </AppText>
 
               <AppText style={styles.fieldLabel}>Amount</AppText>
@@ -1760,7 +1760,7 @@ function ModalEditPayment({
               </AppText>
 
               <AppText style={styles.modalRemaining}>
-                {formatAmount(maximumAllowed)} {debt.currencyCode}
+                {formatAmount(maximumAllowed, debt.currencyCode)} {debt.currencyCode}
               </AppText>
 
               <AppText style={styles.fieldLabel}>Amount</AppText>
