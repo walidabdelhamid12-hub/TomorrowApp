@@ -343,13 +343,27 @@ export const useFinanceStore = create<FinanceStore>()(
         })),
 
       addDebtPayment: (debtId, input) => {
-        if (!get().debts.some((debt) => debt.id === debtId)) {
+        const debt = get().debts.find((item) => item.id === debtId);
+        if (!debt) return null;
+
+        const amount = roundMoney(input.amount);
+        const alreadyPaid = roundMoney(
+          (debt.payments ?? []).reduce((sum, payment) => sum + payment.amount, 0)
+        );
+        const remaining = roundMoney(debt.amount - alreadyPaid);
+
+        if (
+          !Number.isFinite(amount) ||
+          amount <= 0 ||
+          !Number.isFinite(remaining) ||
+          amount > remaining
+        ) {
           return null;
         }
 
         const payment: DebtPayment = {
           ...input,
-          amount: roundMoney(input.amount),
+          amount,
           id: generateId('dpy'),
         };
 
@@ -363,20 +377,43 @@ export const useFinanceStore = create<FinanceStore>()(
         return payment.id;
       },
 
-      updateDebtPayment: (debtId, paymentId, patch) =>
+      updateDebtPayment: (debtId, paymentId, patch) => {
+        const debt = get().debts.find((item) => item.id === debtId);
+        const currentPayment = debt?.payments.find((item) => item.id === paymentId);
+        if (!debt || !currentPayment) return;
+
+        const cleanPatch = withRounded(definedOnly(patch), ['amount']);
+        const nextAmount =
+          typeof cleanPatch.amount === 'number'
+            ? cleanPatch.amount
+            : currentPayment.amount;
+        const otherPayments = roundMoney(
+          debt.payments
+            .filter((payment) => payment.id !== paymentId)
+            .reduce((sum, payment) => sum + payment.amount, 0)
+        );
+        const remainingForPayment = roundMoney(debt.amount - otherPayments);
+
+        if (
+          !Number.isFinite(nextAmount) ||
+          nextAmount <= 0 ||
+          !Number.isFinite(remainingForPayment) ||
+          nextAmount > remainingForPayment
+        ) {
+          return;
+        }
+
         set((state) => ({
-          debts: patchParent(state.debts, debtId, (debt) => ({
-            ...debt,
-            payments: debt.payments.map((payment) =>
+          debts: patchParent(state.debts, debtId, (currentDebt) => ({
+            ...currentDebt,
+            payments: currentDebt.payments.map((payment) =>
               payment.id === paymentId
-                ? {
-                    ...payment,
-                    ...withRounded(definedOnly(patch), ['amount']),
-                  }
+                ? { ...payment, ...cleanPatch }
                 : payment
             ),
           })),
-        })),
+        }));
+      },
 
       deleteDebtPayment: (debtId, paymentId) =>
         set((state) => ({
