@@ -10,15 +10,15 @@ const RETRY_DELAY_MS = 5 * 60 * 1000;
 
 function getLatestDueSlot(now: Date): number {
   const slot = new Date(now);
-  const hour = now.getHours();
+  const minutes = now.getHours() * 60 + now.getMinutes();
 
-  if (hour >= 18) {
-    slot.setHours(18, 0, 0, 0);
-  } else if (hour >= 6) {
-    slot.setHours(6, 0, 0, 0);
+  if (minutes >= 16 * 60 + 30) {
+    slot.setHours(16, 30, 0, 0);
+  } else if (minutes >= 8 * 60 + 30) {
+    slot.setHours(8, 30, 0, 0);
   } else {
     slot.setDate(slot.getDate() - 1);
-    slot.setHours(18, 0, 0, 0);
+    slot.setHours(16, 30, 0, 0);
   }
 
   return slot.getTime();
