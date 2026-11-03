@@ -59,7 +59,7 @@ interface FinanceActions {
   ) => void;
   deleteAssetEntry: (assetId: EntityId, entryId: EntityId) => void;
 
-  addDebt: (input: NewDebtInput) => EntityId;
+  addDebt: (input: NewDebtInput) => EntityId | null;
   updateDebt: (id: EntityId, patch: DebtPatch) => void;
   deleteDebt: (id: EntityId) => void;
   addDebtPayment: (
@@ -311,11 +311,14 @@ export const useFinanceStore = create<FinanceStore>()(
 
       /* Debts */
       addDebt: (input) => {
+        const amount = roundMoney(input.amount);
+        if (!Number.isFinite(amount) || amount <= 0) return null;
+
         const timestamp = now();
 
         const debt: Debt = {
           ...input,
-          amount: roundMoney(input.amount),
+          amount,
           id: generateId('dbt'),
           payments: [],
           createdAt: timestamp,
@@ -329,13 +332,31 @@ export const useFinanceStore = create<FinanceStore>()(
         return debt.id;
       },
 
-      updateDebt: (id, patch) =>
+      updateDebt: (id, patch) => {
+        const debt = get().debts.find((item) => item.id === id);
+        if (!debt) return;
+
+        const cleanPatch = withRounded(definedOnly(patch), ['amount']);
+        if (typeof cleanPatch.amount === 'number') {
+          const alreadyPaid = roundMoney(
+            (debt.payments ?? []).reduce((sum, payment) => sum + payment.amount, 0)
+          );
+          if (
+            !Number.isFinite(cleanPatch.amount) ||
+            cleanPatch.amount <= 0 ||
+            cleanPatch.amount < alreadyPaid
+          ) {
+            return;
+          }
+        }
+
         set((state) => ({
-          debts: patchParent(state.debts, id, (debt) => ({
-            ...debt,
-            ...withRounded(definedOnly(patch), ['amount']),
+          debts: patchParent(state.debts, id, (currentDebt) => ({
+            ...currentDebt,
+            ...cleanPatch,
           })),
-        })),
+        }));
+      },
 
       deleteDebt: (id) =>
         set((state) => ({
