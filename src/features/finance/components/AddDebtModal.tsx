@@ -14,6 +14,7 @@ import {
 
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { parseAmount } from '@/features/finance/utils/money';
+import { roundMoney } from '@/features/finance/utils/finance';
 import type {
     CurrencyCode,
     Debt,
@@ -248,7 +249,8 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
 
   const handleSave = () => {
     const cleanName = personName.trim();
-    const numericAmount = parseAmount(amount);
+    const parsedAmount = parseAmount(amount);
+    const numericAmount = parsedAmount === null ? null : roundMoney(parsedAmount);
     const cleanDate = date.trim();
     const cleanDueDate = dueDate.trim();
 
