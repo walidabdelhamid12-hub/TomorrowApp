@@ -32,7 +32,6 @@ export type FinanceNetworkKey =
 
 interface TotalCardProps {
   baseCurrency: string;
-  total: number;
   accountsTotal: number;
   assetsTotal: number;
   loansRemainingTotal: number;
@@ -265,7 +264,6 @@ function NetworkCard({
 
 export function TotalCard({
   baseCurrency,
-  total,
   accountsTotal,
   assetsTotal,
   loansRemainingTotal,
@@ -355,14 +353,14 @@ export function TotalCard({
             </View>
 
             <AppText style={styles.netWorthLabel}>
-              NET WORTH
+              TOTAL LIQUIDITY
             </AppText>
           </View>
 
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              amountsVisible ? 'Hide total balance' : 'Show total balance'
+              amountsVisible ? 'Hide total liquidity' : 'Show total liquidity'
             }
             accessibilityState={{ expanded: amountsVisible }}
             onPress={onToggleAmounts}
@@ -386,7 +384,7 @@ export function TotalCard({
               minimumFontScale={0.75}
               style={styles.netWorthAmount}
             >
-              {amountsVisible ? formatAmount(total) : hiddenValue}
+              {amountsVisible ? formatAmount(accountsTotal) : hiddenValue}
             </AppText>
           </View>
 
