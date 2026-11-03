@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
+import { parseAmount } from '@/features/finance/utils/money';
 import type {
     CurrencyCode,
     Debt,
@@ -247,8 +248,7 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
 
   const handleSave = () => {
     const cleanName = personName.trim();
-    const cleanAmount = amount.trim().replace(/,/g, '');
-    const numericAmount = Number(cleanAmount);
+    const numericAmount = parseAmount(amount);
     const cleanDate = date.trim();
     const cleanDueDate = dueDate.trim();
 
@@ -258,8 +258,7 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
     }
 
     if (
-      !cleanAmount ||
-      !Number.isFinite(numericAmount) ||
+      numericAmount === null ||
       numericAmount <= 0
     ) {
       Alert.alert('Invalid amount', 'Please enter an amount greater than zero.');
