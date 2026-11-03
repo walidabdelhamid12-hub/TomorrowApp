@@ -224,8 +224,8 @@ export function TransactionsSection({
                       >
                         {amountsVisible
                           ? sameCurrency
-                            ? `${formatAmount(fromAmount)} ${fromCurrency}`
-                            : `${formatAmount(fromAmount)} ${fromCurrency}\n→ ${formatAmount(toAmount)} ${toCurrency}`
+                            ? `${formatAmount(fromAmount, fromCurrency)} ${fromCurrency}`
+                            : `${formatAmount(fromAmount)} ${fromCurrency}\n→ ${formatAmount(toAmount, toCurrency)} ${toCurrency}`
                           : '••••••'}
                       </AppText>
 
@@ -327,7 +327,7 @@ export function TransactionsSection({
                       numberOfLines={1}
                     >
                       {amountsVisible
-                        ? `${isExpense && !isRefund ? '-' : '+'}${formatAmount(tx.amount)} ${tx.currencyCode}`
+                        ? `${isExpense && !isRefund ? '-' : '+'}${formatAmount(tx.amount, tx.currencyCode)} ${tx.currencyCode}`
                         : '••••••'}
                     </AppText>
 
