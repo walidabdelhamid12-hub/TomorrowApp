@@ -642,6 +642,12 @@ export const useCurrencyStore = create<CurrencyStore>()(
                     Date.parse(payload.lastLiveUpdatedAt),
                   ).toISOString()
                 : state.lastLiveUpdatedAt,
+            // Clear the manual-update marker only after a complete live refresh.
+            // Partial refreshes may leave some manually entered values untouched.
+            lastManualUpdatedAt:
+              payload.lastLiveUpdatedAt !== undefined
+                ? null
+                : state.lastManualUpdatedAt,
           };
         });
 
