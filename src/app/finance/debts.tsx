@@ -132,6 +132,9 @@ export default function DebtsScreen() {
   const updateDebtPayment = useFinanceStore(
     (state) => state.updateDebtPayment,
   );
+  const linkDebtPaymentTransaction = useFinanceStore(
+    (state) => state.linkDebtPaymentTransaction,
+  );
 
   const accounts = useLedgerStore((state) => state.accounts);
   const categories = useLedgerStore((state) => state.categories);
@@ -140,6 +143,9 @@ export default function DebtsScreen() {
   );
   const updateTransaction = useLedgerStore(
     (state) => state.updateTransaction,
+  );
+  const removeTransaction = useLedgerStore(
+    (state) => state.removeTransaction,
   );
 
   const [activeTab, setActiveTab] = useState<DebtTab>(
@@ -418,9 +424,23 @@ export default function DebtsScreen() {
       return;
     }
 
-    updateDebtPayment(paymentDebt.id, paymentId, {
-      ledgerTransactionId: transactionId,
-    });
+    const paymentLinked = linkDebtPaymentTransaction(
+      paymentDebt.id,
+      paymentId,
+      transactionId,
+    );
+
+    if (!paymentLinked) {
+      // Roll back both sides if the newly posted transaction cannot be linked.
+      removeTransaction(transactionId);
+      deleteDebtPayment(paymentDebt.id, paymentId);
+
+      Alert.alert(
+        'Payment link failed',
+        'The account transaction could not be linked to the debt payment. Both changes were rolled back.',
+      );
+      return;
+    }
 
     closePayment();
 
