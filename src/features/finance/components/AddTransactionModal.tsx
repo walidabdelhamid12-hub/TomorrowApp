@@ -29,8 +29,8 @@ import type {
   Transaction,
   TransactionType,
 } from '@/features/finance/types/ledger';
-import { todayISO } from '@/features/finance/utils/finance';
-import { parseAmount } from '@/features/finance/utils/money';
+import { roundMoney, todayISO } from '@/features/finance/utils/finance';
+import { formatMoney, parseAmount } from '@/features/finance/utils/money';
 import { moduleColors, useTheme } from '@/theme';
 import { isValidISODate } from '@/utils/input';
 
@@ -169,15 +169,19 @@ export function AddTransactionModal({
           item.id !== transaction?.id,
       )
       .map((item) => {
-        const refundedAmount = transactions
-          .filter(
-            (refund) =>
-              refund.entryType === 'refund' &&
-              refund.relatedTransactionId === item.id,
-          )
-          .reduce((total, refund) => total + refund.amount, 0);
+        const refundedAmount = roundMoney(
+          transactions
+            .filter(
+              (refund) =>
+                refund.entryType === 'refund' &&
+                refund.relatedTransactionId === item.id,
+            )
+            .reduce((total, refund) => total + refund.amount, 0),
+        );
 
-        const remainingAmount = Math.max(0, item.amount - refundedAmount);
+        const remainingAmount = roundMoney(
+          Math.max(0, item.amount - refundedAmount),
+        );
 
         return {
           transaction: item,
@@ -428,10 +432,7 @@ export function AddTransactionModal({
 
       if (value > selectedOriginal.remainingAmount) {
         setError(
-          `The remaining refundable amount is ${selectedOriginal.remainingAmount.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}.`,
+          `The remaining refundable amount is ${formatMoney(selectedOriginal.remainingAmount, selectedOriginal.transaction.currencyCode)}.`,
         );
         return;
       }
@@ -556,10 +557,7 @@ export function AddTransactionModal({
                     label="ORIGINAL PURCHASE"
                     options={refundableTransactions.map((item) => ({
                       value: item.transaction.id,
-                      label: `${item.transaction.date} · ${item.transaction.note?.trim() || 'Purchase'} · ${item.remainingAmount.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })} ${getCurrencyLabel(item.transaction.currencyCode)}`,
+                      label: `${item.transaction.date} · ${item.transaction.note?.trim() || 'Purchase'} · ${formatMoney(item.remainingAmount, item.transaction.currencyCode)} ${getCurrencyLabel(item.transaction.currencyCode)}`,
                       color: moduleColors.finance,
                     }))}
                     value={originalTransactionId}
@@ -574,20 +572,11 @@ export function AddTransactionModal({
                 {selectedOriginal ? (
                   <AppText variant="caption" color="textSecondary">
                     Original amount:{' '}
-                    {selectedOriginal.transaction.amount.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatMoney(selectedOriginal.transaction.amount, selectedOriginal.transaction.currencyCode)}
                     {' · '}Already refunded:{' '}
-                    {selectedOriginal.refundedAmount.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatMoney(selectedOriginal.refundedAmount, selectedOriginal.transaction.currencyCode)}
                     {' · '}Remaining:{' '}
-                    {selectedOriginal.remainingAmount.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatMoney(selectedOriginal.remainingAmount, selectedOriginal.transaction.currencyCode)}
                   </AppText>
                 ) : null}
 
