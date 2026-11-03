@@ -101,6 +101,7 @@ export default function FinanceHomeScreen() {
   const assets = useFinanceStore((state) => state.assets);
   const addAsset = useFinanceStore((state) => state.addAsset);
   const updateAsset = useFinanceStore((state) => state.updateAsset);
+  const deleteAsset = useFinanceStore((state) => state.deleteAsset);
   const addAssetEntry = useFinanceStore((state) => state.addAssetEntry);
   const updateAssetEntry = useFinanceStore(
     (state) => state.updateAssetEntry,
@@ -301,6 +302,29 @@ export default function FinanceHomeScreen() {
       transactions: [],
       transfers: [],
     });
+  };
+
+  const confirmDeleteAsset = (asset: Asset) => {
+    const message =
+      'This will permanently delete the asset and all of its recorded movements.';
+
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        `Delete "${asset.name}" and all its movements?\\n\\n${message}`,
+      );
+
+      if (confirmed) deleteAsset(asset.id);
+      return;
+    }
+
+    Alert.alert(`Delete "${asset.name}"?`, message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deleteAsset(asset.id),
+      },
+    ]);
   };
 
   const confirmDeleteAccount = (account: Account) => {
@@ -960,6 +984,23 @@ export default function FinanceHomeScreen() {
 
                           <AppText style={{ color: accent }}>
                             Edit
+                          </AppText>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => confirmDeleteAsset(asset)}
+                          style={styles.assetListAction}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete ${asset.name}`}
+                        >
+                          <Ionicons
+                            name="trash-outline"
+                            size={17}
+                            color="#DC2626"
+                          />
+
+                          <AppText style={{ color: '#DC2626' }}>
+                            Delete
                           </AppText>
                         </Pressable>
                       </View>
