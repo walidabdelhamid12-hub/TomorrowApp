@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { RatesAutoRefreshProvider } from '@/features/finance/providers/RatesAutoRefreshProvider';
 import { ThemeProvider, useTheme } from '@/theme';
 
 /** Separate component so it can read the theme from <ThemeProvider>. */
@@ -27,7 +28,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <RootStack />
+        <RatesAutoRefreshProvider>
+          <RootStack />
+        </RatesAutoRefreshProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
