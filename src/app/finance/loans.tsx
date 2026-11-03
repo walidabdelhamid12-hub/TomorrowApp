@@ -264,18 +264,60 @@ export default function LoansScreen() {
     if (editingPayment) {
       const txId = editingPayment.ledgerTransactionId;
       if (txId && !account) { Alert.alert('Payment method locked', 'This payment is linked to an account. Keep a registered account selected.'); return; }
+      const previous = txId ? transactions.find(t => t.id === txId) : undefined;
+      if (txId && !previous) { Alert.alert('Update failed', 'The linked account transaction could not be found. No changes were made.'); return; }
       if (txId && account) {
-        const previous = transactions.find(t => t.id === txId);
         const ok = updateTransaction(txId, { amount, accountId: account.id, date: paymentDate, note: note.trim() || `Loan payment: ${selectedLoan.name}` });
         if (!ok) { Alert.alert('Update failed', 'The linked account transaction could not be updated.'); return; }
-        updateLoanPayment(selectedLoan.id, editingPayment.id, { amount, date: paymentDate, note: note.trim() || undefined, accountId: account.id, paymentMethodLabel: undefined, principalAmount, interestAmount });
-        const saved = useFinanceStore.getState().loans.find(l => l.id === selectedLoan.id)?.payments.find(p => p.id === editingPayment.id);
-        if (!saved || saved.amount !== amount) { if (previous) updateTransaction(txId, { amount: previous.amount, accountId: previous.accountId, date: previous.date, note: previous.note }); Alert.alert('Update rejected', 'Account transaction was restored.'); return; }
-      } else {
-        updateLoanPayment(selectedLoan.id, editingPayment.id, { amount, date: paymentDate, note: note.trim() || undefined, accountId: undefined, paymentMethodLabel: customLabel, principalAmount, interestAmount });
       }
-      if (selectedLoan.settlementPaymentId === editingPayment.id) updateLoan(selectedLoan.id, { status: 'settled', settlementAmount: amount, settlementDate: paymentDate, settlementAccountId: account?.id, settlementNote: note.trim() || undefined });
-      else { const paid = selectedLoan.payments.reduce((sum, p) => sum + (p.id === editingPayment.id ? amount : p.amount), 0); updateLoan(selectedLoan.id, { status: scheduledTotal - paid <= 0.001 ? 'completed' : 'active' }); }
+
+      updateLoanPayment(selectedLoan.id, editingPayment.id, {
+        amount,
+        date: paymentDate,
+        note: note.trim() || undefined,
+        accountId: account?.id,
+        paymentMethodLabel: account ? undefined : customLabel,
+        principalAmount,
+        interestAmount,
+      });
+      const saved = useFinanceStore.getState().loans
+        .find(l => l.id === selectedLoan.id)?.payments
+        .find(p => p.id === editingPayment.id);
+      const paymentSaved = !!saved &&
+        Math.abs(saved.amount - amount) <= 0.001 &&
+        Math.abs((saved.principalAmount ?? saved.amount) - principalAmount) <= 0.001 &&
+        Math.abs((saved.interestAmount ?? 0) - interestAmount) <= 0.001 &&
+        saved.date === paymentDate;
+      if (!paymentSaved) {
+        if (txId && previous) {
+          updateTransaction(txId, {
+            amount: previous.amount,
+            accountId: previous.accountId,
+            date: previous.date,
+            note: previous.note,
+          });
+        }
+        Alert.alert('Update rejected', txId ? 'The account transaction was restored because the payment details were rejected.' : 'The payment details were rejected; the previous payment was kept.');
+        return;
+      }
+
+      if (selectedLoan.settlementPaymentId === editingPayment.id) {
+        updateLoan(selectedLoan.id, {
+          status: 'settled',
+          settlementAmount: amount,
+          settlementDate: paymentDate,
+          settlementAccountId: account?.id,
+          settlementNote: note.trim() || undefined,
+        });
+      } else {
+        const paid = selectedLoan.payments.reduce(
+          (sum, p) => sum + (p.id === editingPayment.id ? amount : p.amount),
+          0
+        );
+        updateLoan(selectedLoan.id, {
+          status: scheduledTotal - paid <= 0.001 ? 'completed' : 'active',
+        });
+      }
       closePayment(); return;
     }
     const paymentId = addLoanPayment(selectedLoan.id, { amount, date: paymentDate, note: note.trim() || (settlementMode ? 'Early settlement' : undefined), principalAmount, interestAmount, ...(account ? { accountId: account.id } : { paymentMethodLabel: customLabel }) });
