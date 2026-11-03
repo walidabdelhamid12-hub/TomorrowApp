@@ -433,14 +433,14 @@ export default function LoansScreen() {
               <AppText style={{ color: loan.status === 'active' || !loan.status ? colors.warning : colors.success }}>{loan.status === 'settled' ? 'Settled' : loan.status === 'completed' ? 'Completed' : loan.status === 'closed' ? 'Closed without payment' : 'Active'}</AppText>
             </View>
             <View style={styles.metrics}>
-              <View><AppText variant="caption" color="textSecondary">Original principal</AppText><AppText>{formatAmount(loan.principalAmount ?? 0)} {loan.currencyCode}</AppText></View>
-              <View><AppText variant="caption" color="textSecondary">Contract total</AppText><AppText>{formatAmount(getLoanTotal(loan))} {loan.currencyCode}</AppText></View>
-              <View><AppText variant="caption" color="textSecondary">Remaining</AppText><AppText style={styles.remaining}>{formatAmount(due)} {loan.currencyCode}</AppText></View>
+              <View><AppText variant="caption" color="textSecondary">Original principal</AppText><AppText>{formatAmount(loan.principalAmount ?? 0, loan.currencyCode)} {loan.currencyCode}</AppText></View>
+              <View><AppText variant="caption" color="textSecondary">Contract total</AppText><AppText>{formatAmount(getLoanTotal(loan), loan.currencyCode)} {loan.currencyCode}</AppText></View>
+              <View><AppText variant="caption" color="textSecondary">Remaining</AppText><AppText style={styles.remaining}>{formatAmount(due, loan.currencyCode)} {loan.currencyCode}</AppText></View>
             </View>
-            <AppText variant="caption" color="textSecondary">Paid: {formatAmount(paid)} {loan.currencyCode} · Installment: {formatAmount(loan.monthlyInstallment)} {loan.currencyCode}</AppText>
+            <AppText variant="caption" color="textSecondary">Paid: {formatAmount(paid, loan.currencyCode)} {loan.currencyCode} · Installment: {formatAmount(loan.monthlyInstallment, loan.currencyCode)} {loan.currencyCode}</AppText>
             <AppText variant="caption" color="textSecondary">Payments recorded: {loan.payments.length} · Scheduled installments remaining: {loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed' ? 0 : Math.max(0, loan.numberOfInstallments - loan.payments.length)} · First due {loan.firstDueDate}</AppText>
             {loan.receivedAt
-              ? <AppText color="success" variant="caption">Received: {formatAmount(loan.receivedAmount ?? loan.principalAmount ?? 0)} {loan.currencyCode} on {loan.receivedAt}{loan.receiptTransactionId ? ' · Posted to account' : ' · Custom method'}</AppText>
+              ? <AppText color="success" variant="caption">Received: {formatAmount(loan.receivedAmount ?? loan.principalAmount ?? 0, loan.currencyCode)} {loan.currencyCode} on {loan.receivedAt}{loan.receiptTransactionId ? ' · Posted to account' : ' · Custom method'}</AppText>
               : <View style={styles.actions}><AppButton title="Confirm loan received" fullWidth={false} variant="outline" onPress={() => openReceiveLoan(loan)} /></View>}
             {loan.status !== 'settled' && loan.status !== 'completed' && loan.status !== 'closed' && <View style={styles.actions}>
               <AppButton title="Record payment" fullWidth={false} onPress={() => openPayment(loan)} />
@@ -458,13 +458,13 @@ export default function LoansScreen() {
               });
               const saved = Math.max(0, scheduled - paidBeforeSettlement - (loan.settlementAmount ?? 0));
               return <View style={{ gap: 4 }}>
-                <AppText color="success">Settlement: {formatAmount(loan.settlementAmount ?? 0)} {loan.currencyCode} on {loan.settlementDate}</AppText>
-                {saved > 0.001 && <AppText color="success" variant="caption">Early settlement saving: {formatAmount(saved)} {loan.currencyCode}</AppText>}
+                <AppText color="success">Settlement: {formatAmount(loan.settlementAmount ?? 0, loan.currencyCode)} {loan.currencyCode} on {loan.settlementDate}</AppText>
+                {saved > 0.001 && <AppText color="success" variant="caption">Early settlement saving: {formatAmount(saved, loan.currencyCode)} {loan.currencyCode}</AppText>}
               </View>;
             })()}
             {loan.payments.length > 0 && <View style={styles.history}><AppText style={{ fontWeight: '600' }}>Payment history</AppText>
               {loan.payments.map(payment => <View key={payment.id} style={styles.paymentRow}>
-                <View style={{ flex: 1 }}><AppText>{formatAmount(payment.amount)} {loan.currencyCode}{(payment.latePaymentFee ?? 0) > 0 ? ` · Fee: ${formatAmount(payment.latePaymentFee!)} ${loan.currencyCode}` : ''}</AppText><AppText variant="caption" color="textSecondary">{payment.date} · {payment.note || 'Installment'}</AppText></View>
+                <View style={{ flex: 1 }}><AppText>{formatAmount(payment.amount, loan.currencyCode)} {loan.currencyCode}{(payment.latePaymentFee ?? 0) > 0 ? ` · Fee: ${formatAmount(payment.latePaymentFee!, loan.currencyCode)} ${loan.currencyCode}` : ''}</AppText><AppText variant="caption" color="textSecondary">{payment.date} · {payment.note || 'Installment'}</AppText></View>
                 <View style={styles.row}><Pressable onPress={() => openEditPayment(loan, payment)} hitSlop={8}><Ionicons name="create-outline" size={16} color={moduleColors.finance} /></Pressable><Pressable onPress={() => confirmDeletePayment(loan, payment)} hitSlop={8}><Ionicons name="trash-outline" size={16} color={colors.danger} /></Pressable></View>
               </View>)}
             </View>}
@@ -640,7 +640,7 @@ export default function LoansScreen() {
             <ScrollView style={styles.paymentScroll} contentContainerStyle={styles.paymentScrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator>
               <Card style={styles.modal}>
                 <AppText variant="h2">{editingPayment ? 'Edit payment' : settlementMode ? 'Early settlement' : 'Record installment'}</AppText>
-                <AppText color="textSecondary">Outstanding: {selectedLoan ? formatAmount(remaining(selectedLoan)) + ' ' + selectedLoan.currencyCode : ''}</AppText>
+                <AppText color="textSecondary">Outstanding: {selectedLoan ? formatAmount(remaining(selectedLoan), selectedLoan.currencyCode) + ' ' + selectedLoan.currencyCode : ''}</AppText>
                 <Field label={`Total payment (${selectedLoan?.currencyCode ?? ''})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" />
                 <Field label={`Late payment fee (${selectedLoan?.currencyCode ?? ''}) — optional`} value={latePaymentFee} onChangeText={setLatePaymentFee} keyboardType="decimal-pad" />
                 <AppText variant="caption" color="textSecondary">The late fee is added to the amount deducted from your account, but does not reduce the remaining loan balance.</AppText>
