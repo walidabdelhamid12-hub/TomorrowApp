@@ -596,25 +596,25 @@ export const useFinanceStore = create<FinanceStore>()(
 
         if (
           (nextPrincipal !== undefined &&
-            (!Number.isFinite(nextPrincipal) || nextPrincipal <= 0 || paidPrincipal > nextPrincipal + 0.001)) ||
+            (!Number.isFinite(nextPrincipal) || nextPrincipal <= 0 || paidPrincipal > nextPrincipal)) ||
           !Number.isFinite(nextTotal) || nextTotal <= 0 ||
           !Number.isFinite(paidTotal) ||
           !Number.isFinite(paidPrincipal) ||
           (nextPrincipal !== undefined && nextTotal < nextPrincipal) ||
-          paidTotal > nextTotal + 0.001 ||
+          paidTotal > nextTotal ||
           !Number.isFinite(nextInstallment) || nextInstallment <= 0 ||
           !Number.isInteger(loan.numberOfInstallments) || loan.numberOfInstallments < 1 ||
           !Number.isFinite(principalLimit) ||
           principalLimit < 0 ||
-          paidPrincipal > principalLimit + 0.001 ||
-          (nextPrincipal !== undefined && principalLimit > nextPrincipal + 0.001) ||
+          paidPrincipal > principalLimit ||
+          (nextPrincipal !== undefined && principalLimit > nextPrincipal) ||
           (cleanPatch.settlementAmount !== undefined &&
             (!Number.isFinite(cleanPatch.settlementAmount) || cleanPatch.settlementAmount <= 0)) ||
           (cleanPatch.receivedAmount !== undefined &&
             (!Number.isFinite(cleanPatch.receivedAmount) ||
               cleanPatch.receivedAmount <= 0 ||
               (nextPrincipal !== undefined &&
-                cleanPatch.receivedAmount > nextPrincipal + 0.001)))
+                cleanPatch.receivedAmount > nextPrincipal)))
         ) return;
 
         set((state) => ({
@@ -662,14 +662,14 @@ export const useFinanceStore = create<FinanceStore>()(
           !Number.isFinite(latePaymentFee) || latePaymentFee < 0 ||
           !Number.isFinite(totalLimit) || totalLimit <= 0 ||
           !Number.isFinite(totalAlreadyPaid) ||
-          amount + totalAlreadyPaid > totalLimit + 0.001 ||
+          roundMoney(amount + totalAlreadyPaid) > totalLimit ||
           (paymentMode !== 'simple' && (
             principalAmount === undefined || !Number.isFinite(principalAmount) || principalAmount < 0 ||
             interestAmount === undefined || !Number.isFinite(interestAmount) || interestAmount < 0 ||
-            Math.abs(roundMoney(principalAmount + interestAmount) - amount) > 0.001 ||
+            roundMoney(principalAmount + interestAmount) !== amount ||
             !Number.isFinite(principalAlreadyPaid) ||
             !Number.isFinite(principalLimit) ||
-            principalAmount + principalAlreadyPaid > principalLimit + 0.001
+            roundMoney(principalAmount + principalAlreadyPaid) > principalLimit
           ))
         ) {
           return null;
@@ -735,14 +735,14 @@ export const useFinanceStore = create<FinanceStore>()(
           !Number.isFinite(nextLatePaymentFee) || nextLatePaymentFee < 0 ||
           !Number.isFinite(totalLimit) || totalLimit <= 0 ||
           !Number.isFinite(otherTotalPaid) ||
-          nextAmount + otherTotalPaid > totalLimit + 0.001 ||
+          roundMoney(nextAmount + otherTotalPaid) > totalLimit ||
           (nextMode !== 'simple' && (
             !Number.isFinite(nextPrincipal) || nextPrincipal < 0 ||
             !Number.isFinite(nextInterest) || nextInterest < 0 ||
-            Math.abs(roundMoney(nextPrincipal + nextInterest) - nextAmount) > 0.001 ||
+            roundMoney(nextPrincipal + nextInterest) !== nextAmount ||
             !Number.isFinite(otherPrincipalPaid) ||
             !Number.isFinite(principalLimit) ||
-            nextPrincipal + otherPrincipalPaid > principalLimit + 0.001
+            roundMoney(nextPrincipal + otherPrincipalPaid) > principalLimit
           ))
         ) {
           return;
