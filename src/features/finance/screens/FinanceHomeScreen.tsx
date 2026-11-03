@@ -707,7 +707,7 @@ export default function FinanceHomeScreen() {
           setEditingAccount(null);
         }}
         onSave={(data: AddAccountFormData) => {
-          const amount = Number(data.amount);
+          const amount = parseAmount(data.amount);
 
           if (
             !data.accountName.trim() ||
