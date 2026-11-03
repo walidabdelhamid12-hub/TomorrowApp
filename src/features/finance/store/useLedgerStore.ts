@@ -52,7 +52,7 @@ interface LedgerActions {
   // Transactions
   addTransaction: (input: NewTransactionInput) => EntityId | null;
   updateTransaction: (id: EntityId, patch: TransactionPatch) => boolean;
-  removeTransaction: (id: EntityId) => void;
+  removeTransaction: (id: EntityId) => boolean;
 
   // Transfers
   addTransfer: (input: NewTransferInput) => EntityId | null;
@@ -690,7 +690,7 @@ export const useLedgerStore = create<LedgerStore>()(
         );
 
         if (!current) {
-          return;
+          return false;
         }
 
         const hasRefunds = transactions.some(
@@ -700,7 +700,7 @@ export const useLedgerStore = create<LedgerStore>()(
         );
 
         if (hasRefunds) {
-          return;
+          return false;
         }
 
         set((state) => ({
@@ -708,6 +708,7 @@ export const useLedgerStore = create<LedgerStore>()(
             (transaction) => transaction.id !== id
           ),
         }));
+        return true;
       },
 
       /* ------------------------------ Transfers ---------------------------- */
