@@ -520,6 +520,8 @@ export const useFinanceStore = create<FinanceStore>()(
           (nextPrincipal !== undefined &&
             (!Number.isFinite(nextPrincipal) || nextPrincipal <= 0 || paidPrincipal > nextPrincipal + 0.001)) ||
           !Number.isFinite(nextTotal) || nextTotal <= 0 ||
+          !Number.isFinite(paidTotal) ||
+          !Number.isFinite(paidPrincipal) ||
           (nextPrincipal !== undefined && nextTotal < nextPrincipal) ||
           paidTotal > nextTotal + 0.001 ||
           !Number.isFinite(nextInstallment) || nextInstallment <= 0 ||
@@ -587,6 +589,8 @@ export const useFinanceStore = create<FinanceStore>()(
           Math.abs(roundMoney(principalAmount + interestAmount) - amount) > 0.001 ||
           !Number.isFinite(totalLimit) ||
           totalLimit <= 0 ||
+          !Number.isFinite(totalAlreadyPaid) ||
+          !Number.isFinite(principalAlreadyPaid) ||
           amount + totalAlreadyPaid > totalLimit + 0.001 ||
           !Number.isFinite(principalLimit) ||
           principalAmount + principalAlreadyPaid > principalLimit + 0.001
@@ -667,6 +671,8 @@ export const useFinanceStore = create<FinanceStore>()(
           Math.abs(roundMoney(nextPrincipal + nextInterest) - nextAmount) > 0.001 ||
           !Number.isFinite(totalLimit) ||
           totalLimit <= 0 ||
+          !Number.isFinite(otherTotalPaid) ||
+          !Number.isFinite(otherPrincipalPaid) ||
           nextAmount + otherTotalPaid > totalLimit + 0.001 ||
           !Number.isFinite(principalLimit) ||
           nextPrincipal + otherPrincipalPaid > principalLimit + 0.001
