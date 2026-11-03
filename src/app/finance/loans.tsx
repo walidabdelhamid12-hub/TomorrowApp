@@ -30,6 +30,13 @@ const money = (value: string) => parseAmount(value);
 const remaining = (loan: Loan) => loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed'
   ? 0
   : Math.max(0, (loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments) - loan.payments.reduce((s, p) => s + p.amount, 0));
+const remainingPrincipal = (loan: Loan) => Math.max(
+  0,
+  roundMoney(
+    (loan.receivedAmount ?? loan.principalAmount ?? 0) -
+    loan.payments.reduce((sum, payment) => sum + (payment.principalAmount ?? payment.amount), 0)
+  )
+);
 
 export default function LoansScreen() {
   const router = useRouter();
@@ -140,9 +147,10 @@ export default function LoansScreen() {
     setSelectedLoan(loan);
     setSettlementMode(early);
     const suggestedAmount = early ? remaining(loan) : Math.min(loan.monthlyInstallment, remaining(loan));
+    const suggestedPrincipal = Math.min(suggestedAmount, remainingPrincipal(loan));
     setPaymentAmount(String(suggestedAmount));
-    setPrincipalPayment(String(suggestedAmount));
-    setInterestPayment('0');
+    setPrincipalPayment(String(roundMoney(suggestedPrincipal)));
+    setInterestPayment(String(roundMoney(suggestedAmount - suggestedPrincipal)));
     setPaymentDate(today());
     setAccountId(matching.find(a => a.type === 'bank')?.id ?? matching[0]?.id ?? '');
     setPaymentMethod('account');
@@ -262,7 +270,7 @@ export default function LoansScreen() {
       principalAmount === null || principalAmount < 0 ||
       interestAmount === null || interestAmount < 0 ||
       Math.abs(roundMoney(principalAmount + interestAmount) - amount) > 0.001 ||
-      !/^\\d{4}-\\d{2}-\\d{2}$/.test(paymentDate) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) ||
       (paymentMethod === 'account' && !account) ||
       (paymentMethod === 'custom' && !customLabel)
     ) {
@@ -598,6 +606,7 @@ export default function LoansScreen() {
         <View style={styles.overlay}><Card style={styles.modal}>
           <AppText variant="h2">{editingPayment ? 'Edit payment' : settlementMode ? 'Early settlement' : 'Record installment'}</AppText>
           <AppText color="textSecondary">Outstanding: {selectedLoan ? formatAmount(remaining(selectedLoan)) + ' ' + selectedLoan.currencyCode : ''}</AppText>
+          <AppText color="textSecondary">Remaining principal: {selectedLoan ? formatAmount(remainingPrincipal(selectedLoan)) + ' ' + selectedLoan.currencyCode : ''}</AppText>
           <Field label="Total payment" value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" />
           <Field label="Principal portion" value={principalPayment} onChangeText={setPrincipalPayment} keyboardType="decimal-pad" />
           <Field label="Interest portion" value={interestPayment} onChangeText={setInterestPayment} keyboardType="decimal-pad" />
