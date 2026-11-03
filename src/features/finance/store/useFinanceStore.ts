@@ -724,9 +724,7 @@ export const useFinanceStore = create<FinanceStore>()(
                 : payment.principalAmount ?? payment.amount
             ), 0)
         );
-        const totalLimit = roundMoney(
-          loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments
-        );
+        const totalLimit = getLoanTotal(loan);
         const otherTotalPaid = getLoanPaidAmount({
           ...loan,
           payments: loan.payments.filter((payment) => payment.id !== paymentId),
