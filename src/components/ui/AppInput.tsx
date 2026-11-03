@@ -18,6 +18,7 @@ interface AppInputProps extends TextInputProps {
   leftElement?: React.ReactNode;
   rightElement?: React.ReactNode;
   containerStyle?: StyleProp<ViewStyle>;
+  fieldStyle?: StyleProp<ViewStyle>;
 }
 
 export const AppInput = forwardRef<any, AppInputProps>(
@@ -29,6 +30,7 @@ export const AppInput = forwardRef<any, AppInputProps>(
       leftElement,
       rightElement,
       containerStyle,
+      fieldStyle,
       onFocus,
       onBlur,
       editable = true,
@@ -70,6 +72,7 @@ export const AppInput = forwardRef<any, AppInputProps>(
               paddingHorizontal: spacing.md,
               alignItems: multiline ? 'flex-start' : 'center',
             },
+            fieldStyle,
           ]}
         >
           {leftElement ? (
