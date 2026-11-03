@@ -43,6 +43,7 @@ import {
   useLedgerStore,
 } from '@/features/finance/store/useLedgerStore';
 import type { Asset } from '@/features/finance/types/finance';
+import { parseAmount } from '@/features/finance/utils/money';
 import type {
   Account,
   AccountType,
@@ -416,11 +417,11 @@ export default function FinanceHomeScreen() {
       return;
     }
 
-    const amount = Number(data.amount);
+    const amount = parseAmount(data.amount);
 
     if (
       !data.amount.trim() ||
-      !Number.isFinite(amount) ||
+      amount === null ||
       amount < 0
     ) {
       Alert.alert(
