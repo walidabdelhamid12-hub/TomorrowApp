@@ -513,6 +513,17 @@ export function RatesModal({
     backgroundColor: colors.surface,
   } as const;
 
+  const metalCardStyle = {
+    flex: 0,
+    width: '40%',
+    paddingVertical: spacing.xs * 0.8,
+    paddingHorizontal: spacing.xs * 0.8,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  } as const;
+
   const statusLegend = (
     <View
       style={{
@@ -556,7 +567,7 @@ export function RatesModal({
       title="Exchange rates"
       onClose={handleClose}
     >
-      <View style={{ gap: spacing.sm }}>
+      <View style={{ gap: spacing.sm * 0.5 }}>
         {statusLegend}
 
         <View
@@ -702,15 +713,15 @@ export function RatesModal({
           METALS — PRICE PER GRAM IN {baseCurrency}
         </AppText>
 
-        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-          <View style={cardStyle}>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: spacing.sm }}>
+          <View style={metalCardStyle}>
             <View
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: spacing.xs,
-                marginBottom: spacing.xs,
+                marginBottom: spacing.xs * 0.8,
               }}
             >
               <AppText style={{ fontSize: 16 }}>🥇</AppText>
@@ -733,19 +744,19 @@ export function RatesModal({
                 fontSize: 14,
                 ...getInputStatusStyle(getMetalSource('gold24PerGram')),
               }}
-              fieldStyle={{ minHeight: sizes.inputHeight * 0.7 }}
+              fieldStyle={{ minHeight: sizes.inputHeight * 0.56 }}
               containerStyle={{ width: '100%' }}
             />
           </View>
 
-          <View style={cardStyle}>
+          <View style={metalCardStyle}>
             <View
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: spacing.xs,
-                marginBottom: spacing.xs,
+                marginBottom: spacing.xs * 0.8,
               }}
             >
               <AppText style={{ fontSize: 23 }}>🥈</AppText>
@@ -768,17 +779,23 @@ export function RatesModal({
                 fontSize: 14,
                 ...getInputStatusStyle(getMetalSource('silverPerGram')),
               }}
-              fieldStyle={{ minHeight: sizes.inputHeight * 0.7 }}
+              fieldStyle={{ minHeight: sizes.inputHeight * 0.56 }}
               containerStyle={{ width: '100%' }}
             />
           </View>
         </View>
 
-        <AppText variant="caption" color="textSecondary">
-          Leave a metal price empty to clear the saved price. Other gold
-          karats are calculated from the 24K price. Local market prices
-          may differ from spot prices.
-        </AppText>
+        <View style={{ gap: 2 }}>
+          <AppText variant="caption" color="textSecondary">
+            Leave a metal price empty to clear the saved price.
+          </AppText>
+          <AppText variant="caption" color="textSecondary">
+            Other gold karats are calculated from the 24K price.
+          </AppText>
+          <AppText variant="caption" color="textSecondary">
+            Local market prices may differ from spot prices.
+          </AppText>
+        </View>
       </View>
 
       {error ? (
@@ -797,10 +814,14 @@ export function RatesModal({
         onPress={save}
       />
 
-      <AppText variant="caption" color="textSecondary">
-        Currency rates by Exchange Rate API (exchangerate-api.com).
-        Gold and silver spot prices by gold-api.com.
-      </AppText>
+      <View style={{ gap: 2 }}>
+        <AppText variant="caption" color="textSecondary">
+          Currency rates by Exchange Rate API (exchangerate-api.com).
+        </AppText>
+        <AppText variant="caption" color="textSecondary">
+          Gold and silver spot prices by gold-api.com.
+        </AppText>
+      </View>
     </FormModal>
   );
 }
