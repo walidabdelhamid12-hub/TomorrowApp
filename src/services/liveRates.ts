@@ -4,10 +4,7 @@ import {
   RATE_ANCHOR,
 } from '@/features/finance/constants/currencies';
 import { TROY_OUNCE_GRAMS } from '@/features/finance/constants/metals';
-import {
-  MetalKey,
-  useCurrencyStore,
-} from '@/features/finance/store/useCurrencyStore';
+import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 
 // Exchange rates: units per 1 USD.
 const FX_URL = 'https://open.er-api.com/v6/latest/USD';
@@ -118,12 +115,6 @@ function parseMetal(json: unknown): number | null {
   return positive(json.price) ?? positive(json.priceUsd);
 }
 
-function getAllForeignCurrencyCodes(): string[] {
-  return CURRENCIES
-    .filter((currency) => currency.code !== RATE_ANCHOR)
-    .map((currency) => currency.code);
-}
-
 /**
  * Refreshes FX, gold and silver independently.
  *
@@ -153,12 +144,7 @@ export async function refreshLiveRates(): Promise<RefreshResult> {
       ? parseMetal(silverResult.value)
       : null;
 
-  const currencyCodesToUnconfirm =
-    fx?.failedCurrencyCodes ?? getAllForeignCurrencyCodes();
-
   const egpPerUsd = fx?.egpPerUsd ?? null;
-
-  const metalKeysToUnconfirm: MetalKey[] = [];
 
   const gold24PerGram =
     goldOunceUsd !== null && egpPerUsd !== null
@@ -169,22 +155,6 @@ export async function refreshLiveRates(): Promise<RefreshResult> {
     silverOunceUsd !== null && egpPerUsd !== null
       ? (silverOunceUsd / TROY_OUNCE_GRAMS) * egpPerUsd
       : null;
-
-  if (
-    gold24PerGram === null ||
-    !Number.isFinite(gold24PerGram) ||
-    gold24PerGram <= 0
-  ) {
-    metalKeysToUnconfirm.push('gold24PerGram');
-  }
-
-  if (
-    silverPerGram === null ||
-    !Number.isFinite(silverPerGram) ||
-    silverPerGram <= 0
-  ) {
-    metalKeysToUnconfirm.push('silverPerGram');
-  }
 
   const validGold =
     gold24PerGram !== null &&
@@ -200,12 +170,8 @@ export async function refreshLiveRates(): Promise<RefreshResult> {
 
   const store = useCurrencyStore.getState();
 
-  // Preserve previous values while marking failed sources unconfirmed.
-  store.markRatesUnconfirmed(
-    currencyCodesToUnconfirm,
-    metalKeysToUnconfirm,
-  );
-
+  // Failed sources keep their previous value and source classification.
+  // This preserves the last successfully verified rate for calculations.
   // A scheduled slot is complete only when every source and currency succeeded.
   const isCompleteRefresh =
     fx !== null &&
