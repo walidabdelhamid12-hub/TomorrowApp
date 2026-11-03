@@ -1023,7 +1023,7 @@ export default function DebtsScreen() {
                       Remaining
                     </AppText>
                     <AppText style={styles.remainingAmount}>
-                      {formatAmount(remaining, paymentDebt.currencyCode)} {debt.currencyCode}
+                      {formatAmount(remaining, debt.currencyCode)} {debt.currencyCode}
                     </AppText>
                   </View>
 
@@ -1032,7 +1032,7 @@ export default function DebtsScreen() {
                       Original
                     </AppText>
                     <AppText style={styles.originalAmount}>
-                      {formatAmount(debt.amount)} {debt.currencyCode}
+                      {formatAmount(debt.amount, debt.currencyCode)} {debt.currencyCode}
                     </AppText>
                   </View>
                 </View>
