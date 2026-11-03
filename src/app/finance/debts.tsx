@@ -558,11 +558,26 @@ export default function DebtsScreen() {
     }
 
     // The payment record is updated only after its linked transaction succeeds.
-    updateDebtPayment(debt.id, payment.id, {
+    const paymentUpdated = updateDebtPayment(debt.id, payment.id, {
       amount,
       date: cleanDate,
       note: note.trim() || undefined,
     });
+
+    if (!paymentUpdated) {
+      // Restore the already-updated ledger entry if the debt record rejected
+      // the change, keeping both persisted stores consistent.
+      updateTransaction(transaction.id, {
+        amount: transaction.amount,
+        date: transaction.date,
+        note: transaction.note,
+      });
+      Alert.alert(
+        'Update failed',
+        'The debt payment could not be updated. The account transaction was restored.',
+      );
+      return;
+    }
 
     setEditingPayment(null);
 
