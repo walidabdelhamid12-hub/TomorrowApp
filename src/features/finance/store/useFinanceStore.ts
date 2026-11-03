@@ -407,7 +407,11 @@ export const useFinanceStore = create<FinanceStore>()(
       updateDebtPayment: (debtId, paymentId, patch) => {
         const debt = get().debts.find((item) => item.id === debtId);
         const currentPayment = debt?.payments.find((item) => item.id === paymentId);
-        if (!debt || !currentPayment) return false;
+        // Older payment records without a verified ledger link are read-only:
+        // editing them could change debt totals without changing the account.
+        if (!debt || !currentPayment || !currentPayment.ledgerTransactionId) {
+          return false;
+        }
 
         const cleanPatch = withRounded(definedOnly(patch), ['amount']);
         const nextAmount =
