@@ -101,28 +101,30 @@ export function useFinanceSummary() {
         continue;
       }
 
-      const principalReceived = loan.receivedAmount ?? loan.principalAmount ?? 0;
-      if (!Number.isFinite(principalReceived) || principalReceived < 0) {
-        missing += 1;
-        continue;
-      }
-
-      // Legacy payments without principalAmount are treated as principal payments.
-      // Interest must never reduce the outstanding principal liability.
-      const principalPaid = (loan.payments ?? []).reduce(
-        (sum, payment) =>
-          sum + (payment.principalAmount ?? payment.amount),
+      // Net worth tracks the remaining contractual amount owed to the lender,
+      // not only the cash principal received. Confirmed installments reduce
+      // the contract balance; late fees are stored separately and are excluded.
+      const contractTotal =
+        loan.totalRepaymentAmount ??
+        loan.monthlyInstallment * loan.numberOfInstallments;
+      const totalPaid = (loan.payments ?? []).reduce(
+        (sum, payment) => sum + payment.amount,
         0
       );
 
-      if (!Number.isFinite(principalPaid) || principalPaid < 0) {
+      if (
+        !Number.isFinite(contractTotal) ||
+        contractTotal < 0 ||
+        !Number.isFinite(totalPaid) ||
+        totalPaid < 0
+      ) {
         missing += 1;
         continue;
       }
 
-      const remainingPrincipal = Math.max(principalReceived - principalPaid, 0);
+      const remainingContract = Math.max(contractTotal - totalPaid, 0);
       const principalConverted = convertAmount(
-        remainingPrincipal,
+        remainingContract,
         loan.currencyCode,
         baseCurrency,
         rates,
