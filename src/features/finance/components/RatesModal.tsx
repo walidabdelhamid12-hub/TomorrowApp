@@ -568,8 +568,6 @@ export function RatesModal({
       onClose={handleClose}
     >
       <View style={{ gap: spacing.sm * 0.5 }}>
-        {statusLegend}
-
         <View
           style={{
             flexDirection: 'row',
@@ -787,17 +785,6 @@ export function RatesModal({
           </View>
         </View>
 
-        <View style={{ gap: 2 }}>
-          <AppText variant="caption" color="textSecondary">
-            Leave a metal price empty to clear the saved price.
-          </AppText>
-          <AppText variant="caption" color="textSecondary" style={{ fontSize: 10 }}>
-            Other gold karats are calculated from the 24K price.
-          </AppText>
-          <AppText variant="caption" color="textSecondary">
-            Local market prices may differ from spot prices.
-          </AppText>
-        </View>
       </View>
 
       {error ? (
@@ -815,6 +802,19 @@ export function RatesModal({
         disabled={!hasUnsavedChanges}
         onPress={save}
       />
+
+      <View style={{ gap: spacing.xs }}>
+        {statusLegend}
+        <AppText variant="caption" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+          Leave a metal price empty to clear the saved price.
+        </AppText>
+        <AppText variant="caption" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+          Other gold karats are calculated from the 24K price.
+        </AppText>
+        <AppText variant="caption" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+          Local market prices may differ from spot prices.
+        </AppText>
+      </View>
 
       <View style={{ gap: 2 }}>
         <AppText
