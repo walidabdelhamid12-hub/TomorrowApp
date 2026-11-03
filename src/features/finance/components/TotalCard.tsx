@@ -353,7 +353,7 @@ export function TotalCard({
             </View>
 
             <AppText style={styles.netWorthLabel}>
-              TOTAL LIQUIDITY
+              TOTAL BALANCE
             </AppText>
           </View>
 
