@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppButton, AppText, Screen } from '@/components/ui';
 import type { AddAssetFormData } from '@/features/finance/components/AddAssetModal';
@@ -27,6 +27,7 @@ export default function AssetsScreen() {
   const assets = useFinanceStore((state) => state.assets);
   const addAsset = useFinanceStore((state) => state.addAsset);
   const updateAsset = useFinanceStore((state) => state.updateAsset);
+  const deleteAsset = useFinanceStore((state) => state.deleteAsset);
   const addAssetEntry = useFinanceStore((state) => state.addAssetEntry);
   const updateAssetEntry = useFinanceStore((state) => state.updateAssetEntry);
   const deleteAssetEntry = useFinanceStore((state) => state.deleteAssetEntry);
@@ -74,6 +75,21 @@ export default function AssetsScreen() {
       silverPrice,
       verifiedCurrencies,
     );
+  };
+
+  const confirmDeleteAsset = (asset: Asset) => {
+    const message = 'This will permanently delete the asset and all of its recorded movements.';
+
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(`Delete "${asset.name}" and all its movements?\\n\\n${message}`);
+      if (confirmed) deleteAsset(asset.id);
+      return;
+    }
+
+    Alert.alert(`Delete "${asset.name}"?`, message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteAsset(asset.id) },
+    ]);
   };
 
   const saveAsset = (data: AddAssetFormData) => {
@@ -235,6 +251,15 @@ export default function AssetsScreen() {
                   <Pressable onPress={() => openAsset(asset)} style={styles.action} accessibilityRole="button">
                     <Ionicons name="create-outline" size={17} color={accent} />
                     <AppText style={{ color: accent }}>Edit</AppText>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => confirmDeleteAsset(asset)}
+                    style={styles.action}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${asset.name}`}
+                  >
+                    <Ionicons name="trash-outline" size={17} color="#DC2626" />
+                    <AppText style={{ color: '#DC2626' }}>Delete</AppText>
                   </Pressable>
                 </View>
               </View>
