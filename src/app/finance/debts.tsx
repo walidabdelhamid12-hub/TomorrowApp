@@ -32,6 +32,7 @@ import type {
     NewDebtInput,
 } from '@/features/finance/types/finance';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
+import { getDebtPaid, getDebtRemaining, roundMoney } from '@/features/finance/utils/finance';
 import { parseAmount } from '@/features/finance/utils/money';
 import { moduleColors, useTheme } from '@/theme';
 
@@ -93,11 +94,14 @@ const MONTH_NAMES = [
 
 const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-const getPaidAmount = (debt: Debt) =>
-  debt.payments.reduce((total, payment) => total + payment.amount, 0);
+const getPaidAmount = getDebtPaid;
+const getRemainingAmount = getDebtRemaining;
 
-const getRemainingAmount = (debt: Debt) =>
-  Math.max(0, debt.amount - getPaidAmount(debt));
+const getRemainingExcludingPayment = (debt: Debt, paymentId: string) =>
+  getDebtRemaining({
+    ...debt,
+    payments: debt.payments.filter((payment) => payment.id !== paymentId),
+  });
 
 const formatDate = (value?: string) => {
   if (!value) return 'No due date';
@@ -204,7 +208,9 @@ export default function DebtsScreen() {
     return Array.from(totals.entries())
       .map(([currencyCode, values]) => ({
         currencyCode,
-        ...values,
+        total: roundMoney(values.total),
+        paid: roundMoney(values.paid),
+        remaining: roundMoney(values.remaining),
       }))
       .sort((a, b) => a.currencyCode.localeCompare(b.currencyCode));
   }, [visibleDebts]);
@@ -672,15 +678,9 @@ export default function DebtsScreen() {
       return;
     }
 
-    // Calculate the maximum using every payment except the one being edited.
-    const otherPaymentsTotal = debt.payments
-      .filter((item) => item.id !== payment.id)
-      .reduce((total, item) => total + item.amount, 0);
-
-    const maximumAllowed = Math.max(
-      0,
-      debt.amount - otherPaymentsTotal,
-    );
+    // Calculate the maximum using the shared debt-balance rule,
+    // excluding the payment currently being edited.
+    const maximumAllowed = getRemainingExcludingPayment(debt, payment.id);
 
     if (amount > maximumAllowed + 0.000001) {
       Alert.alert(
@@ -1685,14 +1685,7 @@ function ModalEditPayment({
 
   if (!debt || !payment) return null;
 
-  const otherPaymentsTotal = debt.payments
-    .filter((item) => item.id !== payment.id)
-    .reduce((total, item) => total + item.amount, 0);
-
-  const maximumAllowed = Math.max(
-    0,
-    debt.amount - otherPaymentsTotal,
-  );
+  const maximumAllowed = getRemainingExcludingPayment(debt, payment.id);
 
   const openCalendar = () => {
     const parsed = parseDate(date);
