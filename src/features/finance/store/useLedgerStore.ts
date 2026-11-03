@@ -337,14 +337,29 @@ export const useLedgerStore = create<LedgerStore>()(
       /* ------------------------------ Accounts ----------------------------- */
 
       addAccount: (input) => {
+        const initialBalance = roundMoney(input.initialBalance);
+        const creditLimit =
+          input.creditLimit === undefined
+            ? undefined
+            : roundMoney(input.creditLimit);
+
+        if (
+          !Number.isFinite(initialBalance) ||
+          (creditLimit !== undefined &&
+            (!Number.isFinite(creditLimit) || creditLimit < 0))
+        ) {
+          return '';
+        }
+
         const timestamp = now();
 
         const account: Account = {
           ...input,
+          ...(creditLimit === undefined ? {} : { creditLimit }),
           currencyCode:
             input.currencyCode ||
             useCurrencyStore.getState().baseCurrency,
-          initialBalance: roundMoney(input.initialBalance),
+          initialBalance,
           archived: input.archived ?? false,
           id: generateId('acc'),
           createdAt: timestamp,
@@ -364,10 +379,17 @@ export const useLedgerStore = create<LedgerStore>()(
 
           if (typeof clean.initialBalance === 'number') {
             clean.initialBalance = roundMoney(clean.initialBalance);
+            if (!Number.isFinite(clean.initialBalance)) return state;
           }
 
           if (typeof clean.creditLimit === 'number') {
             clean.creditLimit = roundMoney(clean.creditLimit);
+            if (
+              !Number.isFinite(clean.creditLimit) ||
+              clean.creditLimit < 0
+            ) {
+              return state;
+            }
           }
 
           const currentAccount = state.accounts.find(
