@@ -595,7 +595,7 @@ export function RatesModal({
             <Animated.View style={{ transform: [{ rotate }] }}>
               <Ionicons
                 name="refresh-circle"
-                size={27}
+                size={19}
                 color="#2E9D50"
               />
             </Animated.View>
@@ -649,7 +649,7 @@ export function RatesModal({
                     }}
                   >
                     {currency.flag ? (
-                      <AppText style={{ fontSize: 19 }}>
+                      <AppText style={{ fontSize: 13 }}>
                         {currency.flag}
                       </AppText>
                     ) : null}
@@ -711,7 +711,7 @@ export function RatesModal({
                 marginBottom: spacing.xs,
               }}
             >
-              <AppText style={{ fontSize: 23 }}>🥇</AppText>
+              <AppText style={{ fontSize: 16 }}>🥇</AppText>
               <AppText
                 variant="label"
                 color="text"
