@@ -110,10 +110,13 @@ export default function LoansScreen() {
   };
 
   const saveLoan = () => {
-    const p = money(principal), t = total.trim() ? money(total) : money(installment) * money(count);
-    const m = money(installment), n = Number(count);
-    if (!loanName.trim() || !lender.trim() || !Number.isFinite(p) || p <= 0 ||
-      !Number.isFinite(t) || t < p || !Number.isFinite(m) || m <= 0 ||
+    const p = money(principal);
+    const m = money(installment);
+    const n = Number(count);
+    const enteredTotal = total.trim() ? money(total) : null;
+    const t = enteredTotal ?? (m !== null ? roundMoney(m * n) : null);
+    if (!loanName.trim() || !lender.trim() || p === null || p <= 0 ||
+      t === null || t < p || m === null || m <= 0 ||
       !Number.isInteger(n) || n < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(firstDue)) {
       Alert.alert('Check loan details', 'Enter the lender, loan name, valid principal, total repayment, installment, number of installments and first due date. Total repayment cannot be less than principal.');
       return;
@@ -379,8 +382,9 @@ export default function LoansScreen() {
           </Card>;
         })}
       <AddAccountModal visible={showAddBank} initialType="Bank" onClose={() => setShowAddBank(false)} onSave={(data: AddAccountFormData) => {
-        if (!data.accountName.trim() || data.selectedType !== 'Bank' || !Number.isFinite(money(data.amount))) { Alert.alert('Bank details required', 'Enter a valid bank account name and balance.'); return; }
-        const id = addAccount({ name: data.accountName.trim(), type: 'bank', currencyCode: data.selectedCurrency, initialBalance: money(data.amount) });
+        const initialBalance = money(data.amount);
+        if (!data.accountName.trim() || data.selectedType !== 'Bank' || initialBalance === null) { Alert.alert('Bank details required', 'Enter a valid bank account name and balance.'); return; }
+        const id = addAccount({ name: data.accountName.trim(), type: 'bank', currencyCode: data.selectedCurrency, initialBalance });
         setShowAddBank(false);
         if (selectedLoan && data.selectedCurrency === selectedLoan.currencyCode) { setAccountId(id); setPaymentMethod('account'); }
         else if (showLoanForm && data.selectedCurrency === currency) { setDepositAccountId(id); setDepositMethod('account'); }
