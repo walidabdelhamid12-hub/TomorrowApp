@@ -190,7 +190,7 @@ function NetworkCard({
   const hasAmount = typeof item.amount === 'number';
 
   const formattedAmount = hasAmount
-    ? `${item.sign ?? ''}${formatAmount(item.amount ?? 0)} ${currency}`
+    ? `${item.sign ?? ''}${formatAmount(item.amount ?? 0, currency)} ${currency}`
     : null;
 
   return (
@@ -384,7 +384,7 @@ export function TotalCard({
               minimumFontScale={0.75}
               style={styles.netWorthAmount}
             >
-              {amountsVisible ? formatAmount(accountsTotal + assetsTotal) : hiddenValue}
+              {amountsVisible ? formatAmount(accountsTotal + assetsTotal, baseCurrency) : hiddenValue}
             </AppText>
           </View>
 
