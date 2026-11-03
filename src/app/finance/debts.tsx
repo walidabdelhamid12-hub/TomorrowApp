@@ -489,6 +489,14 @@ export default function DebtsScreen() {
 
     const transaction = matchingTransactions[0];
 
+    if (!transaction) {
+      Alert.alert(
+        'Cannot edit this payment',
+        'A unique matching account transaction could not be verified. No changes were made.',
+      );
+      return;
+    }
+
     if (
       transaction.linkedEntityType !== 'debt' ||
       transaction.linkedEntityId !== debt.id ||
