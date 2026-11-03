@@ -360,7 +360,7 @@ export function TotalCard({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              amountsVisible ? 'Hide total liquidity' : 'Show total liquidity'
+              amountsVisible ? 'Hide total balance' : 'Show total balance'
             }
             accessibilityState={{ expanded: amountsVisible }}
             onPress={onToggleAmounts}
@@ -384,7 +384,7 @@ export function TotalCard({
               minimumFontScale={0.75}
               style={styles.netWorthAmount}
             >
-              {amountsVisible ? formatAmount(accountsTotal) : hiddenValue}
+              {amountsVisible ? formatAmount(accountsTotal + assetsTotal) : hiddenValue}
             </AppText>
           </View>
 
