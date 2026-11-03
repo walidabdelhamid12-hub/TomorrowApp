@@ -509,7 +509,11 @@ export const useFinanceStore = create<FinanceStore>()(
         );
         const paidPrincipal = roundMoney(
           loan.payments.reduce(
-            (sum, payment) => sum + (payment.principalAmount ?? payment.amount),
+            (sum, payment) => sum + (
+              payment.paymentMode === 'simple'
+                ? 0
+                : payment.principalAmount ?? payment.amount
+            ),
             0
           )
         );
@@ -557,18 +561,22 @@ export const useFinanceStore = create<FinanceStore>()(
         if (!loan || loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed') return null;
 
         const amount = roundMoney(input.amount);
-        const principalAmount = roundMoney(
-          input.principalAmount ?? amount
-        );
-        const interestAmount = roundMoney(
-          input.interestAmount ?? amount - principalAmount
-        );
-        const principalLimit = roundMoney(
-          loan.receivedAmount ?? loan.principalAmount ?? 0
-        );
+        const latePaymentFee = roundMoney(input.latePaymentFee ?? 0);
+        const paymentMode = input.paymentMode ?? 'split';
+        const principalAmount = paymentMode === 'simple'
+          ? undefined
+          : roundMoney(input.principalAmount ?? amount);
+        const interestAmount = paymentMode === 'simple'
+          ? undefined
+          : roundMoney(input.interestAmount ?? amount - (principalAmount ?? amount));
+        const principalLimit = roundMoney(loan.receivedAmount ?? loan.principalAmount ?? 0);
         const principalAlreadyPaid = roundMoney(
           loan.payments.reduce(
-            (sum, payment) => sum + (payment.principalAmount ?? payment.amount),
+            (sum, payment) => sum + (
+              payment.paymentMode === 'simple'
+                ? 0
+                : payment.principalAmount ?? payment.amount
+            ),
             0
           )
         );
@@ -580,20 +588,19 @@ export const useFinanceStore = create<FinanceStore>()(
         );
 
         if (
-          !Number.isFinite(amount) ||
-          amount <= 0 ||
-          !Number.isFinite(principalAmount) ||
-          principalAmount < 0 ||
-          !Number.isFinite(interestAmount) ||
-          interestAmount < 0 ||
-          Math.abs(roundMoney(principalAmount + interestAmount) - amount) > 0.001 ||
-          !Number.isFinite(totalLimit) ||
-          totalLimit <= 0 ||
+          !Number.isFinite(amount) || amount <= 0 ||
+          !Number.isFinite(latePaymentFee) || latePaymentFee < 0 ||
+          !Number.isFinite(totalLimit) || totalLimit <= 0 ||
           !Number.isFinite(totalAlreadyPaid) ||
-          !Number.isFinite(principalAlreadyPaid) ||
           amount + totalAlreadyPaid > totalLimit + 0.001 ||
-          !Number.isFinite(principalLimit) ||
-          principalAmount + principalAlreadyPaid > principalLimit + 0.001
+          (paymentMode !== 'simple' && (
+            principalAmount === undefined || !Number.isFinite(principalAmount) || principalAmount < 0 ||
+            interestAmount === undefined || !Number.isFinite(interestAmount) || interestAmount < 0 ||
+            Math.abs(roundMoney(principalAmount + interestAmount) - amount) > 0.001 ||
+            !Number.isFinite(principalAlreadyPaid) ||
+            !Number.isFinite(principalLimit) ||
+            principalAmount + principalAlreadyPaid > principalLimit + 0.001
+          ))
         ) {
           return null;
         }
@@ -601,8 +608,9 @@ export const useFinanceStore = create<FinanceStore>()(
         const payment: LoanPayment = {
           ...input,
           amount,
-          principalAmount,
-          interestAmount,
+          latePaymentFee,
+          paymentMode,
+          ...(paymentMode === 'simple' ? {} : { principalAmount, interestAmount }),
           id: generateId('lpy'),
         };
 
@@ -618,39 +626,33 @@ export const useFinanceStore = create<FinanceStore>()(
 
       updateLoanPayment: (loanId, paymentId, patch) => {
         const loan = get().loans.find((item) => item.id === loanId);
-        const currentPayment = loan?.payments.find(
-          (item) => item.id === paymentId
-        );
+        const currentPayment = loan?.payments.find((item) => item.id === paymentId);
         if (!loan || !currentPayment) return;
 
         const cleanPatch = withRounded(definedOnly(patch), [
           'amount',
+          'latePaymentFee',
           'principalAmount',
           'interestAmount',
         ]);
         const nextAmount = cleanPatch.amount ?? currentPayment.amount;
-        const nextPrincipal =
-          cleanPatch.principalAmount ??
+        const nextLatePaymentFee = cleanPatch.latePaymentFee ?? currentPayment.latePaymentFee ?? 0;
+        const nextMode = cleanPatch.paymentMode ?? currentPayment.paymentMode ?? 'split';
+        const nextPrincipal = cleanPatch.principalAmount ??
           currentPayment.principalAmount ??
-          (cleanPatch.amount !== undefined
-            ? nextAmount
-            : currentPayment.amount);
-        const nextInterest =
-          cleanPatch.interestAmount ??
+          (cleanPatch.amount !== undefined ? nextAmount : currentPayment.amount);
+        const nextInterest = cleanPatch.interestAmount ??
           currentPayment.interestAmount ??
-          (cleanPatch.amount !== undefined
-            ? 0
-            : currentPayment.amount - nextPrincipal);
-        const principalLimit = roundMoney(
-          loan.receivedAmount ?? loan.principalAmount ?? 0
-        );
+          (cleanPatch.amount !== undefined ? 0 : currentPayment.amount - nextPrincipal);
+        const principalLimit = roundMoney(loan.receivedAmount ?? loan.principalAmount ?? 0);
         const otherPrincipalPaid = roundMoney(
           loan.payments
             .filter((payment) => payment.id !== paymentId)
-            .reduce(
-              (sum, payment) => sum + (payment.principalAmount ?? payment.amount),
-              0
-            )
+            .reduce((sum, payment) => sum + (
+              payment.paymentMode === 'simple'
+                ? 0
+                : payment.principalAmount ?? payment.amount
+            ), 0)
         );
         const totalLimit = roundMoney(
           loan.totalRepaymentAmount ?? loan.monthlyInstallment * loan.numberOfInstallments
@@ -662,20 +664,19 @@ export const useFinanceStore = create<FinanceStore>()(
         );
 
         if (
-          !Number.isFinite(nextAmount) ||
-          nextAmount <= 0 ||
-          !Number.isFinite(nextPrincipal) ||
-          nextPrincipal < 0 ||
-          !Number.isFinite(nextInterest) ||
-          nextInterest < 0 ||
-          Math.abs(roundMoney(nextPrincipal + nextInterest) - nextAmount) > 0.001 ||
-          !Number.isFinite(totalLimit) ||
-          totalLimit <= 0 ||
+          !Number.isFinite(nextAmount) || nextAmount <= 0 ||
+          !Number.isFinite(nextLatePaymentFee) || nextLatePaymentFee < 0 ||
+          !Number.isFinite(totalLimit) || totalLimit <= 0 ||
           !Number.isFinite(otherTotalPaid) ||
-          !Number.isFinite(otherPrincipalPaid) ||
           nextAmount + otherTotalPaid > totalLimit + 0.001 ||
-          !Number.isFinite(principalLimit) ||
-          nextPrincipal + otherPrincipalPaid > principalLimit + 0.001
+          (nextMode !== 'simple' && (
+            !Number.isFinite(nextPrincipal) || nextPrincipal < 0 ||
+            !Number.isFinite(nextInterest) || nextInterest < 0 ||
+            Math.abs(roundMoney(nextPrincipal + nextInterest) - nextAmount) > 0.001 ||
+            !Number.isFinite(otherPrincipalPaid) ||
+            !Number.isFinite(principalLimit) ||
+            nextPrincipal + otherPrincipalPaid > principalLimit + 0.001
+          ))
         ) {
           return;
         }
@@ -689,8 +690,11 @@ export const useFinanceStore = create<FinanceStore>()(
                     ...payment,
                     ...cleanPatch,
                     amount: nextAmount,
-                    principalAmount: nextPrincipal,
-                    interestAmount: nextInterest,
+                    latePaymentFee: nextLatePaymentFee,
+                    paymentMode: nextMode,
+                    ...(nextMode === 'simple'
+                      ? {}
+                      : { principalAmount: nextPrincipal, interestAmount: nextInterest }),
                   }
                 : payment
             ),
