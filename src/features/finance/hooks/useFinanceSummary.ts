@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
-import { getLoanRemainingAmount, roundMoney, todayISO } from '@/features/finance/utils/finance';
+import { getDebtRemaining, getLoanRemainingAmount, roundMoney, todayISO } from '@/features/finance/utils/finance';
 import {
   filterByMonth,
   getAccountBalance,
@@ -135,15 +135,7 @@ export function useFinanceSummary() {
         continue;
       }
 
-      const paidAmount = (debt.payments ?? []).reduce(
-        (sum, payment) => sum + payment.amount,
-        0
-      );
-
-      const remainingAmount = Math.max(
-        debt.amount - paidAmount,
-        0
-      );
+      const remainingAmount = getDebtRemaining(debt);
 
       const converted = convertAmount(
         remainingAmount,
