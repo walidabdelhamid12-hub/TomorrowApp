@@ -957,51 +957,30 @@ export default function FinanceHomeScreen() {
                       >
                         <Pressable
                           onPress={() => openAssetEntries(asset)}
-                          style={styles.assetListAction}
+                          style={[styles.assetListAction, styles.movementAction]}
                           accessibilityRole="button"
                         >
-                          <Ionicons
-                            name="list-outline"
-                            size={17}
-                            color={accent}
-                          />
-
-                          <AppText style={{ color: accent }}>
-                            Movements
-                          </AppText>
+                          <Ionicons name="list-outline" size={17} color="#3978C5" />
+                          <AppText style={styles.assetActionLabel}>Movements</AppText>
                         </Pressable>
 
                         <Pressable
                           onPress={() => openAssetForEditing(asset)}
-                          style={styles.assetListAction}
+                          style={[styles.assetListAction, styles.editAction]}
                           accessibilityRole="button"
                         >
-                          <Ionicons
-                            name="create-outline"
-                            size={17}
-                            color={accent}
-                          />
-
-                          <AppText style={{ color: accent }}>
-                            Edit
-                          </AppText>
+                          <Ionicons name="create-outline" size={17} color="#27845B" />
+                          <AppText style={styles.assetActionLabel}>Edit</AppText>
                         </Pressable>
 
                         <Pressable
                           onPress={() => confirmDeleteAsset(asset)}
-                          style={styles.assetListAction}
+                          style={[styles.assetListAction, styles.deleteAction]}
                           accessibilityRole="button"
                           accessibilityLabel={`Delete ${asset.name}`}
                         >
-                          <Ionicons
-                            name="trash-outline"
-                            size={17}
-                            color="#DC2626"
-                          />
-
-                          <AppText style={{ color: '#DC2626' }}>
-                            Delete
-                          </AppText>
+                          <Ionicons name="trash-outline" size={17} color="#D94B4B" />
+                          <AppText style={styles.assetActionLabel}>Delete</AppText>
                         </Pressable>
                       </View>
                     </View>
@@ -1303,7 +1282,24 @@ const styles = StyleSheet.create({
   assetListAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 9,
+  },
+  movementAction: {
+    backgroundColor: '#EAF1FC',
+  },
+  editAction: {
+    backgroundColor: '#E8F5EE',
+  },
+  deleteAction: {
+    backgroundColor: '#FCEEEE',
+  },
+  assetActionLabel: {
+    color: '#4B5563',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
