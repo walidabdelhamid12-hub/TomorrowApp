@@ -29,7 +29,10 @@ const today = () => {
   const d = new Date();
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
 };
-const money = (value: string) => parseAmount(value);
+const money = (value: string) => {
+  const parsed = parseAmount(value);
+  return parsed === null ? null : roundMoney(parsed);
+};
 const remaining = getLoanRemainingAmount;
 export default function LoansScreen() {
   const router = useRouter();
