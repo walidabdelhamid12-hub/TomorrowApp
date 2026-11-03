@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { readLedgerProtection } from '@/features/finance/store/ledgerProtectionReader';
+import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
 
 import type {
   Asset,
@@ -88,7 +90,7 @@ interface FinanceActions {
 
   addLoan: (input: NewLoanInput) => EntityId | null;
   updateLoan: (id: EntityId, patch: LoanPatch) => void;
-  deleteLoan: (id: EntityId) => void;
+  deleteLoan: (id: EntityId) => boolean;
   addLoanPayment: (
     loanId: EntityId,
     input: NewLoanPaymentInput
@@ -109,7 +111,7 @@ interface FinanceActions {
     paidDate?: ISODate
   ) => void;
 
-  resetFinanceData: () => void;
+  resetFinanceData: () => boolean;
 }
 
 export type FinanceStore = FinanceData & FinanceActions;
@@ -636,10 +638,19 @@ export const useFinanceStore = create<FinanceStore>()(
         }));
       },
 
-      deleteLoan: (id) =>
-        set((state) => ({
-          loans: state.loans.filter((loan) => loan.id !== id),
-        })),
+      deleteLoan: (id) => {
+        const ledger = readLedgerProtection();
+        const matches = get().loans.filter(l => l.id === id);
+        const loan = matches[0];
+        if (!useFinanceStore.persist.hasHydrated() || !ledger?.hydrated || matches.length !== 1
+          || (loan.payments ?? []).length || loan.receiptTransactionId || loan.receivedAt
+          || loan.receivedAmount !== undefined || loan.settlementPaymentId || loan.settlementDate
+          || loan.settlementAmount !== undefined || loan.closureDate || loan.closureReason
+          || (loan.status !== undefined && loan.status !== 'active')
+          || ledger.transactions.some(t => t.linkedEntityId === id || (loan.payments ?? []).some(p => p.id === t.linkedPaymentId))) return false;
+        set(state => ({ loans: state.loans.filter(l => l.id !== id) }));
+        return true;
+      },
 
       addLoanPayment: (loanId, input) => {
         const loan = get().loans.find((item) => item.id === loanId);
@@ -856,7 +867,13 @@ export const useFinanceStore = create<FinanceStore>()(
         })),
 
       /* Reset */
-      resetFinanceData: () => set({ ...initialData }),
+      resetFinanceData: () => {
+        const ledger = readLedgerProtection();
+        if (!useFinanceStore.persist.hasHydrated() || !ledger?.hydrated || get().loans.length || get().debts.length
+          || ledger.transactions.some(t => isProtectedTransaction(t, get()))) return false;
+        set({ ...initialData });
+        return true;
+      },
     }),
     {
       name: 'tomorrow:finance',

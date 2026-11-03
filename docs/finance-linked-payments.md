@@ -48,5 +48,31 @@ reversals, contractual versus cash amounts, settlement lifecycle, legacy links,
 stale ownership, rehydration, and injected runtime failures. Native UI interaction
 and real-device storage failure/crash recovery are not covered by this runner.
 
-Account deletion/reset paths, transfer behavior, asset valuation, currency policy,
-and total/net-worth presentation are outside this fix.
+## Review hardening
+
+Account deletion now fails when the account has dependent transfers, protected
+transactions, or explicit loan/debt account references. Both account deletion UI
+paths display rejection. The Finance loan screen has no delete-loan action; direct
+store deletion now rejects historical, received, or ledger-referenced loans.
+Ledger clear/reset rejects transfers, loans/debts, and protected transactions;
+Finance reset rejects existing loans/debts and protected ledger transactions.
+These operations fail closed until both stores are hydrated. A lazy registered
+ledger reader avoids a circular store import in Finance's deletion guards.
+
+Generic transaction creation rejects linked ownership and payment purposes.
+Dedicated `addPaymentTransaction` accepts only explicit payment IDs and a category;
+it derives account, cash amount, direction, date, and ownership from a unique
+existing unlinked payment. Receipt posting validates the current unconfirmed loan
+and derives its ownership and direction. The shared raw creation helper is private
+to the ledger store; there is no caller-controlled generic bypass flag.
+
+Dedicated loan editing rejects split/legacy payments (including retained component
+fields) rather than converting their accounting semantics. Valid single-entry
+reversal remains supported. Custom payments are blocked by incomplete/conflicting
+explicit loan ownership or matching payment IDs; an independently verified receipt
+is allowed alongside a custom repayment. No ambiguous record is relinked.
+
+This PR does not declare the overall Finance 3.1 milestone complete. Transfer
+editing behavior, asset valuation, currency policy, and total/net-worth presentation
+still require their separate review and verification. Crash-atomic persistence and
+native UI/device verification remain outstanding as described above.

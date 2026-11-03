@@ -7,8 +7,11 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { DEFAULT_CATEGORIES } from '@/features/finance/constants/defaultCategories';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
-import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
-import type { EntityId } from '@/features/finance/types/finance';
+import { registerLedgerProtectionReader } from '@/features/finance/store/ledgerProtectionReader';
+import { isProtectedTransaction, isVerifiedLoanReceipt } from '@/features/finance/utils/paymentTransactionOwnership';
+import type { PaymentRef } from '@/features/finance/utils/paymentTransactionOwnership';
+import { isValidISODate } from '@/features/finance/utils/input';
+import type { EntityId, Loan, LoanPayment } from '@/features/finance/types/finance';
 import type {
   Account,
   AccountPatch,
@@ -40,8 +43,8 @@ interface LedgerActions {
   addAccount: (input: NewAccountInput) => EntityId;
   updateAccount: (id: EntityId, patch: AccountPatch) => void;
   setAccountArchived: (id: EntityId, archived: boolean) => void;
-  deleteAccount: (id: EntityId) => void;
-  clearAccountsAndTransactions: () => void;
+  deleteAccount: (id: EntityId) => boolean;
+  clearAccountsAndTransactions: () => boolean;
 
   // Categories
   addCategory: (input: NewCategoryInput) => EntityId;
@@ -53,6 +56,11 @@ interface LedgerActions {
 
   // Transactions
   addTransaction: (input: NewTransactionInput) => EntityId | null;
+  /** Dedicated posting derives cash and ownership from an existing, unlinked payment. */
+  addPaymentTransaction: (ref: PaymentRef, categoryId: string) => EntityId | null;
+  addLoanReceiptTransaction: (input: {
+    loanId: string; amount: number; date: string; accountId: string; categoryId: string;
+  }) => EntityId | null;
   updateTransaction: (id: EntityId, patch: TransactionPatch) => boolean;
   removeTransaction: (id: EntityId) => boolean;
 
@@ -61,7 +69,7 @@ interface LedgerActions {
   updateTransfer: (id: EntityId, patch: TransferPatch) => boolean;
   removeTransfer: (id: EntityId) => void;
 
-  resetLedger: () => void;
+  resetLedger: () => boolean;
 }
 
 export type LedgerStore = LedgerData & LedgerActions;
@@ -335,7 +343,91 @@ function buildTransfer(
 
 export const useLedgerStore = create<LedgerStore>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      const createTransaction = (input: NewTransactionInput): EntityId | null => {
+        if (input.entryType === 'refund' &&
+          (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated())) return null;
+        const { accounts, categories, transactions } = get();
+
+        const account = accounts.find(
+          (item) => item.id === input.accountId
+        );
+
+        const category = categories.find(
+          (item) => item.id === input.categoryId
+        );
+
+        const amount = roundMoney(input.amount);
+
+        const valid =
+          !!account &&
+          !account.archived &&
+          !!category &&
+          category.kind === input.type &&
+          Number.isFinite(amount) &&
+          amount > 0;
+
+        if (!valid || !account) {
+          return null;
+        }
+
+        // A debt/loan payment ID may be posted to the ledger only once.
+        // This protects against rapid repeated submissions and stale UI state.
+        if (
+          input.linkedEntityType &&
+          input.linkedEntityId &&
+          input.linkedPaymentId &&
+          transactions.some(
+            (item) =>
+              item.linkedEntityType === input.linkedEntityType &&
+              item.linkedEntityId === input.linkedEntityId &&
+              item.linkedPaymentId === input.linkedPaymentId
+          )
+        ) {
+          return null;
+        }
+
+        const normalizedInput = {
+          ...input,
+          amount,
+          entryType: input.entryType ?? 'normal',
+        };
+
+        if (
+          normalizedInput.entryType === 'refund' &&
+          !isValidRefund(
+            normalizedInput,
+            transactions,
+            accounts
+          )
+        ) {
+          return null;
+        }
+
+        if (
+          normalizedInput.entryType === 'normal' &&
+          normalizedInput.relatedTransactionId
+        ) {
+          return null;
+        }
+
+        const timestamp = now();
+
+        const transaction: Transaction = {
+          ...normalizedInput,
+          currencyCode: account.currencyCode,
+          id: generateId('trx'),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+
+        set((state) => ({
+          transactions: [transaction, ...state.transactions],
+        }));
+
+        return transaction.id;
+      };
+      return ({
       ...initialData,
 
       /* ------------------------------ Accounts ----------------------------- */
@@ -444,25 +536,36 @@ export const useLedgerStore = create<LedgerStore>()(
           ),
         })),
 
-      deleteAccount: (id) =>
+      deleteAccount: (id) => {
+        const state = get(), finance = useFinanceStore.getState();
+        if (!useLedgerStore.persist.hasHydrated() || !useFinanceStore.persist.hasHydrated()
+          || state.accounts.filter(a => a.id === id).length !== 1
+          || state.transfers.some(t => t.fromAccountId === id || t.toAccountId === id)
+          || state.transactions.some(t => t.accountId === id && isProtectedTransaction(t, finance))
+          || finance.debts.some(d => (d.payments ?? []).some(p => p.accountId === id))
+          || finance.loans.some(l => l.depositAccountId === id || l.settlementAccountId === id
+            || (l.payments ?? []).some(p => p.accountId === id))) return false;
         set((state) => ({
           accounts: state.accounts.filter((account) => account.id !== id),
           transactions: state.transactions.filter(
             (transaction) => transaction.accountId !== id
           ),
-          transfers: state.transfers.filter(
-            (transfer) =>
-              transfer.fromAccountId !== id &&
-              transfer.toAccountId !== id
-          ),
-        })),
+        }));
+        return true;
+      },
 
-      clearAccountsAndTransactions: () =>
+      clearAccountsAndTransactions: () => {
+        const finance = useFinanceStore.getState();
+        if (!useLedgerStore.persist.hasHydrated() || !useFinanceStore.persist.hasHydrated()
+          || get().transfers.length || finance.loans.length || finance.debts.length
+          || get().transactions.some(t => isProtectedTransaction(t, finance))) return false;
         set({
           accounts: [],
           transactions: [],
           transfers: [],
-        }),
+        });
+        return true;
+      },
 
       /* ----------------------------- Categories ---------------------------- */
 
@@ -551,87 +654,52 @@ export const useLedgerStore = create<LedgerStore>()(
       /* ---------------------------- Transactions --------------------------- */
 
       addTransaction: (input) => {
-        if (input.entryType === 'refund' &&
-          (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated())) return null;
-        const { accounts, categories, transactions } = get();
+        if (['linkedEntityType', 'linkedEntityId', 'linkedPaymentId'].some(key => key in input)
+          || ('purpose' in input && input.purpose !== undefined && input.purpose !== 'normal')) return null;
+        return createTransaction(input);
+      },
 
-        const account = accounts.find(
-          (item) => item.id === input.accountId
-        );
+      addPaymentTransaction: (ref, categoryId) => {
+        if (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated()) return null;
+        const finance = useFinanceStore.getState();
+        const parents = ref.entityType === 'debt' ? finance.debts : finance.loans;
+        const matches = parents.filter(p => p.id === ref.entityId);
+        const payments = matches.length === 1 ? (matches[0].payments ?? []).filter(p => p.id === ref.paymentId) : [];
+        if (payments.length !== 1) return null;
+        const parent = matches[0], payment = payments[0];
+        const isLoan = ref.entityType === 'loan';
+        const debt = isLoan ? undefined : finance.debts.find(d => d.id === parent.id);
+        const fee = isLoan ? (payment as LoanPayment).latePaymentFee ?? 0 : 0;
+        const account = get().accounts.filter(a => a.id === payment.accountId);
+        if (payment.ledgerTransactionId || !isValidISODate(payment.date)
+          || !Number.isFinite(payment.amount) || payment.amount <= 0 || !Number.isFinite(fee) || fee < 0
+          || account.length !== 1 || account[0].archived || account[0].currencyCode !== parent.currencyCode
+          || (isLoan && (account[0].type === 'credit_card' || (payment as LoanPayment).paymentMode !== 'simple'))
+          || (debt && debt.direction !== 'receivable' && debt.direction !== 'payable')
+          || get().transactions.some(t => !(isLoan && isVerifiedLoanReceipt(t, parent as Loan, finance, get()))
+            && (t.linkedPaymentId === payment.id
+              || (t.linkedEntityId === parent.id && (!t.linkedPaymentId || t.linkedEntityType !== ref.entityType))))) return null;
+        const type = debt?.direction === 'receivable' ? 'income' : 'expense';
+        return createTransaction({ accountId: account[0].id, categoryId, amount: roundMoney(payment.amount + fee),
+          type, date: payment.date, note: payment.note,
+          purpose: isLoan ? 'loan_payment' : type === 'income' ? 'debt_collection' : 'debt_payment',
+          linkedEntityType: ref.entityType, linkedEntityId: parent.id, linkedPaymentId: payment.id });
+      },
 
-        const category = categories.find(
-          (item) => item.id === input.categoryId
-        );
-
-        const amount = roundMoney(input.amount);
-
-        const valid =
-          !!account &&
-          !account.archived &&
-          !!category &&
-          category.kind === input.type &&
-          Number.isFinite(amount) &&
-          amount > 0;
-
-        if (!valid || !account) {
-          return null;
-        }
-
-        // A debt/loan payment ID may be posted to the ledger only once.
-        // This protects against rapid repeated submissions and stale UI state.
-        if (
-          input.linkedEntityType &&
-          input.linkedEntityId &&
-          input.linkedPaymentId &&
-          transactions.some(
-            (item) =>
-              item.linkedEntityType === input.linkedEntityType &&
-              item.linkedEntityId === input.linkedEntityId &&
-              item.linkedPaymentId === input.linkedPaymentId
-          )
-        ) {
-          return null;
-        }
-
-        const normalizedInput = {
-          ...input,
-          amount,
-          entryType: input.entryType ?? 'normal',
-        };
-
-        if (
-          normalizedInput.entryType === 'refund' &&
-          !isValidRefund(
-            normalizedInput,
-            transactions,
-            accounts
-          )
-        ) {
-          return null;
-        }
-
-        if (
-          normalizedInput.entryType === 'normal' &&
-          normalizedInput.relatedTransactionId
-        ) {
-          return null;
-        }
-
-        const timestamp = now();
-
-        const transaction: Transaction = {
-          ...normalizedInput,
-          currencyCode: account.currencyCode,
-          id: generateId('trx'),
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        };
-
-        set((state) => ({
-          transactions: [transaction, ...state.transactions],
-        }));
-
-        return transaction.id;
+      addLoanReceiptTransaction: (input) => {
+        if (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated()) return null;
+        const matches = useFinanceStore.getState().loans.filter(l => l.id === input.loanId);
+        const loan = matches[0];
+        const account = get().accounts.filter(a => a.id === input.accountId);
+        if (matches.length !== 1 || loan.receivedAt || loan.receiptTransactionId
+          || !Number.isFinite(input.amount) || input.amount <= 0 || !isValidISODate(input.date)
+          || (loan.principalAmount !== undefined && input.amount > loan.principalAmount)
+          || account.length !== 1 || account[0].archived || account[0].type === 'credit_card'
+          || account[0].currencyCode !== loan.currencyCode
+          || get().transactions.some(t => t.linkedEntityId === loan.id && !t.linkedPaymentId)) return null;
+        return createTransaction({ accountId: input.accountId, categoryId: input.categoryId, amount: input.amount,
+          type: 'income', date: input.date, note: 'Loan received: ' + loan.name,
+          linkedEntityType: 'loan', linkedEntityId: loan.id });
       },
 
       updateTransaction: (id, patch) => {
@@ -932,8 +1000,13 @@ export const useLedgerStore = create<LedgerStore>()(
 
       /* -------------------------------- Reset ------------------------------ */
 
-      resetLedger: () => set({ ...initialData }),
-    }),
+      resetLedger: () => {
+        if (!get().clearAccountsAndTransactions()) return false;
+        set({ ...initialData });
+        return true;
+      },
+      });
+    },
     {
       name: 'tomorrow:ledger',
       version: STORAGE_VERSION,
@@ -966,6 +1039,8 @@ export const useLedgerStore = create<LedgerStore>()(
     }
   )
 );
+
+registerLedgerProtectionReader(() => ({ ...useLedgerStore.getState(), hydrated: useLedgerStore.persist.hasHydrated() }));
 
 /* -------------------------------------------------------------------------- */
 /* Hydration hook                                                             */

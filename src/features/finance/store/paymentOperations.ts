@@ -3,7 +3,7 @@ import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Loan, LoanPayment } from '@/features/finance/types/finance';
 import { getDebtRemaining, getLoanPaidAmount, getLoanRemainingAmount, getLoanTotal, roundMoney } from '@/features/finance/utils/finance';
 import { isValidISODate } from '@/features/finance/utils/input';
-import { resolvePayment, type PaymentRef } from '@/features/finance/utils/paymentTransactionOwnership';
+import { isVerifiedLoanReceipt, resolvePayment, type PaymentRef } from '@/features/finance/utils/paymentTransactionOwnership';
 
 export type PaymentResult = { ok: true } | { ok: false; reason: string };
 const fail = (reason: string): PaymentResult => ({ ok: false, reason });
@@ -48,11 +48,17 @@ function findCustomLoanPayment(ref: PaymentRef) {
   const loans = state.loans.filter(l => l.id === ref.entityId);
   const payments = loans.length === 1 ? loans[0].payments.filter(p => p.id === ref.paymentId) : [];
   const payment = payments[0];
+  const ledger = useLedgerStore.getState();
   // An account-only legacy record is not proof of a custom payment.
   if (payments.length !== 1 || payment.ledgerTransactionId || payment.accountId
     || !payment.paymentMethodLabel?.trim()
-    || useLedgerStore.getState().transactions.some(t => t.linkedEntityType === 'loan'
-      && t.linkedEntityId === ref.entityId && t.linkedPaymentId === ref.paymentId)) return null;
+    || ledger.transactions.some(t => {
+      // An explicitly verified receipt is separate from a custom repayment.
+      const receipt = isVerifiedLoanReceipt(t, loans[0], state, ledger);
+      return !receipt && (t.linkedPaymentId === ref.paymentId
+        || (t.linkedEntityId === ref.entityId && (t.linkedEntityType !== 'loan' || !t.linkedPaymentId))
+        || (t.linkedEntityType === 'loan' && !t.linkedEntityId));
+    })) return null;
   return { loan: loans[0], payment };
 }
 
@@ -93,6 +99,10 @@ export function editLinkedPayment(ref: PaymentRef, edit: PaymentEdit): PaymentRe
     const custom = linked ? null : findCustomLoanPayment(ref);
     if (!linked && !custom) return false;
     const payment = linked?.payment ?? custom!.payment;
+    // Older split components must not silently become ignored simple-payment data.
+    if (ref.entityType === 'loan' && ((payment as LoanPayment).paymentMode !== 'simple'
+      || (payment as LoanPayment).principalAmount !== undefined
+      || (payment as LoanPayment).interestAmount !== undefined)) return false;
     const parent = linked?.parent ?? custom!.loan;
     if (ref.entityType === 'debt') {
       const debt = finance.debts.find(d => d.id === ref.entityId)!;
@@ -214,10 +224,8 @@ export function postLinkedPayment(input: PaymentPost): PaymentResult {
     const savedPayment = savedParents.find(p => p.id === parent.id)?.payments.find(p => p.id === paymentId);
     if (!savedPayment || savedPayment.amount !== roundMoney(input.amount) || savedPayment.date !== input.date) return false;
     if (account) {
-      const txId = useLedgerStore.getState().addTransaction({ amount: roundMoney(input.amount + fee),
-        accountId: account, categoryId: input.categoryId!, date: input.date, note: input.note, type,
-        purpose: isLoan ? 'loan_payment' : type === 'income' ? 'debt_collection' : 'debt_payment',
-        linkedEntityType: input.entityType, linkedEntityId: parent.id, linkedPaymentId: paymentId });
+      const txId = useLedgerStore.getState().addPaymentTransaction({
+        entityType: input.entityType, entityId: parent.id, paymentId }, input.categoryId!);
       if (!txId) return false;
       if (isLoan) {
         if (!finance.updateLoanPayment(parent.id, paymentId, { ledgerTransactionId: txId })) return false;
@@ -252,9 +260,8 @@ export function confirmLoanReceipt(input: {
       || useLedgerStore.getState().transactions.some(t => t.linkedEntityType === 'loan'
         && t.linkedEntityId === loan.id && !t.linkedPaymentId)) return false;
     if (input.accountId ? !activeAccount(input.accountId, loan.currencyCode, true) : !input.methodLabel?.trim()) return false;
-    const txId = input.accountId ? useLedgerStore.getState().addTransaction({ type: 'income',
-      amount: input.amount, accountId: input.accountId, categoryId: input.categoryId!, date: input.date,
-      linkedEntityType: 'loan', linkedEntityId: loan.id, note: `Loan received: ${loan.name}` }) : undefined;
+    const txId = input.accountId ? useLedgerStore.getState().addLoanReceiptTransaction({
+      loanId: loan.id, amount: input.amount, accountId: input.accountId, categoryId: input.categoryId!, date: input.date }) : undefined;
     if (input.accountId && !txId) return false;
     finance.updateLoan(loan.id, { receivedAt: input.date, receivedAmount: input.amount,
       ...(txId ? { receiptTransactionId: txId } : { depositMethodLabel: input.methodLabel, depositAccountId: undefined }) });

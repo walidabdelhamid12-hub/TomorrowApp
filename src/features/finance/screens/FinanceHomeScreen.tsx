@@ -318,14 +318,17 @@ export default function FinanceHomeScreen() {
 
   const confirmDeleteAccount = (account: Account) => {
     const message =
-      'Deleting this account may also delete its linked transactions and transfers.';
+      'Ordinary transactions will be deleted. Accounts with transfers or loan/debt history cannot be deleted.';
+    const performDelete = () => {
+      if (!deleteAccount(account.id)) Alert.alert('Cannot delete account', 'This account has transfers or loan/debt dependencies. Keep it to preserve its accounting history.');
+    };
 
     if (Platform.OS === 'web') {
       const confirmed = window.confirm(
         `Delete "${account.name}"?\n\n${message}`,
       );
 
-      if (confirmed) deleteAccount(account.id);
+      if (confirmed) performDelete();
       return;
     }
 
@@ -334,7 +337,7 @@ export default function FinanceHomeScreen() {
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => deleteAccount(account.id),
+        onPress: performDelete,
       },
     ]);
   };

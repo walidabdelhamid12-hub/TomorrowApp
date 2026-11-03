@@ -217,7 +217,7 @@ test('posting uses existing debt/loan amount limits, cash amounts, and linkage r
 });
 
 test('failed posting restores newly created payments when ledger creation fails', () => {
-  ledger.setState({ addTransaction: () => null });
+  ledger.setState({ addPaymentTransaction: () => null });
   assertRejected(() => postLinkedPayment({ entityType: 'debt', entityId: 'debt', amount: 25, date, accountId: 'a', categoryId: 'out' }));
 });
 
@@ -364,4 +364,166 @@ test('rollback failure is reported explicitly and never reported as success', ()
     assert.match(result.reason, /rollback failed/i);
     assert.equal(ledger.getState().transactions.some(t => t.id === 'dt'), true);
   } finally { finance.setState = setState; }
+});
+
+const fullSnapshot = () => structuredClone({ ...snapshot(), accounts: ledger.getState().accounts,
+  transfers: ledger.getState().transfers, categories: ledger.getState().categories });
+
+test('account deletion rejects protected payments and exact reverse-only links', () => {
+  changeTx('lt', t => { const n = { ...t }; delete n.purpose; delete n.linkedEntityType; delete n.linkedEntityId; delete n.linkedPaymentId; return n; });
+  const previous = fullSnapshot();
+  assert.equal(ledger.getState().deleteAccount('a'), false);
+  assert.deepEqual(fullSnapshot(), previous);
+});
+
+test('account deletion cannot erase an outgoing or incoming transfer or change the other balance', () => {
+  finance.setState({ loans: [], debts: [] }); ledger.setState({ transactions: [], transfers: [
+    { id: 'tr', fromAccountId: 'a', toAccountId: 'b', amount: 100, currencyCode: 'USD', type: 'internal', date, ...stamps },
+  ] });
+  const previous = fullSnapshot();
+  for (const id of ['a', 'b']) assert.equal(ledger.getState().deleteAccount(id), false);
+  assert.deepEqual(fullSnapshot(), previous);
+  assert.equal(balance('a'), 1900); assert.equal(balance('b'), 2100);
+});
+
+test('ordinary account deletion still works and missing linked cash does not erase account history', () => {
+  assert.equal(ledger.getState().deleteAccount('b'), true);
+  ledger.setState({ transactions: [] });
+  const previous = fullSnapshot();
+  assert.equal(ledger.getState().deleteAccount('a'), false);
+  assert.deepEqual(fullSnapshot(), previous);
+});
+
+for (const variant of ['payments', 'receipt', 'received-custom', 'settled', 'closed', 'orphan-ledger']) {
+  test(`loan deletion rejects ${variant} history without changing accounting`, () => {
+    const l = loan(); l.payments = []; delete l.receivedAt; delete l.receivedAmount;
+    ledger.setState({ transactions: [] });
+    if (variant === 'payments') l.payments = loan().payments;
+    if (variant === 'receipt') l.receiptTransactionId = 'receipt';
+    if (variant === 'received-custom') { l.receivedAt = date; l.receivedAmount = 1000; l.depositMethodLabel = 'Cash'; }
+    if (variant === 'settled') l.status = 'settled';
+    if (variant === 'closed') l.status = 'closed';
+    if (variant === 'orphan-ledger') ledger.setState({ transactions: [tx('orphan', 'loan', 'loan', undefined, 100)] });
+    finance.setState({ loans: [l] });
+    const previous = fullSnapshot();
+    assert.equal(finance.getState().deleteLoan('loan'), false);
+    assert.deepEqual(fullSnapshot(), previous);
+  });
+}
+
+test('an unreceived loan without accounting history can still be deleted', () => {
+  changeLoan(l => { const n = { ...l, payments: [] }; delete n.receivedAt; delete n.receivedAmount; return n; });
+  ledger.setState({ transactions: [] });
+  assert.equal(finance.getState().deleteLoan('loan'), true);
+  assert.equal(finance.getState().loans.length, 0);
+});
+
+test('ledger clear/reset and finance reset refuse linked history unchanged', () => {
+  const previous = fullSnapshot();
+  assert.equal(ledger.getState().clearAccountsAndTransactions(), false);
+  assert.equal(ledger.getState().resetLedger(), false);
+  assert.equal(finance.getState().resetFinanceData(), false);
+  assert.deepEqual(fullSnapshot(), previous);
+});
+
+test('resets cannot bypass orphan protection and remain available for unlinked empty data', () => {
+  finance.setState({ loans: [], debts: [] });
+  ledger.setState({ transactions: [tx('orphan', undefined, undefined, undefined, 10, 'loan_payment')] });
+  const previous = fullSnapshot();
+  assert.equal(finance.getState().resetFinanceData(), false);
+  assert.equal(ledger.getState().resetLedger(), false);
+  assert.deepEqual(fullSnapshot(), previous);
+  ledger.setState({ transactions: [] });
+  assert.equal(finance.getState().resetFinanceData(), true);
+  assert.equal(ledger.getState().resetLedger(), true);
+});
+
+test('deletion and reset guards fail closed before ledger hydration completes', () => {
+  const ready = ledger.persist.hasHydrated; ledger.persist.hasHydrated = () => false;
+  try {
+    assert.equal(ledger.getState().deleteAccount('b'), false);
+    assert.equal(finance.getState().deleteLoan('loan'), false);
+    assert.equal(ledger.getState().resetLedger(), false);
+    assert.equal(finance.getState().resetFinanceData(), false);
+  } finally { ledger.persist.hasHydrated = ready; }
+});
+
+test('generic creation cannot forge linked purposes or ownership fields', () => {
+  for (const extra of [{ purpose: 'loan_payment' }, { purpose: 'debt_payment' }, { purpose: 'debt_collection' },
+    { purpose: 'loan_principal_payment' }, { purpose: 'loan_interest_payment' }, { linkedEntityType: 'loan' },
+    { linkedEntityId: 'loan' }, { linkedPaymentId: 'lp' }, { linkedEntityType: undefined }]) {
+    const previous = fullSnapshot();
+    assert.equal(ledger.getState().addTransaction({ type: 'expense', amount: 10, date, accountId: 'a', categoryId: 'out', ...extra }), null);
+    assert.deepEqual(fullSnapshot(), previous);
+  }
+});
+
+test('dedicated posting derives cash values and rejects nonexistent or already posted payment IDs', () => {
+  assert.equal(ledger.getState().addPaymentTransaction(loanRef, 'out'), null);
+  assert.equal(ledger.getState().addPaymentTransaction({ ...loanRef, paymentId: 'missing' }, 'out'), null);
+  const paymentId = finance.getState().addLoanPayment('loan', { amount: 25, latePaymentFee: 3, paymentMode: 'simple', date, accountId: 'a' });
+  const ref = { ...loanRef, paymentId };
+  const id = ledger.getState().addPaymentTransaction(ref, 'out');
+  assert.ok(id);
+  const posted = ledger.getState().transactions.find(t => t.id === id);
+  assert.equal(posted.amount, 28); assert.equal(posted.accountId, 'a'); assert.equal(posted.linkedPaymentId, paymentId);
+  assert.equal(ledger.getState().addPaymentTransaction(ref, 'out'), null);
+});
+
+for (const variant of ['explicit-split', 'legacy-components', 'simple-with-components']) {
+  test(`editing ${variant} loan payments preserves original semantics by refusing unchanged`, () => {
+    changeLoan(l => ({ ...l, payments: l.payments.map(p => ({ ...p, principalAmount: 80, interestAmount: 20,
+      paymentMode: variant === 'explicit-split' ? 'split' : variant === 'legacy-components' ? undefined : 'simple' })) }));
+    assertRejected(() => editLinkedPayment(loanRef, edit));
+  });
+}
+
+test('a verified single-entry split payment can still be reversed', () => {
+  changeLoan(l => ({ ...l, payments: l.payments.map(p => ({ ...p, paymentMode: 'split', principalAmount: 80, interestAmount: 20 })) }));
+  assert.equal(reverseLinkedPayment(loanRef).ok, true);
+  assert.equal(balance('a'), 1950);
+});
+
+for (const evidence of [
+  { linkedEntityType: 'loan', linkedEntityId: 'loan' },
+  { linkedEntityId: 'loan' },
+  { linkedEntityType: 'debt', linkedEntityId: 'loan' },
+  { linkedPaymentId: 'lp' },
+  { linkedEntityType: 'loan' },
+]) {
+  test(`custom payment rejects explicit conflicting ownership ${JSON.stringify(evidence)}`, () => {
+    changeLoan(l => ({ ...l, payments: l.payments.map(p => ({ ...p, accountId: undefined, ledgerTransactionId: undefined, paymentMethodLabel: 'Cash' })) }));
+    ledger.setState({ transactions: [{ ...stamps, id: 'orphan', type: 'expense', amount: 105, currencyCode: 'USD', accountId: 'a', categoryId: 'out', date, ...evidence }] });
+    assertRejected(() => editLinkedPayment(loanRef, { ...edit, paymentMethodLabel: 'Cash' }));
+    assertRejected(() => reverseLinkedPayment(loanRef));
+  });
+}
+
+test('a verified loan receipt can coexist with genuine custom payment edits and reversals', () => {
+  changeLoan(l => ({ ...l, receiptTransactionId: 'receipt', payments: l.payments.map(p => ({ ...p, accountId: undefined, ledgerTransactionId: undefined, paymentMethodLabel: 'Cash' })) }));
+  ledger.setState({ transactions: [{ ...tx('receipt', 'loan', 'loan', undefined, 1000), type: 'income' }] });
+  const previous = structuredClone(ledger.getState().transactions);
+  assert.equal(editLinkedPayment(loanRef, { ...edit, paymentMethodLabel: 'Cash' }).ok, true);
+  assert.equal(reverseLinkedPayment(loanRef).ok, true);
+  assert.deepEqual(ledger.getState().transactions, previous);
+});
+
+test('dedicated account repayment posting works after a verified loan receipt', () => {
+  changeLoan(l => ({ ...l, receiptTransactionId: 'receipt' }));
+  ledger.setState(s => ({ transactions: [...s.transactions, { ...tx('receipt', 'loan', 'loan', undefined, 1000), type: 'income' }] }));
+  assert.equal(postLinkedPayment({ entityType: 'loan', entityId: 'loan', amount: 25, latePaymentFee: 3,
+    accountId: 'a', categoryId: 'out', date }).ok, true);
+  assert.equal(balance('a'), 2817);
+  assert.equal(getLoanRemainingAmount(finance.getState().loans[0]), 1075);
+});
+
+test('ledger clear/reset reject transfers even when no loan or debt exists', () => {
+  finance.setState({ loans: [], debts: [] });
+  ledger.setState({ transactions: [], transfers: [
+    { ...stamps, id: 'tr', fromAccountId: 'a', toAccountId: 'b', amount: 100, currencyCode: 'USD', type: 'internal', date },
+  ] });
+  const previous = fullSnapshot();
+  assert.equal(ledger.getState().clearAccountsAndTransactions(), false);
+  assert.equal(ledger.getState().resetLedger(), false);
+  assert.deepEqual(fullSnapshot(), previous);
 });

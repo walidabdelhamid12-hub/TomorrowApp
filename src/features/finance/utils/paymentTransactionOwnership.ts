@@ -1,4 +1,4 @@
-import type { DebtPayment, FinanceData, LoanPayment } from '@/features/finance/types/finance';
+import type { DebtPayment, FinanceData, Loan, LoanPayment } from '@/features/finance/types/finance';
 import type { LedgerData, Transaction } from '@/features/finance/types/ledger';
 import { roundMoney } from '@/features/finance/utils/finance';
 
@@ -28,6 +28,18 @@ export function isProtectedTransaction(tx: Transaction, finance: OwnershipData):
   return paymentPurposes.has(tx.purpose ?? '')
     || tx.linkedEntityType !== undefined || tx.linkedEntityId !== undefined
     || tx.linkedPaymentId !== undefined || transactionReferences(finance, tx.id) > 0;
+}
+
+/** Only an exact, consistent receipt reference distinguishes receipt from orphaned cash. */
+export function isVerifiedLoanReceipt(tx: Transaction, loan: Loan, finance: OwnershipData, ledger: LedgerData): boolean {
+  return loan.receiptTransactionId === tx.id && transactionReferences(finance, tx.id) === 1
+    && ledger.transactions.filter(t => t.id === tx.id).length === 1
+    && tx.type === 'income' && tx.amount === loan.receivedAmount && tx.date === loan.receivedAt
+    && tx.currencyCode === loan.currencyCode && !tx.linkedPaymentId
+    && (tx.entryType === undefined || tx.entryType === 'normal') && !tx.relatedTransactionId
+    && (tx.purpose === undefined || tx.purpose === 'normal')
+    && (tx.linkedEntityType === undefined || tx.linkedEntityType === 'loan')
+    && (tx.linkedEntityId === undefined || tx.linkedEntityId === loan.id);
 }
 
 /** Exact IDs only. No matching by note, amount, name or date to infer a link. */
