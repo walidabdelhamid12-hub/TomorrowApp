@@ -109,7 +109,6 @@ export default function FinanceHomeScreen() {
   const deleteAssetEntry = useFinanceStore(
     (state) => state.deleteAssetEntry,
   );
-  const clearAssets = useFinanceStore((state) => state.clearAssets);
 
   const baseCurrency = useCurrencyStore((state) => state.baseCurrency);
   const rates = useCurrencyStore((state) => state.rates);
@@ -294,16 +293,6 @@ export default function FinanceHomeScreen() {
     }
   };
 
-  const performClearTestData = () => {
-    clearAssets();
-
-    useLedgerStore.setState({
-      accounts: [],
-      transactions: [],
-      transfers: [],
-    });
-  };
-
   const confirmDeleteAsset = (asset: Asset) => {
     const message =
       'This will permanently delete the asset and all of its recorded movements.';
@@ -394,43 +383,6 @@ export default function FinanceHomeScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: () => removeTransfer(transfer.id),
-      },
-    ]);
-  };
-
-  const confirmClearTestData = () => {
-    const message =
-      'This will permanently delete all assets, accounts, transactions, and transfers.\n\n' +
-      'Categories, currencies, exchange rates, debts, loans, and cheques will be kept.';
-
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(
-        `Clear test data?\n\n${message}`,
-      );
-
-      if (!confirmed) return;
-
-      performClearTestData();
-
-      window.alert(
-        'Done!\n\nAssets, accounts, transactions, and transfers have been cleared.',
-      );
-      return;
-    }
-
-    Alert.alert('Clear test data?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete data',
-        style: 'destructive',
-        onPress: () => {
-          performClearTestData();
-
-          Alert.alert(
-            'Done',
-            'Assets, accounts, transactions, and transfers have been cleared.',
-          );
-        },
       },
     ]);
   };
@@ -696,16 +648,6 @@ export default function FinanceHomeScreen() {
         onEditTransfer={openTransfer}
         onDeleteTransfer={confirmDeleteTransfer}
       />
-
-      <Pressable
-        accessibilityRole="button"
-        onPress={confirmClearTestData}
-        style={styles.clearDataButton}
-      >
-        <AppText style={styles.clearDataButtonText}>
-          Clear test data
-        </AppText>
-      </Pressable>
 
       <AddTransactionModal
         visible={txOpen}
