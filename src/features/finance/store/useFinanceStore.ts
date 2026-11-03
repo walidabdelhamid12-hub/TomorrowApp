@@ -70,7 +70,7 @@ interface FinanceActions {
     debtId: EntityId,
     paymentId: EntityId,
     patch: DebtPaymentPatch
-  ) => void;
+  ) => boolean;
   deleteDebtPayment: (debtId: EntityId, paymentId: EntityId) => void;
 
   addLoan: (input: NewLoanInput) => EntityId | null;
@@ -358,10 +358,16 @@ export const useFinanceStore = create<FinanceStore>()(
         }));
       },
 
-      deleteDebt: (id) =>
+      deleteDebt: (id) => {
+        const debt = get().debts.find((item) => item.id === id);
+        // Keep the debt record whenever it has payment history. Its payments
+        // may already be reflected in the ledger and must never be orphaned.
+        if (!debt || (debt.payments ?? []).length > 0) return;
+
         set((state) => ({
-          debts: state.debts.filter((debt) => debt.id !== id),
-        })),
+          debts: state.debts.filter((item) => item.id !== id),
+        }));
+      },
 
       addDebtPayment: (debtId, input) => {
         const debt = get().debts.find((item) => item.id === debtId);
@@ -401,7 +407,7 @@ export const useFinanceStore = create<FinanceStore>()(
       updateDebtPayment: (debtId, paymentId, patch) => {
         const debt = get().debts.find((item) => item.id === debtId);
         const currentPayment = debt?.payments.find((item) => item.id === paymentId);
-        if (!debt || !currentPayment) return;
+        if (!debt || !currentPayment) return false;
 
         const cleanPatch = withRounded(definedOnly(patch), ['amount']);
         const nextAmount =
@@ -421,7 +427,7 @@ export const useFinanceStore = create<FinanceStore>()(
           !Number.isFinite(remainingForPayment) ||
           nextAmount > remainingForPayment
         ) {
-          return;
+          return false;
         }
 
         set((state) => ({
@@ -434,17 +440,26 @@ export const useFinanceStore = create<FinanceStore>()(
             ),
           })),
         }));
+        return true;
       },
 
-      deleteDebtPayment: (debtId, paymentId) =>
+      // This primitive is intentionally limited to unposted payment records.
+      // Posted payments must be reversed through their verified ledger entry.
+      deleteDebtPayment: (debtId, paymentId) => {
+        const payment = get().debts
+          .find((item) => item.id === debtId)
+          ?.payments.find((item) => item.id === paymentId);
+        if (!payment || payment.ledgerTransactionId) return;
+
         set((state) => ({
           debts: patchParent(state.debts, debtId, (debt) => ({
             ...debt,
             payments: debt.payments.filter(
-              (payment) => payment.id !== paymentId
+              (item) => item.id !== paymentId
             ),
           })),
-        })),
+        }));
+      },
 
       /* Loans */
       addLoan: (input) => {
