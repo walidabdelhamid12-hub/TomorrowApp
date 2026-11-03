@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Card } from '@/components/ui';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Transaction, Transfer } from '@/features/finance/types/ledger';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
+import { getTransactionDescription } from '@/features/finance/utils/transactionDescription';
 import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
 import { getTransactionDestination } from '@/features/finance/utils/transactionNavigation';
 import { moduleColors, useTheme } from '@/theme';
@@ -49,6 +50,7 @@ export function TransactionsSection({
   const debts = useFinanceStore(s => s.debts);
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [actionItem, setActionItem] = useState<{ kind: 'transaction' | 'transfer'; id: string } | null>(null);
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
   const accountById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts]);
   const sorted = useMemo(() => [
@@ -60,6 +62,33 @@ export function TransactionsSection({
   [transactions, transfers]);
   const visible = showAll ? sorted : sorted.slice(0, PREVIEW_COUNT);
   const toggleAll = () => { setExpanded(true); setShowAll(value => !value); };
+
+  const selectedTransaction = actionItem?.kind === 'transaction'
+    ? transactions.find(tx => tx.id === actionItem.id) : undefined;
+  const selectedProtected = selectedTransaction && isProtectedTransaction(selectedTransaction, { loans, debts });
+  const performAction = (operation: 'edit' | 'delete') => {
+    const selected = actionItem;
+    setActionItem(null);
+    if (!selected) return;
+    const latest = useLedgerStore.getState();
+    if (selected.kind === 'transfer') {
+      const matches = latest.transfers.filter(item => item.id === selected.id);
+      if (matches.length === 1) (operation === 'edit' ? onEditTransfer : onDeleteTransfer)(matches[0]);
+    } else {
+      const matches = latest.transactions.filter(item => item.id === selected.id);
+      if (matches.length !== 1) return;
+      const tx = matches[0];
+      if (isProtectedTransaction(tx, useFinanceStore.getState())) { onManage(tx); return; }
+      (operation === 'edit' ? onEdit : onDelete)(tx);
+    }
+  };
+  const moreButton = (kind: 'transaction' | 'transfer', id: string) => (
+    <Pressable accessibilityRole="button" accessibilityLabel={kind === 'transfer' ? 'Transfer actions' : 'Transaction actions'}
+      accessibilityHint="Open edit and delete actions" onPress={() => setActionItem({ kind, id })}
+      style={({ pressed }) => [styles.moreButton, { opacity: pressed ? 0.65 : 1 }]}>
+      <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} accessible={false} />
+    </Pressable>
+  );
 
   return (
     <View style={{ marginTop: spacing.xl }}>
@@ -88,7 +117,7 @@ export function TransactionsSection({
       ) : (
         <Card padded={false}>
           {visible.map((item, index) => {
-            const rowStyle = [styles.row, { padding: spacing.md },
+            const rowStyle = [styles.row,
               index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }];
             if (item.kind === 'transfer') {
               const transfer = item.transfer;
@@ -97,72 +126,98 @@ export function TransactionsSection({
               const cardPayment = transfer.type === 'credit_card_payment';
               return (
                 <View key={'transfer-' + item.id} style={rowStyle}>
-                  <View style={styles.detailsRow}>
-                    <View style={styles.iconCircle}>
-                      <Ionicons name={cardPayment ? 'card-outline' : 'swap-horizontal-outline'} size={20}
-                        color={moduleColors.finance} accessible={false} />
-                    </View>
-                    <View style={styles.details}>
-                      <AppText style={styles.name}>{cardPayment ? 'Credit card payment' : 'Transfer'}</AppText>
-                      <AppText variant="caption" color="textSecondary">{transfer.date}</AppText>
-                      <AppText variant="caption" color="textSecondary">{'From: ' + (accountById.get(transfer.fromAccountId)?.name ?? 'Unavailable account')}</AppText>
-                      <AppText variant="caption" color="textSecondary">{'To: ' + (accountById.get(transfer.toAccountId)?.name ?? 'Unavailable account')}</AppText>
-                    </View>
+                  <View style={styles.iconCircle}>
+                    <Ionicons name={cardPayment ? 'card-outline' : 'swap-horizontal-outline'} size={20}
+                      color={moduleColors.finance} accessible={false} />
                   </View>
-                  <AppText style={styles.amount} textBreakStrategy="simple">
-                    {amountsVisible ? formatAmount(transfer.fromAmount ?? transfer.amount, fromCurrency) + ' ' + fromCurrency : '••••••'}
-                  </AppText>
-                  {fromCurrency !== toCurrency && (
-                    <AppText style={styles.amount} textBreakStrategy="simple">
-                      {amountsVisible ? '→ ' + formatAmount(transfer.toAmount ?? transfer.amount, toCurrency) + ' ' + toCurrency : '••••••'}
+                  <View style={styles.details}>
+                    <View style={styles.primary}>
+                      <AppText variant="caption" style={styles.name}>{cardPayment ? 'Credit card payment' : 'Transfer'}</AppText>
+                      <AppText variant="caption" style={styles.amount} textBreakStrategy="simple">
+                        {amountsVisible ? formatAmount(transfer.fromAmount ?? transfer.amount, fromCurrency) + ' ' + fromCurrency : '••••••'}
+                      </AppText>
+                    </View>
+                    {fromCurrency !== toCurrency && (
+                      <AppText variant="caption" style={styles.amount} textBreakStrategy="simple">
+                        {amountsVisible ? '→ ' + formatAmount(transfer.toAmount ?? transfer.amount, toCurrency) + ' ' + toCurrency : '••••••'}
+                      </AppText>
+                    )}
+                    <AppText variant="label" color="textSecondary" style={styles.metadata}>
+                      {transfer.date + ' · ' + (accountById.get(transfer.fromAccountId)?.name ?? 'Unavailable account')
+                        + ' → ' + (accountById.get(transfer.toAccountId)?.name ?? 'Unavailable account')}
                     </AppText>
-                  )}
-                  <View style={styles.actions}>
-                    <RowAction label="Edit transfer" icon="create-outline" onPress={() => onEditTransfer(transfer)} />
-                    <RowAction label="Delete transfer" icon="trash-outline" danger onPress={() => onDeleteTransfer(transfer)} />
                   </View>
+                  {moreButton('transfer', transfer.id)}
                 </View>
               );
             }
             const tx = item.transaction;
             const category = categoryById.get(tx.categoryId);
             const account = accountById.get(tx.accountId);
-            const refund = tx.entryType === 'refund';
-            const expense = tx.type === 'expense' && !refund;
+            const expense = tx.type === 'expense' && tx.entryType !== 'refund';
             const icon = category?.icon ?? '';
             const protectedRecord = isProtectedTransaction(tx, { loans, debts });
             const destination = protectedRecord ? getTransactionDestination(tx, { loans, debts }) : null;
-            return (
+            const description = getTransactionDescription(tx, category?.name, destination);
+            const amount = amountsVisible
+              ? (expense ? '-' : '+') + formatAmount(tx.amount, tx.currencyCode) + ' ' + tx.currencyCode : '••••••';
+            const metadata = tx.date + ' · ' + (account?.name ?? 'Unavailable account');
+            const content = (
+              <>
+                <View style={styles.iconCircle}>
+                  <Ionicons name={protectedRecord ? 'wallet-outline' : icon in Ionicons.glyphMap ? icon as IconName : 'receipt-outline'}
+                    size={20} color={category?.color ?? moduleColors.finance} accessible={false} />
+                </View>
+                <View style={styles.details}>
+                  <View style={styles.primary}>
+                    <AppText variant="caption" style={styles.name}>{description}</AppText>
+                    <AppText variant="caption" style={styles.amount} color={expense ? 'expense' : 'income'} textBreakStrategy="simple">
+                      {amount}
+                    </AppText>
+                  </View>
+                  <AppText variant="label" color="textSecondary" style={styles.metadata}>{metadata}</AppText>
+                </View>
+              </>
+            );
+            return protectedRecord ? (
+              <Pressable key={'transaction-' + item.id} accessibilityRole="button"
+                accessibilityLabel={(destination?.label ?? 'Linked record unavailable') + ': ' + description + ', ' + amount + ', ' + metadata}
+                accessibilityHint={destination ? 'Opens the linked record' : 'Explains why the linked record cannot be opened safely'}
+                onPress={() => onManage(tx)}
+                style={({ pressed }) => [rowStyle, { opacity: pressed ? 0.65 : 1 }]}>
+                {content}
+              </Pressable>
+            ) : (
               <View key={'transaction-' + item.id} style={rowStyle}>
-                <View style={styles.detailsRow}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons name={icon in Ionicons.glyphMap ? icon as IconName : 'receipt-outline'}
-                      size={20} color={category?.color ?? moduleColors.finance} accessible={false} />
-                  </View>
-                  <View style={styles.details}>
-                    <AppText style={styles.name}>{(refund ? 'Refund · ' : '') + (category?.name ?? 'Uncategorized')}</AppText>
-                    <AppText variant="caption" color="textSecondary">{tx.date}</AppText>
-                    <AppText variant="caption" color="textSecondary">{'Account: ' + (account?.name ?? 'Unavailable account')}</AppText>
-                  </View>
-                </View>
-                <AppText style={styles.amount} color={expense ? 'expense' : 'income'} textBreakStrategy="simple">
-                  {amountsVisible ? (expense ? '-' : '+') + formatAmount(tx.amount, tx.currencyCode) + ' ' + tx.currencyCode : '••••••'}
-                </AppText>
-                <View style={styles.actions}>
-                  {protectedRecord ? (
-                    <RowAction label={destination?.label ?? 'Linked record unavailable'} icon="open-outline" onPress={() => onManage(tx)} />
-                  ) : (
-                    <>
-                      <RowAction label="Edit transaction" icon="create-outline" onPress={() => onEdit(tx)} />
-                      <RowAction label="Delete transaction" icon="trash-outline" danger onPress={() => onDelete(tx)} />
-                    </>
-                  )}
-                </View>
+                {content}
+                {moreButton('transaction', tx.id)}
               </View>
             );
           })}
         </Card>
       ))}
+      {actionItem && (
+        <Modal transparent animationType="fade" visible onRequestClose={() => setActionItem(null)}>
+          <View style={styles.modalBackdrop}>
+            <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Close transaction actions"
+              onPress={() => setActionItem(null)} />
+            <View accessibilityViewIsModal style={[styles.actionSheet, { backgroundColor: colors.surface }]}>
+              <AppText variant="h3">{actionItem.kind === 'transfer' ? 'Transfer actions' : 'Transaction actions'}</AppText>
+              {selectedProtected ? (
+                <RowAction label="Open linked record" icon="open-outline" onPress={() => performAction('edit')} />
+              ) : (
+                <>
+                  <RowAction label={actionItem.kind === 'transfer' ? 'Edit transfer' : 'Edit transaction'}
+                    icon="create-outline" onPress={() => performAction('edit')} />
+                  <RowAction label={actionItem.kind === 'transfer' ? 'Delete transfer' : 'Delete transaction'}
+                    icon="trash-outline" danger onPress={() => performAction('delete')} />
+                </>
+              )}
+              <RowAction label="Cancel" icon="close-outline" onPress={() => setActionItem(null)} />
+            </View>
+          </View>
+        </Modal>
+      )}
       {expanded && showAll && sorted.length > PREVIEW_COUNT && (
         <RowAction label="Show less" icon="chevron-up" onPress={toggleAll} />
       )}
@@ -174,14 +229,17 @@ const styles = StyleSheet.create({
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 8 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, flexGrow: 1, flexBasis: 200 },
   headingText: { flex: 1, minWidth: 0 },
-  row: { gap: 8 },
-  detailsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  details: { flex: 1, minWidth: 0 },
-  iconCircle: { width: 36, height: 36, flexShrink: 0, borderRadius: 18, alignItems: 'center',
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 8, minHeight: 60 },
+  primary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 8 },
+  details: { flex: 1, minWidth: 0, gap: 2 },
+  iconCircle: { width: 24, height: 24, flexShrink: 0, alignSelf: 'flex-start', marginTop: 2, borderRadius: 12, alignItems: 'center',
     justifyContent: 'center', backgroundColor: 'rgba(128,128,128,0.12)' },
-  name: { fontWeight: '600' },
-  amount: { fontWeight: '600', fontVariant: ['tabular-nums'] },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  name: { fontWeight: '600', flexGrow: 1, flexShrink: 1, flexBasis: 72 },
+  amount: { fontWeight: '600', fontVariant: ['tabular-nums'], maxWidth: '100%' },
+  metadata: { letterSpacing: 0 },
+  moreButton: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  modalBackdrop: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.4)' },
+  actionSheet: { padding: 16, borderRadius: 16, gap: 8 },
   actionButton: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, minWidth: 48,
     paddingHorizontal: 8, paddingVertical: 8, maxWidth: '100%' },
   actionLabel: { flexShrink: 1 },

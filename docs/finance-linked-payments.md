@@ -92,9 +92,20 @@ stacks while a one-line amount ellipsized. `Card` has no expanding height and th
 scrolling `Screen` does not reserve a transaction-row height. The fix removes that
 width contention rather than imposing row heights or changing shared UI defaults.
 
-Rows now stack details, complete amounts/currencies, and wrapping actions. Text
-retains Android font scaling with no line cap. Decorative icons use a consistent
-20-point size; action targets have a 48-point minimum and can grow with text.
+Rows now use a compact primary icon/description/amount layout with date and account
+on a secondary line. Short protected rows target 60 dp; ordinary rows target 64 dp
+with their 48 dp Actions button. These are content-driven minimums, not fixed
+heights: the primary line wraps, full monetary text has no line cap, and long
+names or larger Android font scales can increase row height. Decorative icons
+use a consistent 20-point size. Ordinary/transfer Edit and Delete remain available
+in an accessible action sheet, avoiding a permanent extra action row. That sheet
+rechecks current ownership before dispatching any captured action callback.
+
+Protected rows have no separate Manage action strip: the entire row opens its
+linked record using the existing safe resolver (or explains missing/ambiguous
+ownership). Display labels such as Loan payment, Debt collection, and Loan received
+come from explicit purpose or resolved ownership; ordinary descriptions can use
+their note/category. Labels never change category IDs, accounting types, or data.
 Preview still shows one record, now explicitly labeled "Showing 1 of N". View all
 is available in the section toolbar even while collapsed; Show less restores the
 preview. Cross-currency transfers show both cash values and both account names.
@@ -109,8 +120,9 @@ it does not establish links or bypass store-level financial protection.
 
 `npm run test:finance` includes the existing store-integrity suite and a UI suite
 that exercises actual component elements/handlers using mocked native primitives,
-plus navigation/focus resolution. It verifies preview/show-all, visible amounts,
-text scaling props, accessible targets, actions, and safe ownership handling.
+plus navigation/focus resolution. It verifies preview/show-all and ordering,
+visible amounts/currency precision, text scaling props, accessible row/menu
+targets, stale-action protection, context labels, and safe ownership handling.
 It does not measure Yoga geometry or run the Android navigation stack. Expo Go
 verification remains needed at narrow widths (320/360 dp), larger font scales,
 long category/account names, large amounts, transfers, and Manage/back navigation.

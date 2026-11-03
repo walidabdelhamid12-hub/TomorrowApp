@@ -20,12 +20,12 @@ function Icon(props) { return React.createElement('Icon', props); }
 Icon.glyphMap = { 'cash-outline': 1 };
 Module._load = function(id, parent, main) {
   if (id === 'react') return hooks;
-  if (id === 'react-native') return { Pressable: 'Pressable', View: 'View', StyleSheet: { create: x => x, hairlineWidth: 1 } };
+  if (id === 'react-native') return { Modal: 'Modal', Pressable: 'Pressable', View: 'View', StyleSheet: { create: x => x, hairlineWidth: 1 } };
   if (id === '@expo/vector-icons') return { Ionicons: Icon };
   if (id === '@/components/ui') return { AppText: 'AppText', Card: 'Card' };
   if (id === '@/theme') return { useTheme: () => theme, moduleColors: { finance: '#237' } };
-  if (id === '@/features/finance/store/useLedgerStore') return { useLedgerStore: select => select(ledger) };
-  if (id === '@/features/finance/store/useFinanceStore') return { useFinanceStore: select => select(finance) };
+  if (id === '@/features/finance/store/useLedgerStore') return { useLedgerStore: Object.assign(select => select(ledger), { getState: () => ledger }) };
+  if (id === '@/features/finance/store/useFinanceStore') return { useFinanceStore: Object.assign(select => select(finance), { getState: () => finance }) };
   return load.call(this, id.startsWith('@/') ? path.join(root, 'src', id.slice(2)) : id, parent, main);
 };
 for (const ext of ['.ts', '.tsx']) require.extensions[ext] = (module, filename) => module._compile(
@@ -34,6 +34,7 @@ for (const ext of ['.ts', '.tsx']) require.extensions[ext] = (module, filename) 
   }).outputText, filename);
 const { TransactionsSection } = require('../src/features/finance/components/TransactionsSection.tsx');
 const { getTransactionDestination, focusLinkedRecords } = require('../src/features/finance/utils/transactionNavigation.ts');
+const { getTransactionDescription } = require('../src/features/finance/utils/transactionDescription.ts');
 let calls, tree;
 const props = () => ({ amountsVisible: true,
   onEdit: x => calls.push(['edit', x.id]), onDelete: x => calls.push(['delete', x.id]),
@@ -54,7 +55,7 @@ function nodes(type, node) {
   return [...(node.type === type ? [node] : []), ...nodes(type, node.props.children)];
 }
 function press(label) {
-  const action = nodes('Pressable').find(n => n.props.accessibilityLabel === label);
+  const action = nodes('Pressable').find(n => n.props.accessibilityLabel === label || n.props.accessibilityLabel?.startsWith(label + ':'));
   assert.ok(action, 'Missing accessible action: ' + label);
   action.props.onPress(); render();
 }
@@ -93,7 +94,7 @@ test('preview explicitly shows one of four; show less and collapse retain existi
 test('full amount, currency, category, date and account use uncapped scalable text', () => {
   press('Toggle recent transactions section');
   for (const text of ['-123,456,789.12 USD', 'Long category name for Android font scaling',
-    '2026-11-04', 'Account: An account with a very long display name']) {
+    '2026-11-04 · An account with a very long display name']) {
     const element = nodes('AppText').find(n => n.props.children === text);
     assert.ok(element, text);
     assert.equal(element.props.numberOfLines, undefined);
@@ -102,26 +103,36 @@ test('full amount, currency, category, date and account use uncapped scalable te
   }
   const row = nodes('Card')[0].props.children[0];
   assert.equal(styles(row.props.style).height, undefined);
-  assert.equal(styles(row.props.style).flexDirection, undefined, 'Rows stack instead of crowding all content horizontally');
+  assert.equal(styles(row.props.style).minHeight, 60);
+  assert.equal(styles(row.props.style).paddingVertical, 8);
+  assert.equal(styles(row.props.style).maxHeight, undefined);
+  assert.ok(nodes('View').some(n => styles(n.props.style).flexWrap === 'wrap'), 'Primary content can reflow instead of clipping money');
 });
 test('ordinary transaction and transfer edit/delete handlers remain usable', () => {
   press('View all (4)');
-  press('Edit transaction'); press('Delete transaction'); press('Edit transfer'); press('Delete transfer');
+  press('Transaction actions'); press('Edit transaction');
+  press('Transaction actions'); press('Delete transaction');
+  press('Transfer actions'); press('Edit transfer');
+  press('Transfer actions'); press('Delete transfer');
   assert.deepEqual(calls, [['edit', 'first'], ['delete', 'first'], ['editTransfer', 'transfer'], ['deleteTransfer', 'transfer']]);
 });
 test('transfer displays both complete amounts and source/destination account names', () => {
   press('View all (4)');
   for (const value of ['123,456,789.12 USD', '→ 99,999,999.123 OMR',
-    'From: An account with a very long display name', 'To: Destination account']) assert.ok(texts().includes(value));
+    '2026-11-01 · An account with a very long display name → Destination account']) assert.ok(texts().includes(value));
 });
 test('amount visibility hides both ordinary and transfer values', () => {
   press('View all (4)'); render({ amountsVisible: false });
   assert.equal(texts().some(t => t.includes('123,456,789') || t.includes('99,999,999')), false);
 });
-test('protected transaction exposes a functional Manage action instead of generic mutation controls', () => {
+test('the entire protected row is the Manage action, with no separate action strip', () => {
   ledger.transactions = [{ ...base('linked', '04'), linkedEntityType: 'loan', linkedEntityId: 'loan' }]; ledger.transfers = [];
   render(); press('Toggle recent transactions section'); press('Manage loan');
   assert.deepEqual(calls, [['manage', 'linked']]);
+  const row = nodes('Card')[0].props.children[0];
+  assert.equal(row.type, 'Pressable');
+  assert.equal(nodes('Pressable', row).length, 1);
+  assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Transaction actions'), false);
   assert.equal(nodes('Pressable').some(n => /^(Edit|Delete) transaction$/.test(n.props.accessibilityLabel)), false);
 });
 test('unresolved protected ownership offers explanation action, never generic edits', () => {
@@ -180,4 +191,66 @@ test('conflicting payment IDs and shared reverse references cannot select a dest
   finance.debts[0].payments = [{ id: 'dp', ledgerTransactionId: 'shared' }];
   finance.loans[0].payments = [{ id: 'lp', ledgerTransactionId: 'shared' }];
   assert.equal(getTransactionDestination({ id: 'shared' }, finance), null);
+});
+
+test('context labels come from explicit purpose or resolved ownership, without altering categories or classification', () => {
+  const purposes = { loan_payment: 'Loan payment', loan_principal_payment: 'Loan principal payment',
+    loan_interest_payment: 'Loan interest payment', debt_payment: 'Debt payment', debt_collection: 'Debt collection' };
+  for (const [purpose, label] of Object.entries(purposes)) {
+    const tx = { ...base('linked', '04'), purpose };
+    const previous = structuredClone(tx);
+    assert.equal(getTransactionDescription(tx, 'Bills', null), label);
+    assert.deepEqual(tx, previous);
+  }
+  const tx = { ...base('legacy', '04'), linkedEntityType: 'debt', linkedEntityId: 'debt' };
+  finance.debts[0].direction = 'receivable';
+  assert.equal(getTransactionDescription(tx, 'Other', getTransactionDestination(tx, finance)), 'Debt collection');
+  assert.equal(getTransactionDescription({ ...base('plain', '04'), note: 'Loan payment' }, 'Shopping', null), 'Loan payment');
+  assert.equal(getTransactionDestination({ ...base('plain', '04'), note: 'Loan payment' }, finance), null);
+});
+
+test('a protected loan payment renders a context label and no generic action controls', () => {
+  ledger.transactions = [{ ...base('linked', '04'), purpose: 'loan_payment', linkedEntityType: 'loan', linkedEntityId: 'loan' }];
+  ledger.transfers = [];
+  const previous = structuredClone({ ledger, finance });
+  render(); press('Toggle recent transactions section');
+  assert.ok(texts().includes('Loan payment'));
+  press('Manage loan');
+  assert.deepEqual(calls, [['manage', 'linked']]);
+  assert.deepEqual({ ledger, finance }, previous);
+});
+
+test('action menu rechecks protection before dispatching a captured ordinary Edit handler', () => {
+  press('View all (4)'); press('Transaction actions');
+  const edit = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Edit transaction');
+  ledger.transactions[0] = { ...ledger.transactions[0], purpose: 'loan_payment', linkedEntityType: 'loan', linkedEntityId: 'loan' };
+  edit.props.onPress(); render();
+  assert.deepEqual(calls, [['manage', 'first']]);
+  assert.equal(nodes('Modal').length, 0);
+});
+
+test('the action menu supports cancel and Android back without mutating records', () => {
+  press('View all (4)'); press('Transaction actions'); press('Cancel');
+  assert.equal(nodes('Modal').length, 0); assert.deepEqual(calls, []);
+  press('Transfer actions');
+  nodes('Modal')[0].props.onRequestClose(); render();
+  assert.equal(nodes('Modal').length, 0); assert.deepEqual(calls, []);
+});
+
+test('ordinary three-decimal currency precision and dynamic sizing are preserved', () => {
+  ledger.transactions = [{ ...base('precise', '04'), amount: 123.456, currencyCode: 'KWD' }]; ledger.transfers = [];
+  render(); press('Toggle recent transactions section');
+  const amount = nodes('AppText').find(n => n.props.children === '-123.456 KWD');
+  assert.ok(amount); assert.equal(amount.props.numberOfLines, undefined);
+  assert.equal(amount.props.adjustsFontSizeToFit, undefined); assert.notEqual(amount.props.allowFontScaling, false);
+});
+
+test('ordering stays newest date first, then creation time', () => {
+  ledger.transactions = [
+    { ...base('early', '04'), createdAt: '2026-11-04T08:00:00', note: 'Earlier' },
+    { ...base('late', '04'), createdAt: '2026-11-04T09:00:00', note: 'Later' },
+    { ...base('old', '03'), note: 'Yesterday' },
+  ]; ledger.transfers = [];
+  render(); press('View all (3)');
+  assert.deepEqual(texts().filter(t => ['Earlier', 'Later', 'Yesterday'].includes(t)), ['Later', 'Earlier', 'Yesterday']);
 });
