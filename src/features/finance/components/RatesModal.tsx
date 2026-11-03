@@ -567,6 +567,8 @@ export function RatesModal({
       title="Exchange rates"
       onClose={handleClose}
     >
+      {statusLegend}
+
       <View style={{ gap: spacing.sm * 0.5 }}>
         <View
           style={{
@@ -804,7 +806,6 @@ export function RatesModal({
       />
 
       <View style={{ gap: spacing.xs }}>
-        {statusLegend}
         <AppText variant="caption" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
           Leave a metal price empty to clear the saved price.
         </AppText>
