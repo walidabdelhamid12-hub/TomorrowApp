@@ -317,7 +317,8 @@ export default function DebtsScreen() {
   const handleConfirmPayment = () => {
     if (!paymentDebt) return;
 
-    const amount = parseAmount(paymentAmount);
+    const parsedAmount = parseAmount(paymentAmount);
+    const amount = parsedAmount === null ? null : roundMoney(parsedAmount);
 
     if (amount === null || amount <= 0) {
       Alert.alert('Invalid amount', 'Enter an amount greater than zero.');
@@ -336,7 +337,7 @@ export default function DebtsScreen() {
 
     const remaining = getRemainingAmount(paymentDebt);
 
-    if (amount > remaining + 0.000001) {
+    if (amount > remaining) {
       Alert.alert(
         'Amount too large',
         `The remaining amount is ${formatAmount(remaining)} ${paymentDebt.currencyCode}.`,
@@ -665,7 +666,8 @@ export default function DebtsScreen() {
     if (!editingPayment) return;
 
     const { debt, payment } = editingPayment;
-    const amount = parseAmount(amountText);
+    const parsedAmount = parseAmount(amountText);
+    const amount = parsedAmount === null ? null : roundMoney(parsedAmount);
     const cleanDate = date.trim();
 
     if (amount === null || amount <= 0) {
@@ -682,7 +684,7 @@ export default function DebtsScreen() {
     // excluding the payment currently being edited.
     const maximumAllowed = getRemainingExcludingPayment(debt, payment.id);
 
-    if (amount > maximumAllowed + 0.000001) {
+    if (amount > maximumAllowed) {
       Alert.alert(
         'Amount too large',
         `The maximum allowed for this payment is ${formatAmount(maximumAllowed)} ${debt.currencyCode}.`,
