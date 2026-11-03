@@ -5,35 +5,28 @@ import { normalizeDigits } from '@/utils/input';
 export type RateMap = Record<string, number>;
 
 /**
- * Parses what the user typed.
- * Accepts Arabic digits, "1,000", "1.5", and "1,5".
- * Returns null when the input is not a valid number.
+ * Parses monetary input using the standard number format:
+ * - "." is the decimal separator.
+ * - "," is the thousands separator and must group digits in threes.
+ * - Arabic/Persian digits and Arabic decimal/thousands separators are supported.
+ * Returns null when the input is not a valid finite number.
  */
 export function parseAmount(text: string): number | null {
-  let s = normalizeDigits(text)
-    .replace(/[\s\u066C]/g, '')
-    .replace(/\u066B/g, '.');
+  const s = normalizeDigits(text)
+    .trim()
+    .replace(/\u066B/g, '.')
+    .replace(/\u066C/g, ',');
 
   if (s === '') return null;
 
-  const hasDot = s.includes('.');
-  const hasComma = s.includes(',');
+  // A comma is always a thousands separator, never a decimal separator.
+  const validNumber =
+    /^-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d*)?$/.test(s) ||
+    /^-?\.\d+$/.test(s);
 
-  if (hasDot && hasComma) {
-    // Treat commas as thousands separators: "1,234.50".
-    s = s.replace(/,/g, '');
-  } else if (hasComma) {
-    // "1,000" = thousands separator; "1,5" = decimal comma.
-    s = /^-?\d{1,3}(,\d{3})+$/.test(s)
-      ? s.replace(/,/g, '')
-      : s.replace(',', '.');
-  }
+  if (!validNumber) return null;
 
-  if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(s)) {
-    return null;
-  }
-
-  const value = Number(s);
+  const value = Number(s.replace(/,/g, ''));
   return Number.isFinite(value) ? value : null;
 }
 
