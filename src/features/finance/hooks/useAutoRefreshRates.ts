@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
@@ -42,6 +41,7 @@ export function useAutoRefreshRates(enabled: boolean) {
 
   const refreshingRef = useRef(false);
   const nextRetryAtRef = useRef(0);
+  const retryPendingRef = useRef(false);
 
   const refresh = useCallback(async (): Promise<RefreshResult | null> => {
     if (refreshingRef.current) return null;
@@ -56,8 +56,10 @@ export function useAutoRefreshRates(enabled: boolean) {
 
       if (result.ok) {
         nextRetryAtRef.current = 0;
+        retryPendingRef.current = false;
       } else {
         nextRetryAtRef.current = Date.now() + RETRY_DELAY_MS;
+        retryPendingRef.current = true;
       }
 
       return result;
@@ -69,6 +71,7 @@ export function useAutoRefreshRates(enabled: boolean) {
 
       setLastResult(result);
       nextRetryAtRef.current = Date.now() + RETRY_DELAY_MS;
+      retryPendingRef.current = true;
 
       return result;
     } finally {
@@ -82,7 +85,9 @@ export function useAutoRefreshRates(enabled: boolean) {
 
     if (Date.now() < nextRetryAtRef.current) return;
 
-    if (!isLatestSlotAlreadyUpdated()) {
+    // A failed manual or scheduled refresh must be retried even when
+    // today's scheduled slot had already succeeded earlier.
+    if (retryPendingRef.current || !isLatestSlotAlreadyUpdated()) {
       void refresh();
     }
   }, [enabled, refresh]);
