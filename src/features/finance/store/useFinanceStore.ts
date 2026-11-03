@@ -504,6 +504,16 @@ export const useFinanceStore = create<FinanceStore>()(
         const interestAmount = roundMoney(
           input.interestAmount ?? amount - principalAmount
         );
+        const principalLimit = roundMoney(
+          loan.receivedAmount ?? loan.principalAmount ?? 0
+        );
+        const principalAlreadyPaid = roundMoney(
+          loan.payments.reduce(
+            (sum, payment) => sum + (payment.principalAmount ?? payment.amount),
+            0
+          )
+        );
+
         if (
           !Number.isFinite(amount) ||
           amount <= 0 ||
@@ -511,9 +521,9 @@ export const useFinanceStore = create<FinanceStore>()(
           principalAmount < 0 ||
           !Number.isFinite(interestAmount) ||
           interestAmount < 0 ||
-          Math.abs(
-            roundMoney(principalAmount + interestAmount) - amount
-          ) > 0.001
+          Math.abs(roundMoney(principalAmount + interestAmount) - amount) > 0.001 ||
+          !Number.isFinite(principalLimit) ||
+          principalAmount + principalAlreadyPaid > principalLimit + 0.001
         ) {
           return null;
         }
@@ -561,6 +571,18 @@ export const useFinanceStore = create<FinanceStore>()(
           (cleanPatch.amount !== undefined
             ? 0
             : currentPayment.amount - nextPrincipal);
+        const principalLimit = roundMoney(
+          loan.receivedAmount ?? loan.principalAmount ?? 0
+        );
+        const otherPrincipalPaid = roundMoney(
+          loan.payments
+            .filter((payment) => payment.id !== paymentId)
+            .reduce(
+              (sum, payment) => sum + (payment.principalAmount ?? payment.amount),
+              0
+            )
+        );
+
         if (
           !Number.isFinite(nextAmount) ||
           nextAmount <= 0 ||
@@ -568,9 +590,9 @@ export const useFinanceStore = create<FinanceStore>()(
           nextPrincipal < 0 ||
           !Number.isFinite(nextInterest) ||
           nextInterest < 0 ||
-          Math.abs(
-            roundMoney(nextPrincipal + nextInterest) - nextAmount
-          ) > 0.001
+          Math.abs(roundMoney(nextPrincipal + nextInterest) - nextAmount) > 0.001 ||
+          !Number.isFinite(principalLimit) ||
+          nextPrincipal + otherPrincipalPaid > principalLimit + 0.001
         ) {
           return;
         }
