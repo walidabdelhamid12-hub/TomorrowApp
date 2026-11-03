@@ -22,7 +22,7 @@ import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useL
 import type { Loan, NewLoanInput } from '@/features/finance/types/finance';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { parseAmount } from '@/features/finance/utils/money';
-import { getLoanPaidAmount, getLoanRemainingAmount, getLoanTotal } from '@/features/finance/utils/finance';
+import { getLoanPaidAmount, getLoanRemainingAmount, getLoanTotal, roundMoney } from '@/features/finance/utils/finance';
 import { moduleColors, useTheme } from '@/theme';
 
 const today = () => {
