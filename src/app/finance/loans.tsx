@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -25,6 +25,7 @@ import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { parseAmount } from '@/features/finance/utils/money';
 import { getLoanPaidAmount, getLoanRemainingAmount, getLoanTotal, roundMoney } from '@/features/finance/utils/finance';
 import { resolvePayment } from '@/features/finance/utils/paymentTransactionOwnership';
+import { focusLinkedRecords } from '@/features/finance/utils/transactionNavigation';
 import { moduleColors, useTheme } from '@/theme';
 
 const today = () => {
@@ -38,11 +39,13 @@ const money = (value: string) => {
 const remaining = getLoanRemainingAmount;
 export default function LoansScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ loanId?: string }>();
   const { colors } = useTheme();
   const financeReady = useFinanceHydrated();
   const ledgerReady = useLedgerHydrated();
   const ready = financeReady && ledgerReady;
   const loans = useFinanceStore(s => s.loans);
+  const visibleLoans = focusLinkedRecords(loans, params.loanId);
   const addLoan = useFinanceStore(s => s.addLoan);
   const baseCurrency = useCurrencyStore(s => s.baseCurrency);
   const addAccount = useLedgerStore(s => s.addAccount);
@@ -274,12 +277,18 @@ export default function LoansScreen() {
         <Pressable onPress={() => router.back()} style={styles.back}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
         <View style={{ flex: 1 }}><AppText variant="h1">Loans</AppText><AppText variant="caption" color="textSecondary">{loans.length} loans</AppText></View>
       </View>
+      {params.loanId !== undefined && (
+        <Card variant="filled">
+          <AppText>{visibleLoans.length ? 'Showing the loan linked to your transaction.' : 'The linked loan is unavailable. No other loan has been selected.'}</AppText>
+          <AppButton title="View all loans" variant="ghost" onPress={() => router.replace('/finance/loans')} />
+        </Card>
+      )}
       <AppText color="textSecondary" style={{ marginBottom: 16 }}>
         Track money borrowed, confirm received funds, record repayments, and monitor your outstanding loan balance.
       </AppText>
       <AppButton title="Add loan" accentColor={moduleColors.finance} leftIcon={<Ionicons name="add" size={18} color={colors.onPrimary} />} onPress={() => setShowLoanForm(true)} />
-      {loans.length === 0 ? <Card variant="filled"><AppText align="center" color="textSecondary">No loans recorded yet. Add your first loan.</AppText></Card> :
-        loans.map(loan => {
+      {visibleLoans.length === 0 ? <Card variant="filled"><AppText align="center" color="textSecondary">{params.loanId !== undefined ? 'Return to transactions or view all loans.' : 'No loans recorded yet. Add your first loan.'}</AppText></Card> :
+        visibleLoans.map(loan => {
           const paid = getLoanPaidAmount(loan);
           const due = remaining(loan);
           return <Card key={loan.id} style={styles.loanCard}>

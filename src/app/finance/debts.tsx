@@ -2,7 +2,7 @@ import { editLinkedPayment, postLinkedPayment, reverseLinkedPayment } from '@/fe
 
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -35,6 +35,7 @@ import type {
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { getDebtPaid, getDebtRemaining, roundMoney } from '@/features/finance/utils/finance';
 import { parseAmount } from '@/features/finance/utils/money';
+import { focusLinkedRecords } from '@/features/finance/utils/transactionNavigation';
 import { moduleColors, useTheme } from '@/theme';
 
 type DebtTab = 'receivable' | 'payable';
@@ -116,7 +117,7 @@ const formatDate = (value?: string) => {
 
 export default function DebtsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ direction?: string }>();
+  const params = useLocalSearchParams<{ direction?: string; debtId?: string }>();
   const { colors } = useTheme();
 
   const financeReady = useFinanceHydrated();
@@ -151,13 +152,22 @@ export default function DebtsScreen() {
   } | null>(null);
 
   const [expandedDebtId, setExpandedDebtId] = useState<string | null>(null);
+  const linkedDebt = params.debtId === undefined ? undefined : focusLinkedRecords(debts, params.debtId)[0];
+  const linkedDebtId = linkedDebt?.id;
+  const linkedDebtDirection = linkedDebt?.direction;
+  useEffect(() => {
+    if (linkedDebtId && linkedDebtDirection) {
+      setActiveTab(linkedDebtDirection);
+      setExpandedDebtId(linkedDebtId);
+    }
+  }, [linkedDebtId, linkedDebtDirection]);
 
   const visibleDebts = useMemo(
     () =>
-      debts
+      focusLinkedRecords(debts, params.debtId)
         .filter((debt) => debt.direction === activeTab)
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [debts, activeTab],
+    [debts, activeTab, params.debtId],
   );
 
   const activeAccounts = useMemo(
@@ -507,6 +517,12 @@ export default function DebtsScreen() {
 
   return (
     <Screen scroll>
+      {params.debtId !== undefined && (
+        <Card variant="filled">
+          <AppText>{visibleDebts.length ? 'Showing the debt linked to your transaction.' : 'The linked debt is unavailable in this tab. No other debt has been selected.'}</AppText>
+          <AppButton title="View all debts" variant="ghost" onPress={() => router.replace('/finance/debts')} />
+        </Card>
+      )}
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}

@@ -82,3 +82,35 @@ This PR does not declare the overall Finance 3.1 milestone complete. Transfer
 editing behavior, asset valuation, currency policy, and total/net-worth presentation
 still require their separate review and verification. Crash-atomic persistence and
 native UI/device verification remain outstanding as described above.
+
+## Recent transactions UI and navigation
+
+The previous row placed an icon, a `flex: 1` category/account block, a shrinking
+amount, and an unshrinking Manage label in one horizontal line. On narrow Android
+screens the label could consume the available width, forcing metadata into tall
+stacks while a one-line amount ellipsized. `Card` has no expanding height and the
+scrolling `Screen` does not reserve a transaction-row height. The fix removes that
+width contention rather than imposing row heights or changing shared UI defaults.
+
+Rows now stack details, complete amounts/currencies, and wrapping actions. Text
+retains Android font scaling with no line cap. Decorative icons use a consistent
+20-point size; action targets have a 48-point minimum and can grow with text.
+Preview still shows one record, now explicitly labeled "Showing 1 of N". View all
+is available in the section toolbar even while collapsed; Show less restores the
+preview. Cross-currency transfers show both cash values and both account names.
+
+Manage actions resolve a unique existing parent from explicit entity/payment IDs
+or exact reverse transaction references. Conflicting, duplicated, or missing
+ownership produces an explanation and no navigation. The home handler rechecks
+current records when pressed. Existing loan/debt routes accept a focus ID, show
+only that parent (and the correct debt direction), and offer View all. A stale or
+ambiguous focus ID never falls back to another record. Navigation is read-only:
+it does not establish links or bypass store-level financial protection.
+
+`npm run test:finance` includes the existing store-integrity suite and a UI suite
+that exercises actual component elements/handlers using mocked native primitives,
+plus navigation/focus resolution. It verifies preview/show-all, visible amounts,
+text scaling props, accessible targets, actions, and safe ownership handling.
+It does not measure Yoga geometry or run the Android navigation stack. Expo Go
+verification remains needed at narrow widths (320/360 dp), larger font scales,
+long category/account names, large amounts, transfers, and Manage/back navigation.

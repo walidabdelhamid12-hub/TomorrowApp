@@ -39,7 +39,7 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "test:finance": "node --test tests/finance-linked-payments.test.cjs",
+    "test:finance": "node --test tests/finance-*.test.cjs",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",

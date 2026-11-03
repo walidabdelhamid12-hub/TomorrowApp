@@ -30,6 +30,7 @@ import { TransactionsSection } from '@/features/finance/components/TransactionsS
 import { TransferModal } from '@/features/finance/components/TransferModal';
 import { useRatesAutoRefresh } from '@/features/finance/providers/RatesAutoRefreshProvider';
 import { useFinanceSummary } from '@/features/finance/hooks/useFinanceSummary';
+import { getTransactionDestination } from '@/features/finance/utils/transactionNavigation';
 import {
   useCurrencyHydrated,
   useCurrencyStore,
@@ -369,6 +370,17 @@ export default function FinanceHomeScreen() {
     ]);
   };
 
+  const openLinkedTransaction = (transaction: Transaction) => {
+    const matches = useLedgerStore.getState().transactions.filter(item => item.id === transaction.id);
+    const current = matches.length === 1 ? matches[0] : undefined;
+    const destination = current && getTransactionDestination(current, useFinanceStore.getState());
+    if (!destination) {
+      Alert.alert('Linked record unavailable', 'A unique existing loan or debt could not be determined from this transaction’s explicit links. No records were changed.');
+      return;
+    }
+    router.push(destination.href);
+  };
+
   const confirmDeleteTransfer = (transfer: Transfer) => {
     const title =
       transfer.type === 'credit_card_payment'
@@ -650,6 +662,7 @@ export default function FinanceHomeScreen() {
       </View>
 
       <TransactionsSection
+        onManage={openLinkedTransaction}
         amountsVisible={amountsVisible}
         onEdit={openTransaction}
         onDelete={confirmDeleteTransaction}
