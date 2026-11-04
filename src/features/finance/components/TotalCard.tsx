@@ -273,7 +273,7 @@ export function TotalCard({
 
   return (
     <View style={{ marginTop: spacing.lg }}>
-      <Card variant="outlined" style={{ backgroundColor: colors.finance.balance.surface, borderColor: colors.finance.balance.border, borderRadius: 14 }}>
+      <Card variant="outlined" padded={false} style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.finance.balance.surface, borderColor: colors.finance.balance.border, borderRadius: 14 }}>
         <View style={styles.headingRow}>
           <View style={styles.netWorthHeading}>
             <View style={[styles.netWorthIcon, { backgroundColor: colors.surfaceAlt }]}>
@@ -295,7 +295,7 @@ export function TotalCard({
           </Pressable>
         </View>
 
-        <View style={[styles.balanceRow, { marginTop: spacing.xs }]}>
+        <View style={[styles.balanceRow, { marginTop: 0 }]}>
 
           <View style={styles.balanceAmount}>
             <AppText
@@ -337,12 +337,12 @@ export function TotalCard({
 
         <View style={[styles.worthRow, { borderColor: colors.border }]}>
           <Ionicons name="analytics-outline" size={16} color={colors.textSecondary} />
-          <AppText variant="caption">Net Worth</AppText>
+          <AppText variant="caption" style={{ fontWeight: '800' }}>Net Worth</AppText>
           <Pressable accessibilityRole="button" accessibilityLabel="Explain Net Worth" accessibilityState={{ expanded: explanationOpen }}
             onPress={() => setExplanationOpen(value => !value)} style={styles.visibilityButton}>
             <Ionicons name="information-circle-outline" size={19} color={colors.textSecondary} />
           </Pressable>
-          <AppText variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={{ flex: 1, textAlign: 'right' }}>
+          <AppText variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={{ flex: 1, textAlign: 'right', fontWeight: '800' }}>
             {amountsVisible ? formatAmount(netWorth ?? accountsTotal + assetsTotal + receivablesTotal - payablesTotal - loansRemainingTotal, baseCurrency) + ' ' + baseCurrency : hiddenValue}
           </AppText>
         </View>
@@ -352,30 +352,6 @@ export function TotalCard({
         {loansInstallmentsRemainingTotal !== undefined && <AppText variant="caption" color="textSecondary">
           {'Loan future contractual payments: ' + (amountsVisible ? formatAmount(loansInstallmentsRemainingTotal, baseCurrency) + ' ' + baseCurrency : hiddenValue)}
         </AppText>}
-        <View style={[styles.networkDivider, { backgroundColor: colors.border }]} />
-
-        <View style={styles.shortcutsHeading}>
-          <AppText style={styles.sectionTitle}>
-            Finance Shortcuts
-          </AppText>
-
-          <AppText style={[styles.shortcutsCount, { color: colors.finance.neutral.accent }]}>
-            {networkItems.length} sections
-          </AppText>
-        </View>
-
-        <View style={styles.networkGrid}>
-          {networkItems.map((item) => (
-            <NetworkCard
-              key={item.key}
-              item={item}
-              currency={baseCurrency}
-              visible={amountsVisible}
-              onPress={() => onNetworkPress(item.key)}
-            />
-          ))}
-        </View>
-
         {missingCount > 0 ? (
           <AppText
             variant="caption"
@@ -386,6 +362,18 @@ export function TotalCard({
           </AppText>
         ) : null}
       </Card>
+
+      <View accessibilityLabel="Finance sections" style={[styles.networkGrid, { marginTop: spacing.sm }]}>
+        {networkItems.map((item) => (
+          <NetworkCard
+            key={item.key}
+            item={item}
+            currency={baseCurrency}
+            visible={amountsVisible}
+            onPress={() => onNetworkPress(item.key)}
+          />
+        ))}
+      </View>
 
       <Modal
         visible={currencyPickerOpen}
@@ -469,7 +457,7 @@ export function TotalCard({
 }
 
 const styles = StyleSheet.create({
-  worthRow: { flexDirection: 'row', alignItems: 'center', gap: 4, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 12 },
+  worthRow: { flexDirection: 'row', alignItems: 'center', gap: 4, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 6 },
   headingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -525,42 +513,21 @@ const styles = StyleSheet.create({
   currencyCode: {
     fontWeight: '700',
   },
-  networkDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#E5E7EB',
-    marginTop: 20,
-  },
-  shortcutsHeading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 16,
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  shortcutsCount: {
-    fontSize: 11,
-    color: '#8A91A2',
-    fontWeight: '600',
-  },
   networkGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 10,
+    rowGap: 8,
   },
   networkCard: {
-    width: '48.5%',
-    minHeight: 88,
+    width: '49%',
+    minHeight: 72,
     borderWidth: 1,
     borderRadius: 15,
     flexDirection: 'row',
     alignItems: 'stretch',
     paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingVertical: 6,
     gap: 2,
   },
   networkCardBody: {

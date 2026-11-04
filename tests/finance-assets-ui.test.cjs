@@ -81,6 +81,7 @@ const texts = () => nodes('AppText').map(n => n.props.children).filter(t => type
 const style = value => Object.assign({}, ...[value].flat(Infinity).filter(Boolean));
 beforeEach(() => {
   states = []; cursor = 0; alerts = []; calls = []; effects = []; params = {};
+  dimensions = { width: 390, height: 844, fontScale: 1 };
   ledger = { accounts: [], transactions: [], transfers: [], categories: [] };
   theme = { colors: lightColors, isDark: false, spacing: { xs: 4, sm: 8, md: 12 }, radius: { sm: 8 } };
   finance = { assets: structuredClone([gold, silver]), loans: [], debts: [], cheques: [] };
@@ -493,8 +494,8 @@ test('transfer account dropdowns are adjacent with amounts before date/note, and
   const props = prepareTransfer();
   render(RealTransferModal, props); flushEffects(); render(RealTransferModal, props);
   assert.ok(nodes('View').some(n => style(n.props.style).flexDirection === 'row' && nodes('Pressable', n).filter(p => ['From account', 'To account'].includes(p.props.accessibilityLabel)).length === 2));
-  assert.ok(nodes('AppInput').find(n => n.props.label === 'Amount to transfer'));
-  assert.equal(nodes('AppInput').find(n => n.props.label === 'Exchange rate').props.value, '55');
+  assert.ok(nodes('AppInput').find(n => n.props.accessibilityLabel === 'Amount to transfer'));
+  assert.equal(nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate').props.value, '55');
   nodes('AppButton').find(n => n.props.title === 'Save changes').props.onPress();
   assert.equal(calls[0][0], 'update'); assert.equal(calls[0][1], 'transfer');
   assert.equal(calls[0][2].fromAmount, 10); assert.equal(calls[0][2].toAmount, 550); assert.equal(calls[0][2].exchangeRate, 55);
@@ -543,13 +544,13 @@ function settleTransfer(props) { for (let i = 0; i < 4; i++) { render(RealTransf
 test('transfer edit keeps a saved custom rate through effects, live rate refresh, and switching to another edit', () => {
   const props = prepareTransfer(); props.transfer = { ...transferFixture, exchangeRate: 54.321123, toAmount: 543.21123 };
   settleTransfer(props);
-  assert.equal(nodes('AppInput').find(n => n.props.label === 'Exchange rate').props.value, '54.321123');
+  assert.equal(nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate').props.value, '54.321123');
   currency.rates = { USD: 58, EGP: 1 }; settleTransfer(props);
-  assert.equal(nodes('AppInput').find(n => n.props.label === 'Exchange rate').props.value, '54.321123');
+  assert.equal(nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate').props.value, '54.321123');
   settleTransfer({ ...props, visible: false });
   const second = { ...props, transfer: { ...transferFixture, id: 'second', fromAccountId: 'egp', toAccountId: 'usd', fromAmount: 550, toAmount: 11, fromCurrencyCode: 'EGP', toCurrencyCode: 'USD', exchangeRate: 0.02 } };
   settleTransfer(second);
-  assert.equal(nodes('AppInput').find(n => n.props.label === 'Exchange rate').props.value, '0.02');
+  assert.equal(nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate').props.value, '0.02');
   nodes('AppButton').find(n => n.props.title === 'Save changes').props.onPress();
   assert.equal(calls[0][1], 'second'); assert.equal(calls[0][2].fromAccountId, 'egp'); assert.equal(calls[0][2].toAccountId, 'usd');
   assert.equal(calls[0][2].toAmount, 11);
@@ -557,7 +558,7 @@ test('transfer edit keeps a saved custom rate through effects, live rate refresh
 test('credit-card transfer mode keeps matching-account validation and a fixed rate of one', () => {
   const props = prepareTransfer(); props.transfer = { ...transferFixture, type: 'credit_card_payment', toAccountId: 'card', toCurrencyCode: 'USD', exchangeRate: 1, toAmount: 10 };
   settleTransfer(props);
-  assert.equal(nodes('AppInput').find(n => n.props.label === 'Exchange rate').props.editable, false);
+  assert.equal(nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate').props.editable, false);
   nodes('AppButton').find(n => n.props.title === 'Save changes').props.onPress();
   assert.equal(calls[0][2].type, 'credit_card_payment'); assert.equal(calls[0][2].toAmount, 10); assert.equal(calls[0][2].exchangeRate, 1);
 });
@@ -612,7 +613,7 @@ test('Total Balance label and single eye share one heading row; all eight shortc
     assert.ok(row);
     const grid = nodes('View').find(n => style(n.props.style).flexWrap === 'wrap' && Array.isArray(n.props.children) && n.props.children.length === 8);
     assert.ok(grid);
-    assert.deepEqual(grid.props.children.map(n => style(n.props.style).width), Array(8).fill('48.5%'));
+    assert.deepEqual(grid.props.children.map(n => style(n.props.style).width), Array(8).fill('49%'));
     geometries.push(grid.props.children.map(n => { const value = style(n.props.style); return { ...value, backgroundColor: undefined, borderColor: undefined }; }));
   }
   assert.deepEqual(geometries[0], geometries[1]);
@@ -634,3 +635,95 @@ for (const view of [{ width: 390, fontScale: 1, direction: 'row' }, { width: 320
     dimensions = { width: 390, height: 844, fontScale: 1 };
   });
 }
+
+const compactSummaryProps = () => ({ baseCurrency: 'EGP', accountsTotal: 1234, assetsTotal: 100, netWorth: 1200, loansRemainingTotal: 134,
+  loansInstallmentsRemainingTotal: 200, receivablesTotal: 0, payablesTotal: 0, income: 50, expense: 30, missing: 2,
+  amountsVisible: true, onToggleAmounts: () => calls.push('eye'), onNetworkPress: key => calls.push(key) });
+test('shortcuts are outside the compact balance Card with no visible heading/counter and warnings remain inside', () => {
+  render(TotalCard, compactSummaryProps());
+  const summary = nodes('Card')[0];
+  assert.equal(nodes('Pressable', summary).some(n => n.props.accessibilityLabel?.startsWith('Open ')), false);
+  assert.equal(nodes('View', summary).some(n => n.props.accessibilityLabel === 'Finance sections'), false);
+  assert.equal(texts().includes('Finance Shortcuts'), false);
+  assert.equal(nodes('AppText').some(n => JSON.stringify(n.props.children).includes('sections')), false);
+  assert.ok(nodes('AppText', summary).some(n => typeof n.props.children === 'string' && n.props.children.includes('2 item(s) have unavailable valuation')));
+  assert.equal(summary.props.padded, false);
+  assert.equal(style(summary.props.style).paddingVertical, 8);
+  const grid = nodes('View').find(n => n.props.accessibilityLabel === 'Finance sections');
+  assert.ok(grid); assert.equal(grid.props.children.length, 8);
+  const expected = ['Expenses', 'Income', 'Accounts', 'Assets', 'Installments', 'Loans', 'Debts', 'Transfers'];
+  assert.deepEqual(nodes('Pressable', grid).map(n => n.props.accessibilityLabel), expected.map(label => 'Open ' + label));
+  assert.ok(grid.props.children.every(n => style(n.props.style).width === '49%' && style(n.props.style).minHeight >= 48));
+});
+test('Net Worth label and value are bolder while the one global eye, formula and contractual masking remain intact', () => {
+  const props = compactSummaryProps(); render(TotalCard, props);
+  const label = nodes('AppText').find(n => n.props.children === 'Net Worth');
+  const value = nodes('AppText').find(n => n.props.children === '1,200.00 EGP');
+  assert.equal(style(label.props.style).fontWeight, '800'); assert.equal(style(value.props.style).fontWeight, '800');
+  assert.equal(nodes('Ionicon').filter(n => ['eye-outline', 'eye-off-outline'].includes(n.props.name)).length, 1);
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Explain Net Worth').props.onPress(); render(TotalCard, props);
+  assert.ok(texts().some(t => t.includes('Future contractual installments')));
+  render(TotalCard, { ...props, amountsVisible: false });
+  assert.equal(texts().some(t => t.includes('1,200.00') || t.includes('1,334.00') || t.includes('200.00 EGP')), false);
+  assert.ok(texts().includes('Loan future contractual payments: ••••••'));
+});
+for (const view of [{ width: 390, fontScale: 1, direction: 'row' }, { width: 320, fontScale: 1, direction: 'column' }, { width: 390, fontScale: 1.6, direction: 'column' }]) {
+  test('three transfer fields render in ' + view.direction + ' at ' + view.width + ' / ' + view.fontScale, () => {
+    const props = prepareTransfer(); dimensions = { ...dimensions, ...view }; settleTransfer(props);
+    const row = nodes('View').find(n => n.props.testID === 'transfer-amounts-row');
+    assert.equal(style(row.props.style).flexDirection, view.direction);
+    assert.equal(row.props.children.length, 3);
+    if (view.direction === 'row') assert.deepEqual(row.props.children.map(n => style(n.props.style).flex), [38, 24, 38]);
+    for (const label of ['Amount to transfer', 'Rate', 'Amount to receive']) assert.ok(nodes('AppText', row).some(n => n.props.children === label));
+    assert.equal(nodes('AppText', row).some(n => typeof n.props.children === 'string' && n.props.children.includes('Suggested rate:')), false);
+    const rate = nodes('AppInput', row).find(n => n.props.accessibilityLabel === 'Rate');
+    assert.equal(rate.props.value, '55'); assert.equal(rate.props.editable, true); assert.equal(rate.props.keyboardType, 'decimal-pad');
+    assert.equal(rate.props.label, undefined); assert.ok(rate.props.accessibilityHint.includes('Suggested rate:'));
+    assert.ok(nodes('AppText', row).some(n => n.props.children === '🇺🇸 USD')); assert.ok(nodes('AppText', row).some(n => n.props.children === '🇪🇬 EGP'));
+    const received = nodes('AppText', row).find(n => n.props.accessibilityLabel?.startsWith('Amount to receive:'));
+    assert.equal(received.props.children, (550).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    assert.equal(nodes('AppInput', row).length, 2);
+    for (const input of nodes('AppInput', row)) assert.ok(style(input.props.fieldStyle).minHeight >= 48);
+    for (const label of ['From account', 'To account']) assert.equal(style(nodes('AppText').find(n => n.props.children === label).props.style).fontWeight, '700');
+    dimensions = { width: 390, height: 844, fontScale: 1 };
+  });
+}
+test('incomplete transfer selection keeps the amount row coherent without a made-up rate or received value', () => {
+  const props = prepareTransfer(); props.transfer = null; ledger.accounts = ledger.accounts.slice(0, 1);
+  settleTransfer(props);
+  const row = nodes('View').find(n => n.props.testID === 'transfer-amounts-row'); assert.ok(row);
+  const amount = nodes('AppInput', row).find(n => n.props.accessibilityLabel === 'Amount to transfer');
+  amount.props.onChangeText('25'); settleTransfer(props);
+  const rate = nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate');
+  assert.equal(rate.props.value, ''); assert.equal(rate.props.editable, false);
+  assert.equal(nodes('AppText').find(n => n.props.accessibilityLabel?.startsWith('Amount to receive:')).props.children, '—');
+  assert.equal(nodes('AppInput').find(n => n.props.accessibilityLabel === 'Amount to transfer').props.value, '25');
+  assert.deepEqual(calls, []);
+});
+
+test('Date and Note remain the next fields after the transfer row, with their original edit values', () => {
+  const props = prepareTransfer(); settleTransfer(props);
+  const children = nodes('FormModal')[0].props.children.props.children;
+  const rowIndex = children.findIndex(n => n?.props?.testID === 'transfer-amounts-row');
+  assert.ok(rowIndex >= 0); assert.equal(children[rowIndex + 1].type, 'DateField');
+  assert.equal(children[rowIndex + 1].props.value, '2026-11-04');
+  assert.equal(children[rowIndex + 2].type, 'AppInput'); assert.equal(children[rowIndex + 2].props.label, 'Note (optional)');
+  assert.equal(children[rowIndex + 2].props.value, 'Keep note');
+});
+test('manual Rate entry remains numeric-only and submits its full precision through the unchanged transfer handler', () => {
+  const props = prepareTransfer(); settleTransfer(props);
+  nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate').props.onChangeText('54.321123456'); settleTransfer(props);
+  const rate = nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate');
+  assert.equal(rate.props.value, '54.321123456'); assert.equal(rate.props.leftElement, undefined);
+  nodes('AppButton').find(n => n.props.title === 'Save changes').props.onPress();
+  assert.equal(calls[0][2].exchangeRate, 54.321123456); assert.equal(calls[0][2].toAmount, 10 * 54.321123456);
+  assert.equal(calls[0][2].date, '2026-11-04'); assert.equal(calls[0][2].note, 'Keep note');
+  assert.deepEqual(calls.slice(1), ['close']);
+});
+test('same-currency transfer keeps Rate fixed at one in the compact row', () => {
+  const props = prepareTransfer(); ledger.accounts[1].currencyCode = 'USD';
+  props.transfer = { ...transferFixture, toCurrencyCode: 'USD', toAmount: 10, exchangeRate: 1 }; settleTransfer(props);
+  const rate = nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate');
+  assert.equal(rate.props.value, '1'); assert.equal(rate.props.editable, false);
+  assert.ok(rate.props.accessibilityHint.includes('fixed at 1'));
+});

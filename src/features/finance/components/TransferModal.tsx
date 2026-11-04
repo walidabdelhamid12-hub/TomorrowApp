@@ -1,6 +1,6 @@
 import { AccountDropdown } from './AccountDropdown';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import {
   AppButton,
@@ -34,6 +34,7 @@ export function TransferModal({
 }: TransferModalProps) {
   const { colors, spacing } = useTheme();
   const { width, fontScale } = useWindowDimensions();
+  const stackFields = width / fontScale < 360;
 
   const accounts = useLedgerStore((state) => state.accounts);
   const addTransfer = useLedgerStore((state) => state.addTransfer);
@@ -327,6 +328,14 @@ export function TransferModal({
     onClose();
   };
 
+  const accountsSelected = !!selectedSource && !!selectedDestination;
+  const receivedText = accountsSelected && calculatedToAmount !== null
+    ? calculatedToAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '—';
+  const rateHint = sameCurrency || mode === 'credit_card_payment'
+    ? 'The exchange rate is fixed at 1 for this transfer.'
+    : `Suggested rate: ${suggestedRate.toLocaleString(undefined, { maximumFractionDigits: 8 })} · You can edit it manually.`;
+
   return (
     <FormModal
       visible={visible}
@@ -357,7 +366,7 @@ export function TransferModal({
             onChange={handleModeChange}
           />
 
-          <View style={{ flexDirection: width / fontScale < 360 ? 'column' : 'row', gap: spacing.sm }}>
+          <View style={{ flexDirection: stackFields ? 'column' : 'row', gap: spacing.sm }}>
             <AccountDropdown label="From account" options={sourceAccounts} value={fromAccountId}
               onChange={value => { setFromAccountId(value); setError(undefined); }} emptyMessage="No eligible source accounts" />
             <AccountDropdown label="To account" options={destinationAccounts} value={toAccountId}
@@ -365,72 +374,32 @@ export function TransferModal({
               emptyMessage={mode === 'credit_card_payment' ? 'Add a credit card account' : 'Choose another non-card account'} />
           </View>
 
-          <AppInput
-            label="Amount to transfer"
-            value={fromAmount}
-            onChangeText={(value) => {
-              setFromAmount(value);
-              setError(undefined);
-            }}
-            keyboardType="decimal-pad"
-            placeholder="0"
-            leftElement={
-              <AppText color="textSecondary">
-                {selectedSource
-                  ? getCurrencyLabel(selectedSource.currencyCode)
-                  : ''}
-              </AppText>
-            }
-          />
-
-          {selectedSource && selectedDestination ? (
-            <>
-              <AppInput
-                label="Exchange rate"
-                value={exchangeRate}
-                onChangeText={(value) => {
-                  setExchangeRate(value);
-                  setError(undefined);
-                }}
-                keyboardType="decimal-pad"
-                editable={!sameCurrency && mode !== 'credit_card_payment'}
-                placeholder="1"
-                hint={
-                  sameCurrency || mode === 'credit_card_payment'
-                    ? 'The exchange rate is fixed at 1 for this transfer.'
-                    : `Suggested rate: ${suggestedRate.toLocaleString(undefined, {
-                        maximumFractionDigits: 8,
-                      })} · You can edit it manually.`
-                }
-              />
-
-              <View
-                style={{
-                  padding: spacing.sm,
-                  borderRadius: 12,
-                  backgroundColor: colors.surfaceAlt,
-                  gap: spacing.xs,
-                }}
-              >
-                <AppText color="textSecondary" variant="caption">
-                  AMOUNT TO RECEIVE
-                </AppText>
-
-                <AppText variant="bodyStrong">
-                  {calculatedToAmount === null
-                    ? '—'
-                    : calculatedToAmount.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                </AppText>
-
-                <AppText color="textSecondary" variant="caption">
-                  {getCurrencyLabel(selectedDestination.currencyCode)}
-                </AppText>
+          <View testID="transfer-amounts-row" style={[styles.amountsRow, stackFields && styles.stacked]}>
+            <View style={[styles.field, !stackFields && { flex: 38 }]}>
+              <AppText variant="label" color={colors.finance.neutral.accent} style={[styles.label, !stackFields && styles.rowLabel]}>Amount to transfer</AppText>
+              <AppInput accessibilityLabel="Amount to transfer" accessibilityHint={selectedSource ? 'Amount in ' + selectedSource.currencyCode : 'Choose the source account currency'}
+                value={fromAmount} onChangeText={value => { setFromAmount(value); setError(undefined); }}
+                keyboardType="decimal-pad" placeholder="0" style={styles.input}
+                fieldStyle={[styles.inputField, { borderColor: colors.finance.neutral.border }]} />
+              <AppText variant="label" color={colors.finance.neutral.accent}>{selectedSource ? getCurrencyLabel(selectedSource.currencyCode) : '—'}</AppText>
+            </View>
+            <View style={[styles.field, !stackFields && { flex: 24 }]}>
+              <AppText variant="label" color={colors.finance.neutral.accent} style={[styles.label, !stackFields && styles.rowLabel]}>Rate</AppText>
+              <AppInput accessibilityLabel="Rate" accessibilityHint={accountsSelected ? rateHint : 'Choose both accounts to view the rate'}
+                value={accountsSelected ? exchangeRate : ''} onChangeText={value => { setExchangeRate(value); setError(undefined); }}
+                keyboardType="decimal-pad" editable={accountsSelected && !sameCurrency && mode !== 'credit_card_payment'}
+                placeholder={accountsSelected ? '1' : '—'} style={styles.input}
+                fieldStyle={[styles.inputField, { borderColor: colors.finance.neutral.border }]} />
+            </View>
+            <View style={[styles.field, !stackFields && { flex: 38 }]}>
+              <AppText variant="label" color={colors.finance.neutral.accent} style={[styles.label, !stackFields && styles.rowLabel]}>Amount to receive</AppText>
+              <View style={[styles.result, { backgroundColor: colors.finance.balance.surface, borderColor: colors.finance.balance.border }]}>
+                <AppText variant="bodyStrong" accessibilityLabel={'Amount to receive: ' + receivedText + (selectedDestination ? ' ' + selectedDestination.currencyCode : '')}
+                  style={styles.resultText} textBreakStrategy="simple">{receivedText}</AppText>
               </View>
-            </>
-          ) : null}
+              <AppText variant="label" color={colors.finance.neutral.accent}>{selectedDestination ? getCurrencyLabel(selectedDestination.currencyCode) : '—'}</AppText>
+            </View>
+          </View>
 
           <DateField value={date} onChange={setDate} />
 
@@ -440,6 +409,8 @@ export function TransferModal({
             onChangeText={setNote}
             placeholder="e.g. Monthly savings transfer"
           />
+
+          {accountsSelected && <AppText variant="caption" color={colors.finance.neutral.accent}>{rateHint}</AppText>}
 
           {error ? (
             <AppText variant="caption" color="danger">
@@ -469,3 +440,14 @@ export function TransferModal({
     </FormModal>
   );
 }
+const styles = StyleSheet.create({
+  amountsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  stacked: { flexDirection: 'column', alignItems: 'stretch', gap: 8 },
+  field: { minWidth: 0, gap: 4 },
+  label: { fontWeight: '700', fontSize: 11, lineHeight: 14 },
+  rowLabel: { minHeight: 28 },
+  inputField: { minHeight: 48, paddingHorizontal: 6, borderRadius: 10 },
+  input: { fontSize: 14, paddingVertical: 8, fontVariant: ['tabular-nums'] },
+  result: { minHeight: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 8, justifyContent: 'center' },
+  resultText: { fontSize: 14, fontVariant: ['tabular-nums'], flexShrink: 1 },
+});

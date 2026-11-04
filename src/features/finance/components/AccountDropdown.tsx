@@ -13,7 +13,7 @@ export function AccountDropdown({ label, options, value, onChange, emptyMessage 
   const { colors } = useTheme();
   const selected = options.find(account => account.id === value);
   return <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-    <AppText variant="label" color="textSecondary">{label}</AppText>
+    <AppText variant="label" color={colors.finance.neutral.accent} style={{ fontWeight: '700' }}>{label}</AppText>
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open, disabled: !options.length }}
       disabled={!options.length} onPress={() => setOpen(true)}
       style={{ minHeight: 48, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt, borderRadius: 10, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
