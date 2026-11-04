@@ -11,7 +11,8 @@ function decimalRatio(value: number): [bigint, bigint] {
  * No currency/3-decimal quantization between metal valuation and FX conversion.
  * Convert the final exact ratio to the existing Number API only once. Forty
  * significant decimal digits exceed Number precision, including tiny quantities.
- * This helper is asset-only; it is never used to post or round ledger entries.
+ * Used for asset valuation and read-only proportional principal allocation;
+ * never used to post or round ledger entries.
  */
 export function evaluateAssetRatio(numerators: readonly number[], denominators: readonly number[] = []): number | null {
   if (![...numerators, ...denominators].every(Number.isFinite) || denominators.includes(0)) return null;

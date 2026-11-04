@@ -1,3 +1,4 @@
+import { evaluateAssetRatio } from '@/features/finance/utils/assetDecimal';
 import type {
   Asset,
   AssetEntry,
@@ -135,6 +136,29 @@ export function getLoanPaidAmount(loan: Loan): number {
   );
 }
 
+/** Approved proportional allocation for simple payments; explicit legacy splits win.
+ * Fees never reduce principal. Missing/invalid legacy allocation stays unknown.
+ * Receipt confirmation supplies the actual original cash principal when present.
+ */
+export function getLoanRemainingPrincipal(loan: Loan): number | null {
+  if (['settled', 'completed', 'closed'].includes(loan.status ?? '')) return 0;
+  const principal = loan.receivedAmount ?? loan.principalAmount;
+  const total = getLoanTotal(loan);
+  if (principal === undefined || !Number.isFinite(principal) || principal < 0 || !Number.isFinite(total) || total <= 0 || principal > total) return null;
+  let reduction = 0;
+  for (const payment of loan.payments ?? []) {
+    if (!Number.isFinite(payment.amount) || payment.amount < 0) return null;
+    if (payment.paymentMode === 'split' || payment.principalAmount !== undefined || payment.interestAmount !== undefined) {
+      if (payment.principalAmount === undefined || !Number.isFinite(payment.principalAmount) || payment.principalAmount < 0 || payment.principalAmount > payment.amount) return null;
+      if (payment.interestAmount !== undefined && (!Number.isFinite(payment.interestAmount) || payment.interestAmount < 0 || roundMoney(payment.principalAmount + payment.interestAmount) !== roundMoney(payment.amount))) return null;
+      reduction += payment.principalAmount;
+    } else {
+      reduction += evaluateAssetRatio([payment.amount, principal], [total]) ?? NaN;
+    }
+  }
+  return Number.isFinite(reduction) ? Math.max(0, principal - reduction) : null;
+}
+
 /** Remaining contractual balance, never below zero. */
 export function getLoanRemainingAmount(loan: Loan): number {
   if (
@@ -149,17 +173,20 @@ export function getLoanRemainingAmount(loan: Loan): number {
 }
 
 export function getLoanRemainingInstallments(loan: Loan): number {
-  return Math.max(loan.numberOfInstallments - loan.payments.length, 0);
+  const remaining = getLoanRemainingAmount(loan);
+  return remaining === 0 ? 0 : loan.monthlyInstallment > 0 ? Math.ceil(remaining / loan.monthlyInstallment) : loan.numberOfInstallments;
 }
 
 export function getLoanStatus(loan: Loan): LoanStatus {
-  return getLoanRemainingInstallments(loan) === 0 ? 'completed' : 'active';
+  if (loan.status === 'settled' || loan.status === 'closed' || loan.status === 'completed') return loan.status;
+  return getLoanRemainingAmount(loan) === 0 ? 'completed' : 'active';
 }
 
 /** Due date of the next unpaid installment, or null when fully paid. */
 export function getLoanNextDueDate(loan: Loan): ISODate | null {
-  if (getLoanStatus(loan) === 'completed') return null;
-  return addMonthsISO(loan.firstDueDate, loan.payments.length);
+  if (getLoanRemainingAmount(loan) === 0) return null;
+  const paidInstallments = loan.monthlyInstallment > 0 ? Math.floor(getLoanPaidAmount(loan) / loan.monthlyInstallment) : 0;
+  return addMonthsISO(loan.firstDueDate, paidInstallments);
 }
 
 export function isLoanOverdue(loan: Loan, today: ISODate = todayISO()): boolean {

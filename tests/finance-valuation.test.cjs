@@ -139,7 +139,67 @@ test('the Finance asset subtotal does not reintroduce three-decimal double round
     assert.equal(formatAmount(summary.accountsTotal + summary.assetsTotal, 'EGP'), '12.25');
     assert.equal(summary.accountsTotal, 0);
     assert.equal(summary.loansRemainingTotal, 0);
-    // Existing net-worth quantization remains deliberately outside this asset-display change.
-    assert.equal(summary.netWorth, roundMoney(12.254515));
+    // Net Worth also waits for the display boundary instead of double-rounding assets.
+    assert.equal(summary.netWorth, 12.254515);
+    assert.equal(formatAmount(summary.netWorth, 'EGP'), '12.25');
   } finally { Module._load = previousLoader; }
+});
+
+const { getLoanRemainingPrincipal, getLoanRemainingInstallments, getLoanNextDueDate } = require('../src/features/finance/utils/finance.ts');
+const loanFixture = (fields = {}) => ({ id: 'loan', name: 'Loan', lenderName: 'Lender', principalAmount: 100000,
+  receivedAmount: 100000, receivedAt: '2026-11-01', totalRepaymentAmount: 120000, monthlyInstallment: 10000,
+  numberOfInstallments: 12, firstDueDate: '2026-11-01', currencyCode: 'EGP', status: 'active', payments: [], ...fields });
+test('approved principal allocation is proportional, excludes fees, and preserves explicit legacy splits', () => {
+  const original = loanFixture({ payments: [{ amount: 12000, latePaymentFee: 500, paymentMode: 'simple' }, { amount: 6000 }] });
+  const before = structuredClone(original);
+  assert.equal(getLoanRemainingPrincipal(original), 85000);
+  assert.deepEqual(original, before);
+  assert.equal(getLoanRemainingPrincipal(loanFixture({ payments: [{ amount: 12000, principalAmount: 8000, interestAmount: 4000, paymentMode: 'split' }] })), 92000);
+  assert.equal(getLoanRemainingPrincipal(loanFixture({ receivedAmount: 80000 })), 80000);
+  assert.equal(getLoanRemainingPrincipal(loanFixture({ payments: [{ amount: 150000 }] })), 0);
+});
+test('missing or conflicting principal allocation stays unknown rather than subtracting the whole contract', () => {
+  assert.equal(getLoanRemainingPrincipal(loanFixture({ receivedAmount: undefined, principalAmount: undefined })), null);
+  assert.equal(getLoanRemainingPrincipal(loanFixture({ payments: [{ amount: 100, paymentMode: 'split' }] })), null);
+  assert.equal(getLoanRemainingPrincipal(loanFixture({ payments: [{ amount: 100, principalAmount: 150 }] })), null);
+  assert.equal(getLoanRemainingPrincipal(loanFixture({ payments: [{ amount: NaN }] })), null);
+  assert.equal(getLoanRemainingPrincipal(loanFixture({ payments: [{ amount: 100, principalAmount: 50, interestAmount: 80 }] })), null);
+});
+test('terminal loans have zero principal; partial records do not each consume a scheduled installment', () => {
+  for (const status of ['settled', 'completed', 'closed']) assert.equal(getLoanRemainingPrincipal(loanFixture({ status })), 0);
+  const partial = loanFixture({ payments: [{ amount: 1000 }, { amount: 1000 }] });
+  assert.equal(getLoanRemainingInstallments(partial), 12);
+  assert.equal(getLoanNextDueDate(partial), '2026-11-01');
+  assert.equal(getLoanRemainingInstallments(loanFixture({ payments: [{ amount: 12000 }] })), 11);
+});
+function summaryFor(loans) {
+  const previous = Module._load;
+  const file = require.resolve('../src/features/finance/hooks/useFinanceSummary.ts'); delete require.cache[file];
+  const currency = { baseCurrency: 'EGP', rates: { EGP: 1, USD: 55.4154 }, verifiedCurrencies: ['EGP', 'USD'], metals: { gold24PerGram: null, silverPerGram: null } };
+  const finance = { assets: [], loans, debts: [], cheques: [] };
+  const ledger = { accounts: [], transactions: [], transfers: [] };
+  Module._load = function(id, parent, main) {
+    if (id === 'react') return { useMemo: fn => fn() };
+    if (id.endsWith('/useCurrencyStore')) return { useCurrencyStore: select => select(currency) };
+    if (id.endsWith('/useFinanceStore')) return { useFinanceStore: select => select(finance) };
+    if (id.endsWith('/useLedgerStore')) return { useLedgerStore: select => select(ledger) };
+    return previous.call(this, id, parent, main);
+  };
+  try { return require(file).useFinanceSummary(); } finally { Module._load = previous; delete require.cache[file]; }
+}
+test('Net Worth deducts principal across loans/currencies and reports future contractual obligations separately', () => {
+  const s = summaryFor([loanFixture({ payments: [{ amount: 12000 }] }), loanFixture({ currencyCode: 'USD', principalAmount: 100, receivedAmount: 100, totalRepaymentAmount: 120, payments: [{ amount: 12 }] }), loanFixture({ status: 'settled' }), loanFixture({ receivedAt: undefined, receiptTransactionId: undefined })]);
+  assert.equal(s.loansRemainingTotal, 94987.386);
+  assert.equal(s.netWorth, -94987.386);
+  assert.equal(s.loansInstallmentsRemainingTotal, 113984.863);
+  assert.equal(s.isComplete, true);
+  const unknown = summaryFor([loanFixture({ principalAmount: undefined, receivedAmount: undefined })]);
+  assert.equal(unknown.isComplete, false); assert.equal(unknown.loansInstallmentsRemainingTotal, 120000);
+});
+test('monetary rounding never calls native Intl or toLocaleString at decimal ties', () => {
+  const previous = Number.prototype.toLocaleString;
+  Number.prototype.toLocaleString = () => { throw new Error('Native formatter must not run'); };
+  try {
+    for (const [v, c, expected] of [[12254.515, 'EGP', '12,254.52'], [-1.005, 'EGP', '-1.01'], [1.2345, 'OMR', '1.235'], [-1.2345, 'KWD', '-1.235'], [1e21, 'EGP', '1,000,000,000,000,000,000,000.00'], [1e-8, 'EGP', '0.00']]) assert.equal(formatAmount(v, c), expected);
+  } finally { Number.prototype.toLocaleString = previous; }
 });

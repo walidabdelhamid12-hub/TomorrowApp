@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
-import { getDebtRemaining, getLoanRemainingAmount, roundMoney, todayISO } from '@/features/finance/utils/finance';
+import { getDebtRemaining, getLoanRemainingAmount, getLoanRemainingPrincipal, roundMoney, todayISO } from '@/features/finance/utils/finance';
 import {
   filterByMonth,
   getAccountBalance,
@@ -101,17 +101,16 @@ export function useFinanceSummary() {
         continue;
       }
 
-      // Net worth tracks the remaining contractual amount owed to the lender,
-      // not only the cash principal received. Confirmed installments reduce
-      // the contract balance; late fees are stored separately and are excluded.
+      // Net Worth deducts principal only; contractual obligations are separate.
       const remainingContract = getLoanRemainingAmount(loan);
+      const remainingPrincipal = getLoanRemainingPrincipal(loan);
 
       if (!Number.isFinite(remainingContract)) {
         missing += 1;
         continue;
       }
       const principalConverted = convertAmount(
-        remainingContract,
+        remainingPrincipal ?? NaN,
         loan.currencyCode,
         baseCurrency,
         rates,
@@ -122,8 +121,10 @@ export function useFinanceSummary() {
         missing += 1;
       } else {
         loansRemainingTotal += principalConverted;
-        loansInstallmentsRemainingTotal += principalConverted;
       }
+      const contractualConverted = convertAmount(remainingContract, loan.currencyCode, baseCurrency, rates, verifiedCurrencies);
+      if (contractualConverted === null) missing += 1;
+      else loansInstallmentsRemainingTotal += contractualConverted;
     }
 
     for (const debt of debts) {
@@ -215,12 +216,12 @@ export function useFinanceSummary() {
 
   // Credit-card debt is already represented by the negative
   // account balance, so it must not be subtracted a second time.
-  const netWorth = roundMoney(
+  const netWorth = (
     totals.accountsTotal +
       totals.assetsTotal +
       totals.receivablesTotal -
       totals.payablesTotal -
-      totals.loansInstallmentsRemainingTotal
+      totals.loansRemainingTotal
   );
 
   const month = useMemo(() => {

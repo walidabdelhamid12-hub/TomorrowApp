@@ -607,3 +607,40 @@ test('debt deletion refuses missing and duplicate IDs without deleting any paren
   assert.equal(finance.getState().deleteDebt('debt'), false);
   assert.deepEqual(fullSnapshot(), previous);
 });
+
+test('ordinary transaction and same-currency transfer lifecycle restores balances and combined account total', () => {
+  finance.setState({ loans: [], debts: [] }); ledger.setState({ transactions: [], transfers: [] });
+  const initial = balance('a');
+  const id = ledger.getState().addTransaction({ type: 'expense', amount: 100, accountId: 'a', categoryId: 'out', date });
+  assert.equal(balance('a'), initial - 100);
+  assert.equal(ledger.getState().updateTransaction(id, { amount: 150 }), true); assert.equal(balance('a'), initial - 150);
+  assert.equal(ledger.getState().removeTransaction(id), true); assert.equal(balance('a'), initial);
+  const total = balance('a') + balance('b');
+  const transfer = ledger.getState().addTransfer({ fromAccountId: 'a', toAccountId: 'b', fromAmount: 100, toAmount: 100,
+    fromCurrencyCode: 'USD', toCurrencyCode: 'USD', exchangeRate: 1, date, type: 'internal' });
+  assert.ok(transfer); assert.equal(balance('a') + balance('b'), total);
+  assert.equal(ledger.getState().updateTransfer(transfer, { fromAmount: 200, toAmount: 200 }), true);
+  assert.equal(balance('a'), initial - 200); assert.equal(balance('a') + balance('b'), total);
+  ledger.getState().removeTransfer(transfer); assert.equal(balance('a'), initial); assert.equal(balance('a') + balance('b'), total);
+});
+test('confirmed settlement affects principal/status/account exactly once and reversal restores prior principal', () => {
+  const { getLoanRemainingPrincipal } = require('../src/features/finance/utils/finance.ts');
+  const before = getLoanRemainingPrincipal(finance.getState().loans[0]); const cash = balance('a');
+  assert.equal(postLinkedPayment({ entityType: 'loan', entityId: 'loan', amount: 500, latePaymentFee: 10, date, accountId: 'a', categoryId: 'out', settlement: true }).ok, true);
+  const saved = finance.getState().loans[0]; assert.equal(saved.status, 'settled');
+  assert.equal(getLoanRemainingPrincipal(saved), 0); assert.equal(getLoanRemainingAmount(saved), 0); assert.equal(balance('a'), cash - 510);
+  const state = snapshot();
+  assert.equal(postLinkedPayment({ entityType: 'loan', entityId: 'loan', amount: 500, date, accountId: 'a', settlement: true }).ok, false);
+  assert.deepEqual(snapshot(), state);
+  assert.equal(reverseLinkedPayment({ entityType: 'loan', entityId: 'loan', paymentId: saved.settlementPaymentId }).ok, true);
+  assert.equal(getLoanRemainingPrincipal(finance.getState().loans[0]), before); assert.equal(balance('a'), cash);
+});
+test('finance and ledger records survive persisted rehydration without rewriting asset movements or loan history', async () => {
+  const assets = ['gold', 'silver', 'foreign_currency'].map((category, i) => ({ ...stamps, id: 'asset-' + i, name: category, category, karat: 21, currencyCode: 'USD', entries: [{ id: 'entry-' + i, date, amount: 10, createdAt: date }] }));
+  finance.setState({ assets });
+  const financeBefore = structuredClone({ assets: finance.getState().assets, loans: finance.getState().loans, debts: finance.getState().debts });
+  const ledgerBefore = structuredClone({ accounts: ledger.getState().accounts, transactions: ledger.getState().transactions, transfers: ledger.getState().transfers });
+  await Promise.all([finance.persist.rehydrate(), ledger.persist.rehydrate()]);
+  assert.deepEqual({ assets: finance.getState().assets, loans: finance.getState().loans, debts: finance.getState().debts }, financeBefore);
+  assert.deepEqual({ accounts: ledger.getState().accounts, transactions: ledger.getState().transactions, transfers: ledger.getState().transfers }, ledgerBefore);
+});
