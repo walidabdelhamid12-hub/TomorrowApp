@@ -583,75 +583,23 @@ export default function DebtsScreen() {
       </View>
 
       <View style={styles.summaryGrid}>
-        <Card style={styles.summaryCard}>
-          <AppText variant="caption" color="textSecondary">
-            Total
-          </AppText>
-
-          {currencyTotals.length === 0 ? (
-            <AppText style={styles.summaryAmount}>0</AppText>
-          ) : (
-            currencyTotals.map((item) => (
-              <AppText key={item.currencyCode} style={styles.summaryAmount}>
-                {item.currencyCode} {formatAmount(item.total, item.currencyCode)}
-              </AppText>
-            ))
-          )}
-        </Card>
-
-        <Card style={styles.summaryCard}>
-          <AppText variant="caption" color="textSecondary">
-            Paid / Collected
-          </AppText>
-
-          {currencyTotals.length === 0 ? (
-            <AppText style={[styles.summaryAmount, { color: '#059669' }]}>
-              0
-            </AppText>
-          ) : (
-            currencyTotals.map((item) => (
-              <AppText
-                key={item.currencyCode}
-                style={[styles.summaryAmount, { color: '#059669' }]}
-              >
-                {item.currencyCode} {formatAmount(item.paid, item.currencyCode)}
-              </AppText>
-            ))
-          )}
-        </Card>
-
-        <Card style={styles.summaryCard}>
-          <AppText variant="caption" color="textSecondary">
-            Remaining
-          </AppText>
-
-          {currencyTotals.length === 0 ? (
-            <AppText
-              style={[
-                styles.summaryAmount,
-                {
-                  color: activeTab === 'receivable' ? '#059669' : '#DC2626',
-                },
-              ]}
-            >
-              0
-            </AppText>
-          ) : (
-            currencyTotals.map((item) => (
-              <AppText
-                key={item.currencyCode}
-                style={[
-                  styles.summaryAmount,
-                  {
-                    color: activeTab === 'receivable' ? '#059669' : '#DC2626',
-                  },
-                ]}
-              >
-                {item.currencyCode} {formatAmount(item.remaining, item.currencyCode)}
-              </AppText>
-            ))
-          )}
-        </Card>
+        {([
+          { label: 'Total', key: 'total' as const, color: colors.text },
+          { label: activeTab === 'receivable' ? 'Collected' : 'Paid', key: 'paid' as const, color: activeTab === 'receivable' ? '#059669' : '#DC2626' },
+          { label: 'Remaining', key: 'remaining' as const, color: activeTab === 'receivable' ? '#059669' : '#DC2626' },
+        ]).map(metric => (
+          <Card key={metric.key} style={styles.summaryCard}>
+            <AppText variant="caption" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{metric.label}</AppText>
+            {(currencyTotals.length ? currencyTotals : [{ currencyCode: '', total: 0, paid: 0, remaining: 0 }]).map(item => (
+              <View key={item.currencyCode} style={styles.summaryCurrency}>
+                <AppText style={[styles.summaryAmount, { color: metric.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
+                  {formatAmount(item[metric.key], item.currencyCode)}
+                </AppText>
+                {item.currencyCode ? <AppText variant="caption" color="textSecondary" numberOfLines={1}>{item.currencyCode}</AppText> : null}
+              </View>
+            ))}
+          </Card>
+        ))}
       </View>
 
       <AppButton
@@ -848,6 +796,7 @@ export default function DebtsScreen() {
       <FinanceDetailsModal
         compact
         title={detailDebtId === null ? undefined : detailDebt?.personName ?? 'Debt unavailable'}
+        subtitle={detailDebt ? 'Debt recorded on ' + formatDate(detailDebt.date) : undefined}
         onClose={() => setDetailDebtId(null)}
         metrics={detailDebt ? [
           { label: 'Remaining', value: formatAmount(getRemainingAmount(detailDebt), detailDebt.currencyCode) + ' ' + detailDebt.currencyCode },
@@ -855,7 +804,7 @@ export default function DebtsScreen() {
           { label: 'Paid / collected', value: formatAmount(getPaidAmount(detailDebt), detailDebt.currencyCode) + ' ' + detailDebt.currencyCode },
           { label: 'Type', value: detailDebt.direction === 'receivable' ? 'Receivable' : 'Payable' },
         ] : []}
-        lines={detailDebt ? debtDetailLines(detailDebt) : ['No unique debt is available.']}
+        lines={detailDebt ? [...(detailDebt.dueDate ? ['Due: ' + formatDate(detailDebt.dueDate)] : []), ...(detailDebt.notes?.trim() ? ['Notes: ' + detailDebt.notes.trim()] : [])] : ['No unique debt is available.']}
       >
         {detailDebt && (
           <View style={{ gap: 12, paddingTop: 8 }}>
@@ -1676,13 +1625,16 @@ const styles = StyleSheet.create({
   summaryCard: {
     flex: 1,
     paddingHorizontal: 9,
-    paddingVertical: 12,
-    gap: 5,
-    minHeight: 90,
+    paddingVertical: 7,
+    gap: 3,
+    minHeight: 75,
+    alignItems: 'center',
   },
+  summaryCurrency: { alignItems: 'center', width: '100%', gap: 0 },
   summaryAmount: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
+    textAlign: 'center',
   },
   sectionHeader: {
     flexDirection: 'row',
