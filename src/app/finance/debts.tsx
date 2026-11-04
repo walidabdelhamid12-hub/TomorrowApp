@@ -157,6 +157,7 @@ export default function DebtsScreen() {
   } | null>(null);
 
   const [detailDebtId, setDetailDebtId] = useState<string | null>(null);
+  const [expandedDebtId, setExpandedDebtId] = useState<string | null>(null);
   const detailDebt = debts.filter(d => d.id === detailDebtId).length === 1 ? debts.find(d => d.id === detailDebtId) : undefined;
   const swipe = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
@@ -691,6 +692,7 @@ export default function DebtsScreen() {
           const paid = getPaidAmount(debt);
           const remaining = getRemainingAmount(debt);
           const status = getStatus(debt);
+          const expanded = expandedDebtId === debt.id;
 
           return (
             <Card key={debt.id} style={styles.debtCard}>
@@ -767,15 +769,40 @@ export default function DebtsScreen() {
                   <AppText variant="caption" color="textSecondary">
                     Paid / collected: {formatAmount(paid, debt.currencyCode)}
                   </AppText>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={colors.textSecondary}
-                  />
+                  <AppText variant="caption" color="textSecondary">Details</AppText>
                 </View>
               </Pressable>
-
-
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={(expanded ? 'Hide' : 'Show') + ' payment history for ' + debt.personName}
+                accessibilityState={{ expanded }}
+                onPress={() => setExpandedDebtId(expanded ? null : debt.id)}
+                style={styles.historyToggle}
+              >
+                <AppText variant="caption" color="textSecondary">
+                  Payment history ({debt.payments.length})
+                </AppText>
+                <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={19} color={colors.textSecondary} />
+              </Pressable>
+              {expanded && (
+                <View style={styles.quickHistory}>
+                  {debt.payments.length === 0 ? (
+                    <AppText variant="caption" color="textSecondary">No payments recorded yet.</AppText>
+                  ) : debt.payments.map(payment => (
+                    <View key={payment.id} style={styles.quickPayment}>
+                      <View style={styles.quickPaymentRow}>
+                        <AppText style={styles.paymentDate}>{formatDate(payment.date)}</AppText>
+                        <AppText style={styles.paymentAmount}>{formatAmount(payment.amount, debt.currencyCode)} {debt.currencyCode}</AppText>
+                      </View>
+                      <FinanceActionButtons
+                        label={'payment dated ' + formatDate(payment.date)}
+                        onEdit={() => openEditPayment(debt, payment)}
+                        onDelete={() => confirmDeletePayment(debt, payment)}
+                      />
+                    </View>
+                  ))}
+                </View>
+              )}
             </Card>
           );
         })
@@ -1585,6 +1612,10 @@ function ModalEditPayment({
 }
 
 const styles = StyleSheet.create({
+  historyToggle: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 4 },
+  quickHistory: { paddingHorizontal: 12, paddingBottom: 6, gap: 2 },
+  quickPayment: { paddingTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#94A3B855' },
+  quickPaymentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 22 },
   center: {
     flex: 1,
     alignItems: 'center',
