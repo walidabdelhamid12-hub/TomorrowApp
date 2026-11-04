@@ -1,3 +1,4 @@
+import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { AssetTypeIcon } from '@/features/finance/components/AssetTypeIcon';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -37,7 +38,15 @@ const showRate = (value: number): string =>
   String(Number(value.toFixed(4)));
 
 const showMetal = (value: number | null): string =>
-  value === null ? '' : String(value);
+  value === null ? '' : formatAmount(value, 'KWD').replace(/,/g, '').replace(/0+$/, '').replace(/\.$/, '');
+
+// The clean display is never the source of truth for an untouched metal price.
+function metalChanged(text: string, canonical: number | null, edited: boolean): boolean {
+  if (!edited) return false;
+  if (text.trim() === '') return canonical !== null;
+  const value = parseAmount(text);
+  return value === null || value !== canonical;
+}
 
 function isValidRate(value: number | undefined): value is number {
   return (
@@ -140,6 +149,8 @@ export function RatesModal({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [gold, setGold] = useState('');
   const [silver, setSilver] = useState('');
+  const [goldEdited, setGoldEdited] = useState(false);
+  const [silverEdited, setSilverEdited] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [refreshMessage, setRefreshMessage] =
     useState<RefreshResult | null>(null);
@@ -221,6 +232,8 @@ export function RatesModal({
     });
 
     setDrafts(initial);
+    setGoldEdited(false);
+    setSilverEdited(false);
 
     setGold(
       metals.gold24PerGram === null
@@ -274,21 +287,11 @@ export function RatesModal({
       }
     }
 
-    const originalGoldDisplay =
-      metals.gold24PerGram === null
-        ? ''
-        : showMetal(metals.gold24PerGram / baseRate);
-
-    if (hasDisplayValueChanged(gold, originalGoldDisplay)) {
+    if (metalChanged(gold, metals.gold24PerGram === null ? null : metals.gold24PerGram / baseRate, goldEdited)) {
       return true;
     }
 
-    const originalSilverDisplay =
-      metals.silverPerGram === null
-        ? ''
-        : showMetal(metals.silverPerGram / baseRate);
-
-    if (hasDisplayValueChanged(silver, originalSilverDisplay)) {
+    if (metalChanged(silver, metals.silverPerGram === null ? null : metals.silverPerGram / baseRate, silverEdited)) {
       return true;
     }
 
@@ -388,6 +391,9 @@ export function RatesModal({
       }
     }
 
+    const goldChanged = metalChanged(gold, metals.gold24PerGram === null ? null : metals.gold24PerGram / baseRate, goldEdited);
+    const silverChanged = metalChanged(silver, metals.silverPerGram === null ? null : metals.silverPerGram / baseRate, silverEdited);
+
     const goldDisplay =
       gold.trim() === '' ? null : parseAmount(gold);
 
@@ -395,7 +401,7 @@ export function RatesModal({
       silver.trim() === '' ? null : parseAmount(silver);
 
     if (
-      gold.trim() !== '' &&
+      goldChanged && gold.trim() !== '' &&
       (goldDisplay === null || goldDisplay <= 0)
     ) {
       console.log('[RatesModal] SAVE STOPPED: invalid gold price');
@@ -406,7 +412,7 @@ export function RatesModal({
     }
 
     if (
-      silver.trim() !== '' &&
+      silverChanged && silver.trim() !== '' &&
       (silverDisplay === null || silverDisplay <= 0)
     ) {
       console.log('[RatesModal] SAVE STOPPED: invalid silver price');
@@ -417,10 +423,10 @@ export function RatesModal({
     }
 
     const goldStored =
-      goldDisplay === null ? null : goldDisplay * baseRate;
+      goldChanged ? goldDisplay === null ? null : goldDisplay * baseRate : metals.gold24PerGram;
 
     const silverStored =
-      silverDisplay === null ? null : silverDisplay * baseRate;
+      silverChanged ? silverDisplay === null ? null : silverDisplay * baseRate : metals.silverPerGram;
 
     if (
       (goldStored !== null &&
@@ -432,26 +438,6 @@ export function RatesModal({
       setError('One or more metal prices are invalid.');
       return;
     }
-
-    const originalGoldDisplay =
-      metals.gold24PerGram === null
-        ? ''
-        : showMetal(metals.gold24PerGram / baseRate);
-
-    const originalSilverDisplay =
-      metals.silverPerGram === null
-        ? ''
-        : showMetal(metals.silverPerGram / baseRate);
-
-    const goldChanged = hasDisplayValueChanged(
-      gold,
-      originalGoldDisplay,
-    );
-
-    const silverChanged = hasDisplayValueChanged(
-      silver,
-      originalSilverDisplay,
-    );
 
     console.log('[RatesModal] Changed currencies:', Object.keys(changedRates));
     console.log('[RatesModal] Gold changed:', goldChanged);
@@ -736,8 +722,9 @@ export function RatesModal({
             </View>
 
             <AppInput
+              accessibilityLabel="Gold price"
               value={gold}
-              onChangeText={setGold}
+              onChangeText={value => { setGold(value); setGoldEdited(true); }}
               keyboardType="decimal-pad"
               placeholder="not set"
               style={{
@@ -772,8 +759,9 @@ export function RatesModal({
             </View>
 
             <AppInput
+              accessibilityLabel="Silver price"
               value={silver}
-              onChangeText={setSilver}
+              onChangeText={value => { setSilver(value); setSilverEdited(true); }}
               keyboardType="decimal-pad"
               placeholder="not set"
               style={{

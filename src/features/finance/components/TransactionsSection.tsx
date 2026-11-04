@@ -2,7 +2,7 @@ import { FinanceDetailsModal } from '@/features/finance/components/FinanceDetail
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { AppText, Card } from '@/components/ui';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
@@ -30,6 +30,8 @@ export function TransactionsSection({
   onEdit, onEditTransfer, onDelete, onDeleteTransfer, onManage, amountsVisible,
 }: TransactionsSectionProps) {
   const { colors, spacing } = useTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const stacked = width / fontScale < 340;
   const transactions = useLedgerStore(s => s.transactions);
   const transfers = useLedgerStore(s => s.transfers);
   const categories = useLedgerStore(s => s.categories);
@@ -111,7 +113,7 @@ export function TransactionsSection({
       ) : (
         <Card padded={false} variant="outlined">
           {visible.map((item, index) => {
-            const rowStyle = [styles.row,
+            const rowStyle = [styles.row, stacked && styles.stacked,
               index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }];
             if (item.kind === 'transfer') {
               const transfer = item.transfer;
@@ -128,22 +130,22 @@ export function TransactionsSection({
                   <View style={styles.details}>
                     <View style={styles.primary}>
                       <AppText variant="caption" style={styles.name}>{cardPayment ? 'Credit card payment' : 'Transfer'}</AppText>
-                      <AppText variant="caption" color="info" style={styles.amount} textBreakStrategy="simple">
-                        {amountsVisible ? formatAmount(transfer.fromAmount ?? transfer.amount, fromCurrency) + ' ' + fromCurrency : '••••••'}
-                      </AppText>
                     </View>
-                    {fromCurrency !== toCurrency && (
-                      <AppText variant="caption" color="info" style={styles.amount} textBreakStrategy="simple">
-                        {amountsVisible ? '→ ' + formatAmount(transfer.toAmount ?? transfer.amount, toCurrency) + ' ' + toCurrency : '••••••'}
-                      </AppText>
-                    )}
                     <AppText variant="label" color="textSecondary" style={styles.metadata}>
                       {transfer.date + ' · ' + (accountById.get(transfer.fromAccountId)?.name ?? 'Unavailable account')
                         + ' → ' + (accountById.get(transfer.toAccountId)?.name ?? 'Unavailable account')}
                     </AppText>
                   </View>
                   </Pressable>
-                  {rowActions('transfer', transfer.id)}
+                  <View style={[styles.right, stacked && { maxWidth: '100%' }]}>
+                    <AppText variant="caption" color="info" style={styles.amount} textBreakStrategy="simple">
+                      {amountsVisible ? formatAmount(transfer.fromAmount ?? transfer.amount, fromCurrency) + ' ' + fromCurrency : '••••••'}
+                    </AppText>
+                    {fromCurrency !== toCurrency && <AppText variant="caption" color="info" style={styles.amount} textBreakStrategy="simple">
+                      {amountsVisible ? '→ ' + formatAmount(transfer.toAmount ?? transfer.amount, toCurrency) + ' ' + toCurrency : '••••••'}
+                    </AppText>}
+                    {rowActions('transfer', transfer.id)}
+                  </View>
                 </View>
               );
             }
@@ -152,7 +154,7 @@ export function TransactionsSection({
             const account = accountById.get(tx.accountId);
             const expense = tx.type === 'expense' && tx.entryType !== 'refund';
             const movementColor = expense ? colors.expense : colors.income;
-            const icon = category?.icon ?? '';
+            const icon: IconName = tx.entryType === 'refund' ? 'return-down-back-outline' : expense ? 'trending-down-outline' : 'trending-up-outline';
             const protectedRecord = isProtectedTransaction(tx, { loans, debts });
             const destination = protectedRecord ? getTransactionDestination(tx, { loans, debts }) : null;
             const description = getTransactionDescription(tx, category?.name, destination);
@@ -162,15 +164,15 @@ export function TransactionsSection({
             const content = (
               <>
                 <View style={[styles.iconCircle, { backgroundColor: movementColor + '18' }]}>
-                  <Ionicons name={protectedRecord ? 'wallet-outline' : icon in Ionicons.glyphMap ? icon as IconName : 'receipt-outline'}
+                  <Ionicons name={protectedRecord ? destination?.href.pathname === '/finance/loans' ? 'cash-outline' : 'people-outline' : icon}
                     size={20} color={movementColor} accessible={false} />
                 </View>
                 <View style={styles.details}>
                   <View style={styles.primary}>
                     <AppText variant="caption" style={styles.name}>{description}</AppText>
-                    <AppText variant="caption" style={styles.amount} color={expense ? 'expense' : 'income'} textBreakStrategy="simple">
+                    {protectedRecord && <AppText variant="caption" style={styles.amount} color={expense ? 'expense' : 'income'} textBreakStrategy="simple">
                       {amount}
-                    </AppText>
+                    </AppText>}
                   </View>
                   <AppText variant="label" color="textSecondary" style={styles.metadata}>{metadata}</AppText>
                 </View>
@@ -187,7 +189,10 @@ export function TransactionsSection({
             ) : (
               <View key={'transaction-' + item.id} style={rowStyle}>
                 <Pressable accessibilityRole="button" accessibilityLabel="Transaction details" onPress={() => setDetailItem({ kind: 'transaction', id: tx.id })} style={styles.rowBody}>{content}</Pressable>
-                {rowActions('transaction', tx.id)}
+                <View style={[styles.right, stacked && { maxWidth: '100%' }]}>
+                  <AppText variant="caption" style={styles.amount} color={expense ? 'expense' : 'income'} textBreakStrategy="simple">{amount}</AppText>
+                  {rowActions('transaction', tx.id)}
+                </View>
               </View>
             );
           })}
@@ -199,19 +204,21 @@ export function TransactionsSection({
 }
 
 const styles = StyleSheet.create({
+  stacked: { flexDirection: 'column', alignItems: 'stretch' },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 },
   headingText: { flexShrink: 1, minWidth: 0 },
   listToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 48, minWidth: 48,
     paddingHorizontal: 4, paddingVertical: 8, maxWidth: '50%' },
-  rowBody: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, minWidth: 0 },
-  row: { flexDirection: 'column', alignItems: 'stretch', gap: 8, paddingHorizontal: 8, paddingVertical: 8, minHeight: 60 },
+  right: { maxWidth: '50%', flexShrink: 1, minWidth: 0, alignItems: 'flex-end' },
+  rowBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, minWidth: 0 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 8, minHeight: 60 },
   primary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 8 },
   details: { flex: 1, minWidth: 0, gap: 2 },
   iconCircle: { width: 24, height: 24, flexShrink: 0, alignSelf: 'flex-start', marginTop: 2, borderRadius: 12, alignItems: 'center',
     justifyContent: 'center' },
   name: { fontWeight: '600', flexGrow: 1, flexShrink: 1, flexBasis: 72 },
-  amount: { fontWeight: '600', fontVariant: ['tabular-nums'], maxWidth: '100%' },
+  amount: { textAlign: 'right', fontWeight: '600', fontVariant: ['tabular-nums'], maxWidth: '100%' },
   metadata: { letterSpacing: 0 },
   moreButton: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   modalBackdrop: { flex: 1, justifyContent: 'center', padding: 24 },

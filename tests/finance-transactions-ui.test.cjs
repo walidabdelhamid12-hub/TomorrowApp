@@ -20,7 +20,7 @@ function Icon(props) { return React.createElement('Icon', props); }
 Icon.glyphMap = { 'cash-outline': 1 };
 Module._load = function(id, parent, main) {
   if (id === 'react') return hooks;
-  if (id === 'react-native') return { Modal: 'Modal', Pressable: 'Pressable', View: 'View', StyleSheet: { create: x => x, hairlineWidth: 1 } };
+  if (id === 'react-native') return { useWindowDimensions: () => ({ width: 390, height: 844, fontScale: 1 }), AppState: { addEventListener: () => ({ remove() {} }) }, Modal: 'Modal', Pressable: 'Pressable', View: 'View', StyleSheet: { create: x => x, hairlineWidth: 1 } };
   if (id === '@expo/vector-icons') return { Ionicons: Icon };
   if (id === '@/components/ui') return { AppText: 'AppText', Card: 'Card' };
   if (id === '@/theme') return { useTheme: () => theme, moduleColors: { finance: '#237' } };

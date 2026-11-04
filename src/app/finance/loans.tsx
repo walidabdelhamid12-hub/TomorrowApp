@@ -1,8 +1,7 @@
 import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { FinanceDisclosure } from '@/features/finance/components/FinanceDisclosure';
 import { canEditLoanPayment, canReverseLoanPayment } from '@/features/finance/utils/loanPaymentPolicy';
-import { FinanceDetailsModal } from '@/features/finance/components/FinanceDetailsModal';
-import { loanDetailLines } from '@/features/finance/utils/detailLines';
+import { LoanDetails } from '@/features/finance/components/LoanDetails';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -283,7 +282,7 @@ export default function LoansScreen() {
   return (
     <Screen scroll>
       {confirmation}
-      <FinanceDetailsModal title={detailLoanId === null ? undefined : detailLoan?.name ?? 'Loan unavailable'} onClose={() => setDetailLoanId(null)} lines={detailLoan ? loanDetailLines(detailLoan) : ['No unique loan is available.']} />
+      <LoanDetails loanId={detailLoanId} loan={detailLoan} onClose={() => setDetailLoanId(null)} />
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.back}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
         <View style={{ flex: 1 }}><AppText variant="h1">Loans</AppText><AppText variant="caption" color="textSecondary">{loans.length} loans</AppText></View>
@@ -310,7 +309,7 @@ export default function LoansScreen() {
             <View style={styles.metrics}>
               <View style={styles.metric}><AppText variant="caption" color="textSecondary">Original principal</AppText><AppText>{(loan.receivedAmount ?? loan.principalAmount) === undefined ? 'Unknown' : formatAmount((loan.receivedAmount ?? loan.principalAmount)!, loan.currencyCode) + ' ' + loan.currencyCode}</AppText></View>
               <View style={styles.metric}><AppText variant="caption" color="textSecondary">Contractual total</AppText><AppText>{formatAmount(getLoanTotal(loan), loan.currencyCode)} {loan.currencyCode}</AppText></View>
-              <View style={styles.metric}><AppText variant="caption" color="textSecondary">Remaining contractual payments</AppText><AppText style={styles.remaining}>{formatAmount(due, loan.currencyCode)} {loan.currencyCode}</AppText></View>
+              <View style={styles.metric}><AppText variant="caption" color="textSecondary">Remaining contractual</AppText><AppText style={styles.remaining}>{formatAmount(due, loan.currencyCode)} {loan.currencyCode}</AppText></View>
               <View style={styles.metric}><AppText variant="caption" color="textSecondary">Total paid</AppText><AppText>{formatAmount(paid, loan.currencyCode)} {loan.currencyCode}</AppText></View>
               <View style={styles.metric}><AppText variant="caption" color="textSecondary">Installment</AppText><AppText>{formatAmount(loan.monthlyInstallment, loan.currencyCode)}</AppText></View>
               <View style={styles.metric}><AppText variant="caption" color="textSecondary">Currency</AppText><AppText>{loan.currencyCode}</AppText></View>
@@ -556,8 +555,8 @@ function Field({ label, value, onChangeText, keyboardType = 'default' }: { label
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 12 },
-  back: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  loanCard: { marginTop: 9, gap: 8 },
+  back: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  loanCard: { marginTop: 8, padding: 12, gap: 6 },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metric: { flexBasis: '47%', flexGrow: 1, minWidth: 120, gap: 2 },

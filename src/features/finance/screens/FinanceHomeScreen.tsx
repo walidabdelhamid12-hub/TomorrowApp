@@ -1,3 +1,4 @@
+import { useFinanceDate } from '@/features/finance/hooks/useFinanceDate';
 import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { useFinancePreferences } from '@/features/finance/store/useFinancePreferences';
 
@@ -154,10 +155,7 @@ export default function FinanceHomeScreen() {
   const [ratesOpen, setRatesOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
 
-  const monthLabel = new Date().toLocaleDateString('en-US', {
-    month: 'long',
-    year: 'numeric',
-  });
+  const dateLabel = useFinanceDate();
 
   const openTransaction = (transaction: Transaction | null) => {
     setEditingTx(transaction);
@@ -494,17 +492,10 @@ export default function FinanceHomeScreen() {
   return (
     <Screen scroll>
       {confirmation}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <AppText variant="h1">Finance</AppText>
-        <Pressable accessibilityRole="button" accessibilityLabel={amountsVisible ? 'Hide Finance amounts' : 'Show Finance amounts'}
-          accessibilityState={{ selected: amountsVisible }} onPress={toggleAmounts}
-          style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name={amountsVisible ? 'eye-outline' : 'eye-off-outline'} size={22} color={colors.text} />
-        </Pressable>
-      </View>
+      <AppText variant="h1">Finance</AppText>
 
       <AppText color="textSecondary" style={{ marginTop: spacing.xs }}>
-        {monthLabel}
+        {dateLabel}
       </AppText>
 
       <TotalCard
@@ -521,6 +512,7 @@ export default function FinanceHomeScreen() {
         income={summary.income}
         expense={summary.expense}
         amountsVisible={amountsVisible}
+        onToggleAmounts={toggleAmounts}
         onNetworkPress={handleNetworkPress}
       />
 

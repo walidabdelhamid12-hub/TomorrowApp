@@ -1,6 +1,6 @@
+import { AccountCard } from '@/features/finance/components/AccountCard';
 import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { AccountDetails } from '@/features/finance/components/AccountDetails';
-import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -23,21 +23,12 @@ import {
     useLedgerStore,
 } from '@/features/finance/store/useLedgerStore';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
-import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
 import { moduleColors, useTheme } from '@/theme';
 
-const TYPE_LABELS: Record<AccountType, string> = {
-  cash: 'Cash',
-  bank: 'Bank',
-  wallet: 'Wallet',
-  savings: 'Savings',
-  credit_card: 'Credit card',
-};
-
 export default function AccountsScreen() {
   const router = useRouter();
-  const { colors, spacing } = useTheme();
+  const { colors } = useTheme();
   const { confirm, confirmation } = useFinanceConfirmation();
   const [detailAccountId, setDetailAccountId] = useState<string | null>(null);
   const ready = useLedgerHydrated();
@@ -177,39 +168,8 @@ export default function AccountsScreen() {
               transfers,
             );
 
-            return (
-              <View
-                key={account.id}
-                style={[
-                  styles.accountRow,
-                  { padding: spacing.md },
-                  { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: 16 },
-                ]}
-              >
-                <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + account.name} onPress={() => setDetailAccountId(account.id)} style={[styles.accountInfo, { minHeight: 48 }]}>
-                  <View style={[styles.accountTitleRow, { gap: 8 }]}><Ionicons name={account.type === 'bank' ? 'business-outline' : account.type === 'credit_card' ? 'card-outline' : 'wallet-outline'} size={20} color={colors.primary} />
-                    <AppText style={styles.accountName}>
-                      {account.name}
-                    </AppText>
-                  </View>
-
-                  <AppText variant="caption" color="textSecondary">
-                    {TYPE_LABELS[account.type]} · {account.currencyCode}
-                  </AppText>
-
-                  <AppText
-                    style={[
-                      styles.balance,
-                      balance < 0 && { color: colors.danger },
-                    ]}
-                  >
-                    {formatAmount(balance, account.currencyCode)} {account.currencyCode}
-                  </AppText>
-                </Pressable>
-
-                <FinanceActionButtons label={account.name} onEdit={() => openEdit(account)} onDelete={() => confirmDelete(account)} />
-              </View>
-            );
+            return <AccountCard key={account.id} account={account} balance={balance}
+              onPress={() => setDetailAccountId(account.id)} onEdit={() => openEdit(account)} onDelete={() => confirmDelete(account)} />;
           })}
         </View>
       )}

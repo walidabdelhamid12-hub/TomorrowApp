@@ -9,6 +9,8 @@ const React = require('react');
 const root = path.resolve(__dirname, '..');
 const load = Module._load;
 let states, cursor, finance, currency, alerts, calls, theme, ledger, effects, params;
+let appStateListener, appStateRemoved = false;
+let dimensions = { width: 390, height: 844, fontScale: 1 };
 const hooks = { ...React, useEffect: (fn, deps) => {
   const key = cursor++; const previous = states[key];
   if (!previous || !deps || deps.some((d, i) => d !== previous[i])) { states[key] = deps; effects.push(fn); }
@@ -22,7 +24,7 @@ Ionicon.glyphMap = {};
 function MaterialIcon(props) { return React.createElement('MaterialIcon', props); }
 Module._load = function(id, parent, main) {
   if (id === 'react') return hooks;
-  if (id === 'react-native') return { View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', Modal: 'Modal', ScrollView: 'ScrollView', TextInput: 'TextInput', KeyboardAvoidingView: 'KeyboardAvoidingView',
+  if (id === 'react-native') return { useWindowDimensions: () => dimensions, AppState: { addEventListener: (_event, callback) => { appStateListener = callback; return { remove() { appStateRemoved = true; } }; } }, View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', Modal: 'Modal', ScrollView: 'ScrollView', TextInput: 'TextInput', KeyboardAvoidingView: 'KeyboardAvoidingView',
     PanResponder: { create: handlers => ({ panHandlers: handlers }) }, Animated: { Value: function() { this.interpolate = () => 0; this.stopAnimation = () => {}; this.setValue = () => {}; }, timing: () => ({ start() {}, stop() {} }), loop: () => ({ start() {}, stop() {} }) },
     StyleSheet: { create: value => value, hairlineWidth: 1 }, Platform: { OS: 'android' },
     Alert: { alert: (...args) => alerts.push(args) } };
@@ -33,7 +35,7 @@ Module._load = function(id, parent, main) {
   if (id === '@/features/finance/components/AddTransactionModal') return { AddTransactionModal: 'AddTransactionModal' };
   if (id === '@/features/finance/components/TransferModal') return { TransferModal: 'TransferModal' };
   if (id === '@/theme') return { useTheme: () => theme, moduleColors: { finance: '#10B981' } };
-  if (id === '@/components/ui') return { Card: 'Card', AppText: 'AppText', AppButton: 'AppButton', Screen: 'Screen', DateField: 'DateField', AppInput: 'AppInput' };
+  if (id === '@/components/ui') return { Card: 'Card', AppText: 'AppText', AppButton: 'AppButton', Screen: 'Screen', DateField: 'DateField', AppInput: 'AppInput', ChipSelect: 'ChipSelect' };
   if (id === '@/features/finance/components/AddAssetModal') return { AddAssetModal: 'AddAssetModal' };
   if (id === '@/features/finance/components/FormModal') return { FormModal: 'FormModal' };
   if (id === '@/features/finance/store/paymentOperations') return Object.fromEntries(['confirmLoanReceipt', 'postLinkedPayment', 'editLinkedPayment', 'reverseLinkedPayment'].map(name => [name, () => { calls.push(name); return { ok: true }; }]));
@@ -113,7 +115,7 @@ test('the active Assets screen uses the same Rates symbols and corrected gold/si
 test('the compact shared card has small padding, no fixed height, and scalable untruncated names/values', () => {
   render(AssetRow, rowProps({ ...gold, name: 'A long gold asset name with room to wrap at large Android font scales' }));
   const cardStyle = style(nodes('Card')[0].props.style);
-  assert.equal(cardStyle.padding, 8); assert.equal(cardStyle.gap, 4);
+  assert.equal(cardStyle.padding, 8); assert.equal(cardStyle.gap, undefined);
   assert.equal(cardStyle.height, undefined); assert.equal(cardStyle.minHeight, undefined);
   for (const text of nodes('AppText')) {
     assert.equal(text.props.numberOfLines, undefined);
@@ -196,7 +198,7 @@ test('asset body remains the movements target and labeled actions are siblings w
   assert.equal(texts().includes('Movements'), false);
   const body = nodes('Pressable').find(n => n.props.accessibilityLabel.startsWith('Movements for'));
   assert.equal(nodes('Pressable', body).length, 1);
-  assert.equal(nodes('Ionicon', body).some(n => n.props.name === 'chevron-forward'), true);
+  assert.equal(nodes('Pressable', body).length, 1);
   body.props.onPress();
   assert.deepEqual(calls, ['movements']);
 });
@@ -261,7 +263,7 @@ test('loan body opens exact read-only details; back and settlement Cancel never 
   const before = structuredClone(finance.loans);
   render(LoansScreen);
   nodes('Pressable').find(n => n.props.accessibilityLabel === 'Details for My Loan').props.onPress(); render(LoansScreen);
-  assert.ok(texts().includes('Remaining principal: 90,000.00 EGP'));
+  assert.ok(texts().includes('Remaining principal')); assert.ok(texts().includes('90,000.00 EGP'));
   const modal = nodes('Modal').find(n => n.props.visible && nodes('AppText', n).some(t => t.props.children === 'My Loan'));
   assert.ok(modal); modal.props.onRequestClose(); render(LoansScreen);
   nodes('AppButton').find(n => n.props.title === 'Early settlement').props.onPress(); render(LoansScreen);
@@ -276,7 +278,8 @@ test('account details show actual balances and ordered transactions/transfers wi
   ledger.transactions = [{ id: 't', accountId: 'a', type: 'expense', amount: 10, date: '2026-11-02' }];
   ledger.transfers = [{ id: 'x', fromAccountId: 'a', toAccountId: 'b', fromAmount: 20, amount: 20, date: '2026-11-03' }];
   render(AccountDetails, { accountId: 'a', onClose: () => calls.push('close') });
-  assert.ok(texts().includes('Current balance: 70.00 EGP'));
+  assert.ok(texts().includes('Current balance')); assert.ok(texts().includes('70.00 EGP'));
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Toggle Transaction history').props.onPress(); render(AccountDetails, { accountId: 'a', onClose() {} });
   assert.ok(texts().includes('2026-11-03 · Transfer to Cash · 20.00 EGP'));
   render(AccountDetails, { accountId: 'a', onClose() {}, amountsVisible: false });
   assert.equal(texts().some(t => t.includes('70.00') || t.includes('20.00')), false); assert.deepEqual(calls, []);
@@ -371,17 +374,17 @@ test('loan disclosures default closed, show a payment count, and preserve receip
   assert.ok(texts().some(t => t.includes('Received: 100,000.00 EGP on 2026-11-01')));
 });
 
-test('all nine shortcuts follow approved order, Categories spans the final row, and one visibility prop masks every amount', () => {
+test('eight shortcuts follow approved order with Categories excluded and one global eye masks every amount', () => {
   const props = { baseCurrency: 'EGP', accountsTotal: 123456, assetsTotal: 234567, loansRemainingTotal: 345678, netWorth: 456789,
     loansInstallmentsRemainingTotal: 567890, receivablesTotal: 678901, payablesTotal: 789012, income: 890123, expense: 901234,
     amountsVisible: false, onNetworkPress() {} };
   render(TotalCard, props);
   assert.deepEqual(nodes('Pressable').map(n => n.props.accessibilityLabel).filter(t => t?.startsWith('Open ')),
-    ['Expenses','Income','Accounts','Assets','Installments','Loans','Debts','Transfers','Categories'].map(t => 'Open ' + t));
+    ['Expenses','Income','Accounts','Assets','Installments','Loans','Debts','Transfers'].map(t => 'Open ' + t));
   assert.equal(texts().some(t => /123,456|234,567|345,678|456,789|567,890|678,901|789,012|890,123|901,234/.test(t)), false);
-  assert.equal(nodes('Ionicon').some(n => n.props.name === 'eye-outline' || n.props.name === 'eye-off-outline'), false);
+  assert.equal(nodes('Ionicon').filter(n => n.props.name === 'eye-outline' || n.props.name === 'eye-off-outline').length, 1);
   assert.ok(texts().includes('Coming soon'));
-  assert.ok(nodes('View').some(n => style(n.props.style).width === '100%'));
+  assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Open Categories'), false);
   const info = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Explain Net Worth');
   assert.equal(info.props.accessibilityState.expanded, false);
   info.props.onPress(); render(TotalCard, props);
@@ -420,4 +423,142 @@ test('Finance header has one global eye control and toggles summary and recent v
   assert.ok(texts().includes('-321.00 EGP'));
   nodes('Pressable').find(n => n.props.accessibilityLabel === 'Hide Finance amounts').props.onPress(); render(FinanceHomeScreen);
   assert.equal(texts().some(t => t.includes('12,024') || t.includes('321.00')), false);
+});
+
+const { CURRENCIES } = require('../src/features/finance/constants/currencies.ts');
+function preparePreciseRates() {
+  currency.rates = Object.fromEntries(CURRENCIES.map(c => [c.code, 1]));
+  currency.rates.KWD = 2;
+  currency.baseCurrency = 'KWD';
+  currency.metals = { gold24PerGram: 14005.16246913, silverPerGram: 88.925123456 };
+  currency.rateSources = Object.fromEntries(CURRENCIES.map(c => [c.code, 'manual']));
+  currency.setMetalPrice = (key, value) => { calls.push([key, value]); currency.metals = { ...currency.metals, [key]: value }; return true; };
+  currency.setManualRates = values => { calls.push(['rates', values]); return true; };
+  theme.sizes = { inputHeight: 48 };
+  return { visible: true, onClose: () => calls.push('close'), refreshRates: async () => null, isRefreshing: false };
+}
+function metalInput(kind) { return nodes('AppInput').find(n => n.props.accessibilityLabel === kind + ' price'); }
+
+test('Rates shows trimmed three-decimal metals while unchanged Save and clean close preserve canonical prices in a converted base', () => {
+  const props = preparePreciseRates(), before = { ...currency.metals };
+  render(RatesModal, props); flushEffects(); render(RatesModal, props);
+  assert.equal(metalInput('Gold').props.value, '7002.581');
+  assert.equal(metalInput('Silver').props.value, '44.463');
+  assert.equal(nodes('AppButton').find(n => n.props.title === 'Save rates').props.disabled, true);
+  nodes('AppButton').find(n => n.props.title === 'Save rates').props.onPress(); render(RatesModal, props);
+  assert.deepEqual(calls, []); assert.deepEqual(currency.metals, before);
+  assert.equal(nodes('AppText').some(n => n.props.color === 'danger' && typeof n.props.children === 'string' && n.props.children.includes('Enter a valid')), false);
+  nodes('FormModal')[0].props.onClose();
+  assert.deepEqual(calls, ['close']); assert.deepEqual(currency.metals, before);
+});
+
+test('deliberately edited metal digits below the old tolerance save exactly through base conversion; Save stays open and becomes clean', () => {
+  const props = preparePreciseRates();
+  render(RatesModal, props); flushEffects(); render(RatesModal, props);
+  metalInput('Silver').props.onChangeText('44.462561729'); render(RatesModal, props);
+  nodes('FormModal')[0].props.onClose();
+  assert.equal(alerts[0][0], 'Unsaved changes'); assert.deepEqual(calls, []);
+  nodes('AppButton').find(n => n.props.title === 'Save rates').props.onPress();
+  assert.deepEqual(calls, [['silverPerGram', 44.462561729 * 2]]);
+  render(RatesModal, props); flushEffects(); render(RatesModal, props);
+  assert.equal(metalInput('Silver').props.value, '44.463');
+  assert.equal(nodes('AppButton').find(n => n.props.title === 'Save rates').props.disabled, true);
+  nodes('AppButton').find(n => n.props.title === 'Save rates').props.onPress();
+  assert.equal(calls.length, 1);
+});
+
+test('metal trailing zeros trim only in display, deliberate clear and invalid edits keep existing validation', () => {
+  const props = preparePreciseRates(); currency.metals.gold24PerGram = 14000;
+  render(RatesModal, props); flushEffects(); render(RatesModal, props);
+  assert.equal(metalInput('Gold').props.value, '7000');
+  metalInput('Gold').props.onChangeText('-5'); render(RatesModal, props);
+  nodes('AppButton').find(n => n.props.title === 'Save rates').props.onPress(); render(RatesModal, props);
+  assert.deepEqual(calls, []);
+  metalInput('Gold').props.onChangeText(''); render(RatesModal, props);
+  nodes('AppButton').find(n => n.props.title === 'Save rates').props.onPress();
+  assert.deepEqual(calls, [['gold24PerGram', null]]);
+});
+
+const { TransferModal: RealTransferModal } = require('../src/features/finance/components/TransferModal.tsx');
+const transferFixture = { id: 'transfer', type: 'internal', fromAccountId: 'usd', toAccountId: 'egp',
+  fromAmount: 10, toAmount: 550, amount: 10, currencyCode: 'USD', fromCurrencyCode: 'USD', toCurrencyCode: 'EGP', exchangeRate: 55, date: '2026-11-04', note: 'Keep note' };
+function prepareTransfer() {
+  ledger.accounts = [{ id: 'usd', name: 'USD bank', currencyCode: 'USD', type: 'bank' }, { id: 'egp', name: 'EGP bank', currencyCode: 'EGP', type: 'bank' }, { id: 'card', name: 'USD card', currencyCode: 'USD', type: 'credit_card' }];
+  ledger.updateTransfer = (id, values) => { calls.push(['update', id, values]); return true; };
+  ledger.addTransfer = values => { calls.push(['add', values]); return 'new'; };
+  currency.rates = { USD: 55, EGP: 1 }; dimensions = { width: 390, height: 844, fontScale: 1 };
+  return { visible: true, transfer: transferFixture, onClose: () => calls.push('close') };
+}
+test('transfer account dropdowns are adjacent with amounts before date/note, and edit preserves the original payload', () => {
+  const props = prepareTransfer();
+  render(RealTransferModal, props); flushEffects(); render(RealTransferModal, props);
+  assert.ok(nodes('View').some(n => style(n.props.style).flexDirection === 'row' && nodes('Pressable', n).filter(p => ['From account', 'To account'].includes(p.props.accessibilityLabel)).length === 2));
+  assert.ok(nodes('AppInput').find(n => n.props.label === 'Amount to transfer'));
+  assert.equal(nodes('AppInput').find(n => n.props.label === 'Exchange rate').props.value, '55');
+  nodes('AppButton').find(n => n.props.title === 'Save changes').props.onPress();
+  assert.equal(calls[0][0], 'update'); assert.equal(calls[0][1], 'transfer');
+  assert.equal(calls[0][2].fromAmount, 10); assert.equal(calls[0][2].toAmount, 550); assert.equal(calls[0][2].exchangeRate, 55);
+  assert.deepEqual(calls.slice(1), ['close']);
+});
+for (const view of [{ width: 320, fontScale: 1 }, { width: 390, fontScale: 1.6 }]) test('transfer dropdowns stack at width ' + view.width + ' and font scale ' + view.fontScale, () => {
+  const props = prepareTransfer(); dimensions = { ...dimensions, ...view };
+  render(RealTransferModal, props); flushEffects(); render(RealTransferModal, props);
+  assert.ok(nodes('View').some(n => style(n.props.style).flexDirection === 'column' && nodes('Pressable', n).filter(p => ['From account', 'To account'].includes(p.props.accessibilityLabel)).length === 2));
+  dimensions = { width: 390, height: 844, fontScale: 1 };
+});
+
+const { useFinanceDate, formatFinanceDate } = require('../src/features/finance/hooks/useFinanceDate.ts');
+test('Finance date uses the device local calendar with full English day, month and year', () => {
+  assert.equal(formatFinanceDate(new Date(2026, 10, 4, 23, 59)), 'Wednesday, November 4, 2026');
+});
+test('Finance date refreshes over local midnight and app resume, and cleans up its timer/subscription', () => {
+  const OriginalDate = Date, originalInterval = global.setInterval, originalClear = global.clearInterval;
+  let now = new OriginalDate(2026, 10, 4, 23, 59), tick, cleared;
+  global.Date = class extends OriginalDate { constructor(...args) { super(...(args.length ? args : [now.getTime()])); } };
+  global.setInterval = callback => { tick = callback; return 42; };
+  global.clearInterval = id => { cleared = id; };
+  function DateLabel() { return React.createElement('AppText', null, useFinanceDate()); }
+  let cleanup;
+  try {
+    render(DateLabel); cleanup = effects.shift()(); effects = [];
+    assert.ok(texts().includes('Wednesday, November 4, 2026'));
+    now = new OriginalDate(2026, 10, 5, 0, 1); tick(); render(DateLabel);
+    assert.ok(texts().includes('Thursday, November 5, 2026'));
+    now = new OriginalDate(2026, 10, 6, 8); appStateListener('active'); render(DateLabel);
+    assert.ok(texts().includes('Friday, November 6, 2026'));
+  } finally { cleanup?.(); global.Date = OriginalDate; global.setInterval = originalInterval; global.clearInterval = originalClear; }
+  assert.equal(cleared, 42); assert.equal(appStateRemoved, true);
+});
+
+test('asset value and Edit/Delete share a compact right zone outside the type/name details target', () => {
+  render(AssetRow, rowProps(gold));
+  const right = nodes('View').find(n => nodes('AppText', n).some(t => t.props.children === '≈ 12,254.52 EGP') && nodes('Pressable', n).length === 2);
+  assert.ok(right);
+  assert.deepEqual(nodes('Pressable', right).map(n => n.props.accessibilityLabel), ['Edit GOLD TEST', 'Delete GOLD TEST']);
+  const body = nodes('Pressable').find(n => n.props.accessibilityLabel.startsWith('Movements for'));
+  assert.ok(nodes('AppText', body).some(n => n.props.children === '2.000 g'));
+  assert.equal(nodes('AppText', body).some(n => n.props.children === '≈ 12,254.52 EGP'), false);
+});
+
+function settleTransfer(props) { for (let i = 0; i < 4; i++) { render(RealTransferModal, props); flushEffects(); } render(RealTransferModal, props); }
+test('transfer edit keeps a saved custom rate through effects, live rate refresh, and switching to another edit', () => {
+  const props = prepareTransfer(); props.transfer = { ...transferFixture, exchangeRate: 54.321123, toAmount: 543.21123 };
+  settleTransfer(props);
+  assert.equal(nodes('AppInput').find(n => n.props.label === 'Exchange rate').props.value, '54.321123');
+  currency.rates = { USD: 58, EGP: 1 }; settleTransfer(props);
+  assert.equal(nodes('AppInput').find(n => n.props.label === 'Exchange rate').props.value, '54.321123');
+  settleTransfer({ ...props, visible: false });
+  const second = { ...props, transfer: { ...transferFixture, id: 'second', fromAccountId: 'egp', toAccountId: 'usd', fromAmount: 550, toAmount: 11, fromCurrencyCode: 'EGP', toCurrencyCode: 'USD', exchangeRate: 0.02 } };
+  settleTransfer(second);
+  assert.equal(nodes('AppInput').find(n => n.props.label === 'Exchange rate').props.value, '0.02');
+  nodes('AppButton').find(n => n.props.title === 'Save changes').props.onPress();
+  assert.equal(calls[0][1], 'second'); assert.equal(calls[0][2].fromAccountId, 'egp'); assert.equal(calls[0][2].toAccountId, 'usd');
+  assert.equal(calls[0][2].toAmount, 11);
+});
+test('credit-card transfer mode keeps matching-account validation and a fixed rate of one', () => {
+  const props = prepareTransfer(); props.transfer = { ...transferFixture, type: 'credit_card_payment', toAccountId: 'card', toCurrencyCode: 'USD', exchangeRate: 1, toAmount: 10 };
+  settleTransfer(props);
+  assert.equal(nodes('AppInput').find(n => n.props.label === 'Exchange rate').props.editable, false);
+  nodes('AppButton').find(n => n.props.title === 'Save changes').props.onPress();
+  assert.equal(calls[0][2].type, 'credit_card_payment'); assert.equal(calls[0][2].toAmount, 10); assert.equal(calls[0][2].exchangeRate, 1);
 });

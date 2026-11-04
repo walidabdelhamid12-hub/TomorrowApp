@@ -44,6 +44,7 @@ interface TotalCardProps {
   income: number;
   expense: number;
   amountsVisible: boolean;
+  onToggleAmounts: () => void;
   onNetworkPress: (key: FinanceNetworkKey) => void;
   chequesTotal?: number;
   transfersTotal?: number;
@@ -220,6 +221,7 @@ export function TotalCard({
   income,
   expense,
   amountsVisible,
+  onToggleAmounts,
   onNetworkPress,
   transfersTotal,
 }: TotalCardProps) {
@@ -243,7 +245,7 @@ export function TotalCard({
   const hiddenValue = '••••••';
 
   const order: FinanceNetworkKey[] = ['expenses', 'income', 'accounts', 'assets', 'cheques', 'loans', 'debts', 'transfers', 'categories'];
-  const networkItems = [...NETWORK_ITEMS].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key)).map((item) => {
+  const networkItems = NETWORK_ITEMS.filter(item => item.key !== 'categories').sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key)).map((item) => {
     switch (item.key) {
       case 'accounts':
         return { ...item, amount: accountsTotal };
@@ -300,7 +302,12 @@ export function TotalCard({
 
         </View>
 
-        <View style={[styles.balanceRow, { marginTop: spacing.sm }]}>
+        <View style={[styles.balanceRow, { marginTop: spacing.xs }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={amountsVisible ? 'Hide Finance amounts' : 'Show Finance amounts'}
+            accessibilityState={{ selected: amountsVisible }} onPress={onToggleAmounts}
+            style={{ minWidth: 48, minHeight: 48, alignSelf: 'flex-start', alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name={amountsVisible ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.textSecondary} />
+          </Pressable>
           <View style={styles.balanceAmount}>
             <AppText
               variant="h1"

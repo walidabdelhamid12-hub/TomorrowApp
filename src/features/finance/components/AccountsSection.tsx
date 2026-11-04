@@ -1,5 +1,5 @@
+import { AccountCard } from '@/features/finance/components/AccountCard';
 import { AccountDetails } from '@/features/finance/components/AccountDetails';
-import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
@@ -7,20 +7,11 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppButton, AppText, Card } from '@/components/ui';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
-import type { Account, AccountType } from '@/features/finance/types/ledger';
-import { formatAmount } from '@/features/finance/utils/amountFormat';
+import type { Account } from '@/features/finance/types/ledger';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
 import { useTheme } from '@/theme';
 
 const PREVIEW_COUNT = 1;
-
-const TYPE_LABELS: Record<AccountType, string> = {
-  cash: 'Cash',
-  bank: 'Bank',
-  wallet: 'Wallet',
-  savings: 'Savings',
-  credit_card: 'Credit card',
-};
 
 interface AccountsSectionProps {
   accounts: readonly Account[];
@@ -112,41 +103,9 @@ export function AccountsSection({
               {visibleAccounts.map((account) => {
                 const balance =
                   balances.get(account.id) ?? account.initialBalance;
-                const negative = balance < 0;
 
-                return (
-                  <View
-                    key={account.id}
-                    style={[
-                      styles.row,
-                      { padding: spacing.md },
-                      { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: 16 },
-                    ]}
-                  >
-                    <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + account.name} onPress={() => setDetailAccountId(account.id)} style={[styles.flex, { minHeight: 48 }]}>
-
-                      <Ionicons name={account.type === 'bank' ? 'business-outline' : 'wallet-outline'} size={20} color={colors.primary} />
-                      <AppText style={styles.name}>
-                        {account.name}
-                      </AppText>
-
-                      <AppText variant="caption" color="textSecondary">
-                        {`${TYPE_LABELS[account.type]} · ${account.currencyCode}`}
-                      </AppText>
-
-                    <AppText
-                      {...(negative ? ({ color: 'danger' } as const) : {})}
-                      style={styles.balance}
-                    >
-                      {amountsVisible
-                        ? `${formatAmount(balance, account.currencyCode)} ${account.currencyCode}`
-                        : '••••••'}
-                    </AppText>
-
-                    </Pressable>
-                    <FinanceActionButtons label={account.name} onEdit={() => onEdit(account)} onDelete={() => onDelete(account)} />
-                  </View>
-                );
+                return <AccountCard key={account.id} account={account} balance={balance} amountsVisible={amountsVisible}
+              onPress={() => setDetailAccountId(account.id)} onEdit={() => onEdit(account)} onDelete={() => onDelete(account)} />;
               })}
         </View>
 
