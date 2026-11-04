@@ -639,6 +639,48 @@ for (const view of [{ width: 390, fontScale: 1, direction: 'row' }, { width: 320
 const compactSummaryProps = () => ({ baseCurrency: 'EGP', accountsTotal: 1234, assetsTotal: 100, netWorth: 1200, loansRemainingTotal: 134,
   loansInstallmentsRemainingTotal: 200, receivablesTotal: 0, payablesTotal: 0, income: 50, expense: 30, missing: 2,
   amountsVisible: true, onToggleAmounts: () => calls.push('eye'), onNetworkPress: key => calls.push(key) });
+for (const [mode, colors] of [['light', lightColors], ['dark', darkColors]]) {
+  test(`${mode} compact summary removes whitespace without fixing height or hiding content`, () => {
+    theme.colors = colors;
+    dimensions = { width: 320, height: 640, fontScale: 1.6 };
+    render(TotalCard, compactSummaryProps());
+    const summary = nodes('Card')[0];
+    const cardStyle = style(summary.props.style);
+    assert.equal(cardStyle.backgroundColor, colors.finance.balance.surface);
+    assert.equal(cardStyle.paddingVertical, 0);
+    assert.equal(cardStyle.height, undefined);
+    assert.notEqual(cardStyle.overflow, 'hidden');
+    const info = nodes('Pressable', summary).find(n => n.props.accessibilityLabel === 'Explain Net Worth');
+    assert.ok(style(info.props.style).minHeight >= 44);
+    const worthRow = nodes('View', summary).find(n => nodes('Pressable', n).includes(info)
+      && nodes('AppText', n).some(t => t.props.children === 'Net Worth'));
+    assert.equal(style(worthRow.props.style).marginTop, 0);
+    for (const label of ['Hide Finance amounts', 'Base currency EGP. Change currency']) {
+      const control = nodes('Pressable', summary).find(n => n.props.accessibilityLabel === label);
+      assert.ok(style(control.props.style).minHeight >= 48);
+    }
+    assert.ok(nodes('AppText', summary).some(n => n.props.children === 'Loan future contractual payments: 200.00 EGP'));
+    info.props.onPress(); render(TotalCard, compactSummaryProps());
+    assert.ok(texts().some(t => t.includes('Future contractual installments')));
+  });
+
+  test(`${mode} Finance date keeps its English format and location with a themed semibold accent`, () => {
+    theme.colors = colors;
+    theme.sizes = { inputHeight: 48 };
+    currency.rateSources = { EGP: 'manual' };
+    privacy = { amountsVisible: true, toggleAmounts() {} };
+    render(FinanceHomeScreen);
+    const date = nodes('AppText').find(n => typeof n.props.children === 'string'
+      && /^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday), [A-Z][a-z]+ \d{1,2}, \d{4}$/.test(n.props.children));
+    assert.ok(date);
+    assert.equal(date.props.color, colors.finance.neutral.accent);
+    assert.equal(style(date.props.style).fontWeight, '600');
+    assert.equal(style(date.props.style).marginTop, theme.spacing.xs);
+    const labels = nodes('AppText');
+    assert.equal(labels.indexOf(date), labels.findIndex(n => n.props.children === 'Finance') + 1);
+  });
+}
+
 test('shortcuts are outside the compact balance Card with no visible heading/counter and warnings remain inside', () => {
   render(TotalCard, compactSummaryProps());
   const summary = nodes('Card')[0];
@@ -648,7 +690,7 @@ test('shortcuts are outside the compact balance Card with no visible heading/cou
   assert.equal(nodes('AppText').some(n => JSON.stringify(n.props.children).includes('sections')), false);
   assert.ok(nodes('AppText', summary).some(n => typeof n.props.children === 'string' && n.props.children.includes('2 item(s) have unavailable valuation')));
   assert.equal(summary.props.padded, false);
-  assert.equal(style(summary.props.style).paddingVertical, 8);
+  assert.equal(style(summary.props.style).paddingVertical, 0);
   const grid = nodes('View').find(n => n.props.accessibilityLabel === 'Finance sections');
   assert.ok(grid); assert.equal(grid.props.children.length, 8);
   const expected = ['Expenses', 'Income', 'Accounts', 'Assets', 'Installments', 'Loans', 'Debts', 'Transfers'];

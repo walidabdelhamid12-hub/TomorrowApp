@@ -273,7 +273,7 @@ export function TotalCard({
 
   return (
     <View style={{ marginTop: spacing.lg }}>
-      <Card variant="outlined" padded={false} style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.finance.balance.surface, borderColor: colors.finance.balance.border, borderRadius: 14 }}>
+      <Card variant="outlined" padded={false} style={{ paddingHorizontal: 12, paddingVertical: 0, backgroundColor: colors.finance.balance.surface, borderColor: colors.finance.balance.border, borderRadius: 14 }}>
         <View style={styles.headingRow}>
           <View style={styles.netWorthHeading}>
             <View style={[styles.netWorthIcon, { backgroundColor: colors.surfaceAlt }]}>
@@ -356,7 +356,7 @@ export function TotalCard({
           <AppText
             variant="caption"
             color="danger"
-            style={{ marginTop: spacing.md }}
+            style={{ marginTop: spacing.xs }}
           >
             {`${missingCount} item(s) have unavailable valuation or principal allocation in ${baseCurrency}. Check Rates and loan details.`}
           </AppText>
@@ -457,7 +457,7 @@ export function TotalCard({
 }
 
 const styles = StyleSheet.create({
-  worthRow: { flexDirection: 'row', alignItems: 'center', gap: 4, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 6 },
+  worthRow: { flexDirection: 'row', alignItems: 'center', gap: 4, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 0 },
   headingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -485,7 +485,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   visibilityButton: {
-    minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center',
+    minWidth: 48, minHeight: 44, alignItems: 'center', justifyContent: 'center',
   },
   balanceRow: {
     flexDirection: 'row',

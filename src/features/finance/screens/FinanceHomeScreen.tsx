@@ -494,7 +494,7 @@ export default function FinanceHomeScreen() {
       {confirmation}
       <AppText variant="h1">Finance</AppText>
 
-      <AppText color="textSecondary" style={{ marginTop: spacing.xs }}>
+      <AppText color={colors.finance.neutral.accent} style={{ marginTop: spacing.xs, fontWeight: '600' }}>
         {dateLabel}
       </AppText>
 
