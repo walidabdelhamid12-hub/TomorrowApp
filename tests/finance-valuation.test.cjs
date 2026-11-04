@@ -117,3 +117,29 @@ test('ledger rounding, account balances and the shared non-asset conversion cont
   assert.equal(convertAmount(1, 'USD', 'EGP', { USD: 12.2549, EGP: 1 }, ['USD', 'EGP']), 12.255);
   assert.equal(getAccountBalance({ id: 'a', initialBalance: 10 }, [{ accountId: 'a', type: 'expense', amount: 1.005 }]), 8.995);
 });
+
+test('the Finance asset subtotal does not reintroduce three-decimal double rounding', () => {
+  const currency = { baseCurrency: 'EGP', rates: { EGP: 1 }, verifiedCurrencies: ['EGP'],
+    metals: { gold24PerGram: 7002.58, silverPerGram: null } };
+  const finance = { assets: [asset('gold', 0.002, { karat: 21 })], loans: [], debts: [], cheques: [] };
+  const ledger = { accounts: [], transactions: [], transfers: [] };
+  const previousLoader = Module._load;
+  Module._load = function(id, parent, main) {
+    if (id === 'react') return { useMemo: fn => fn() };
+    if (id === '@/features/finance/store/useCurrencyStore') return { useCurrencyStore: select => select(currency) };
+    if (id === '@/features/finance/store/useFinanceStore') return { useFinanceStore: select => select(finance) };
+    if (id === '@/features/finance/store/useLedgerStore') return { useLedgerStore: select => select(ledger) };
+    return previousLoader.call(this, id, parent, main);
+  };
+  try {
+    const { useFinanceSummary } = require('../src/features/finance/hooks/useFinanceSummary.ts');
+    const summary = useFinanceSummary();
+    assert.equal(summary.assetsTotal, 12.254515);
+    assert.equal(formatMoney(summary.assetsTotal, 'EGP'), '12.25');
+    assert.equal(formatAmount(summary.accountsTotal + summary.assetsTotal, 'EGP'), '12.25');
+    assert.equal(summary.accountsTotal, 0);
+    assert.equal(summary.loansRemainingTotal, 0);
+    // Existing net-worth quantization remains deliberately outside this asset-display change.
+    assert.equal(summary.netWorth, roundMoney(12.254515));
+  } finally { Module._load = previousLoader; }
+});

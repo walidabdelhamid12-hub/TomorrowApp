@@ -189,7 +189,8 @@ export function useFinanceSummary() {
 
     return {
       accountsTotal: roundMoney(accountsTotal),
-      assetsTotal: roundMoney(assetsTotal),
+      // Asset values stay unquantized until monetary display, including their subtotal.
+      assetsTotal,
       loansRemainingTotal: roundMoney(loansRemainingTotal),
       loansInstallmentsRemainingTotal: roundMoney(loansInstallmentsRemainingTotal),
       receivablesTotal: roundMoney(receivablesTotal),

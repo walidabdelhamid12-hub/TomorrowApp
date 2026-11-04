@@ -21,7 +21,10 @@ Asset entries/balances, metal prices, exchange rates, and storage schemas are no
 rewritten. Existing quantity-balance precision is retained. The shared ledger
 `roundMoney` and `convertAmount` functions are unchanged, including account, loan,
 debt, and transaction calculation behavior. Summary formulas are unchanged; their
-asset inputs naturally use the corrected valuation. Missing/invalid metal prices
+asset inputs naturally use the corrected valuation. The asset subtotal also remains
+unquantized until display so it cannot reintroduce three-decimal double rounding;
+the existing net-worth quantization and all non-asset subtotal rules are unchanged.
+Missing/invalid metal prices
 and unverified FX rates still produce unavailable valuations.
 
 Run `npm run test:finance` and TypeScript checks. Native Expo Go display verification
