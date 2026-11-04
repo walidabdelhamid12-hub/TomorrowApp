@@ -26,3 +26,24 @@ and unverified FX rates still produce unavailable valuations.
 
 Run `npm run test:finance` and TypeScript checks. Native Expo Go display verification
 is still needed; these tests execute actual pure valuation/formatting code on Node.
+
+## Compact asset presentation
+
+AssetsScreen, the reusable AssetRow, and FinanceHomeScreen's asset list share
+AssetCard and AssetTypeIcon. Gold and silver use the installed MaterialCommunityIcons
+`gold` bullion-bar vector glyph, tinted gold or silver for the current theme. No
+new dependency or large gradient/icon background is introduced.
+
+The outlined card uses 8 dp padding, 4 dp internal gaps, compact category/value
+labels, and wrapping balance/valuation columns instead of the previous larger
+padding/vertical gaps. There are no fixed card heights or text line caps. Movements,
+Edit, Delete, and the movement-summary target retain at least 48 dp touch areas;
+actions wrap at large font sizes. Labels, surfaces, borders, and action colors
+support the existing light/dark palettes. AssetRow now exposes its existing
+Movements callback alongside Edit/Delete and retains the amount privacy toggle.
+
+UI tests exercise actual component elements and handlers with mocked native
+surfaces, including the active Assets screen's modal/deletion bindings. They do
+not measure native layout or font loading. Check Expo Go on Android for bullion
+font loading, light/dark colors, long names/large values, font scaling, and touch
+targets. Existing asset save/delete/persistence flows are not rewritten.

@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 
 import { AppButton, AppText, Screen } from '@/components/ui';
 import type { AddAssetFormData } from '@/features/finance/components/AddAssetModal';
 import { AddAssetModal } from '@/features/finance/components/AddAssetModal';
+import { AssetCard } from '@/features/finance/components/AssetCard';
 import { AssetEntriesModal } from '@/features/finance/components/AssetEntriesModal';
 import { useCurrencyHydrated, useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
@@ -221,48 +222,10 @@ export default function AssetsScreen() {
                   : 'Silver';
 
             return (
-              <View key={asset.id} style={[styles.assetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Pressable onPress={() => openEntries(asset)} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                  <View style={styles.assetTop}>
-                    <View style={styles.flex}>
-                      <AppText variant="bodyStrong">{asset.name}</AppText>
-                      <AppText color="textSecondary" style={styles.category}>{categoryLabel}</AppText>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-                  </View>
-                  <View style={styles.values}>
-                    <View style={styles.flex}>
-                      <AppText color="textSecondary">Original balance</AppText>
-                      <AppText variant="bodyStrong">{originalBalance}</AppText>
-                    </View>
-                    <View style={styles.flex}>
-                      <AppText color="textSecondary">Value in {baseCurrency}</AppText>
-                      <AppText variant="bodyStrong" style={{ color: valuation === null ? colors.textSecondary : accent }}>
-                        {convertedValue}
-                      </AppText>
-                    </View>
-                  </View>
-                </Pressable>
-                <View style={[styles.actions, { borderTopColor: colors.border }]}>
-                  <Pressable onPress={() => openEntries(asset)} style={[styles.action, styles.movementAction]} accessibilityRole="button">
-                    <Ionicons name="list-outline" size={17} color="#3978C5" />
-                    <AppText style={styles.actionLabel}>Movements</AppText>
-                  </Pressable>
-                  <Pressable onPress={() => openAsset(asset)} style={[styles.action, styles.editAction]} accessibilityRole="button">
-                    <Ionicons name="create-outline" size={17} color="#27845B" />
-                    <AppText style={styles.actionLabel}>Edit</AppText>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => confirmDeleteAsset(asset)}
-                    style={[styles.action, styles.deleteAction]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete ${asset.name}`}
-                  >
-                    <Ionicons name="trash-outline" size={17} color="#D94B4B" />
-                    <AppText style={styles.actionLabel}>Delete</AppText>
-                  </Pressable>
-                </View>
-              </View>
+              <AssetCard key={asset.id} asset={asset} categoryLabel={categoryLabel}
+                balanceText={originalBalance} valuationText={convertedValue} baseCurrency={baseCurrency}
+                onViewEntries={() => openEntries(asset)} onEdit={() => openAsset(asset)}
+                onDelete={() => confirmDeleteAsset(asset)} />
             );
           })}
         </View>
@@ -294,17 +257,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   backButton: { width: 40, height: 40, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
   headerText: { flex: 1, gap: 2 },
-  flex: { flex: 1, minWidth: 0 },
   list: { gap: 12, marginBottom: 14 },
   emptyCard: { minHeight: 220, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, alignItems: 'center', justifyContent: 'center', padding: 20, gap: 12 },
-  assetCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 14, gap: 12 },
-  assetTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  category: { marginTop: 3 },
-  values: { flexDirection: 'row', gap: 12, marginTop: 12 },
-  actions: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10 },
-  action: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 9 },
-  movementAction: { backgroundColor: '#EAF1FC' },
-  editAction: { backgroundColor: '#E8F5EE' },
-  deleteAction: { backgroundColor: '#FCEEEE' },
-  actionLabel: { color: '#4B5563', fontSize: 12, fontWeight: '600' },
 });

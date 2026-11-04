@@ -20,6 +20,7 @@ import { AddAccountModal } from '@/features/finance/components/AddAccountModal';
 import type { AddAssetFormData } from '@/features/finance/components/AddAssetModal';
 import { AddAssetModal } from '@/features/finance/components/AddAssetModal';
 import { AddTransactionModal } from '@/features/finance/components/AddTransactionModal';
+import { AssetCard } from '@/features/finance/components/AssetCard';
 import { AssetEntriesModal } from '@/features/finance/components/AssetEntriesModal';
 import { RatesModal } from '@/features/finance/components/RatesModal';
 import {
@@ -847,106 +848,10 @@ export default function FinanceHomeScreen() {
                           : 'Silver';
 
                   return (
-                    <View
-                      key={asset.id}
-                      style={[
-                        styles.assetListCard,
-                        { borderColor: colors.border },
-                      ]}
-                    >
-                      <Pressable
-                        onPress={() => openAssetEntries(asset)}
-                        style={({ pressed }) => ({
-                          opacity: pressed ? 0.7 : 1,
-                        })}
-                      >
-                        <View style={styles.assetListTop}>
-                          <View style={{ flex: 1 }}>
-                            <AppText variant="bodyStrong">
-                              {asset.name}
-                            </AppText>
-
-                            <AppText
-                              color="textSecondary"
-                              style={{ marginTop: 3 }}
-                            >
-                              {categoryLabel}
-                            </AppText>
-                          </View>
-
-                          <Ionicons
-                            name="chevron-forward"
-                            size={20}
-                            color={colors.textSecondary}
-                          />
-                        </View>
-
-                        <View style={styles.assetListValues}>
-                          <View style={{ flex: 1 }}>
-                            <AppText color="textSecondary">
-                              Original balance
-                            </AppText>
-
-                            <AppText variant="bodyStrong">
-                              {originalBalance}
-                            </AppText>
-                          </View>
-
-                          <View style={{ flex: 1 }}>
-                            <AppText color="textSecondary">
-                              Value in {baseCurrency}
-                            </AppText>
-
-                            <AppText
-                              variant="bodyStrong"
-                              style={{
-                                color:
-                                  valuation === null
-                                    ? colors.textSecondary
-                                    : accent,
-                              }}
-                            >
-                              {convertedValue}
-                            </AppText>
-                          </View>
-                        </View>
-                      </Pressable>
-
-                      <View
-                        style={[
-                          styles.assetListActions,
-                          { borderTopColor: colors.border },
-                        ]}
-                      >
-                        <Pressable
-                          onPress={() => openAssetEntries(asset)}
-                          style={[styles.assetListAction, styles.movementAction]}
-                          accessibilityRole="button"
-                        >
-                          <Ionicons name="list-outline" size={17} color="#3978C5" />
-                          <AppText style={styles.assetActionLabel}>Movements</AppText>
-                        </Pressable>
-
-                        <Pressable
-                          onPress={() => openAssetForEditing(asset)}
-                          style={[styles.assetListAction, styles.editAction]}
-                          accessibilityRole="button"
-                        >
-                          <Ionicons name="create-outline" size={17} color="#27845B" />
-                          <AppText style={styles.assetActionLabel}>Edit</AppText>
-                        </Pressable>
-
-                        <Pressable
-                          onPress={() => confirmDeleteAsset(asset)}
-                          style={[styles.assetListAction, styles.deleteAction]}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Delete ${asset.name}`}
-                        >
-                          <Ionicons name="trash-outline" size={17} color="#D94B4B" />
-                          <AppText style={styles.assetActionLabel}>Delete</AppText>
-                        </Pressable>
-                      </View>
-                    </View>
+                    <AssetCard key={asset.id} asset={asset} categoryLabel={categoryLabel}
+                      balanceText={originalBalance} valuationText={convertedValue} baseCurrency={baseCurrency}
+                      onViewEntries={() => openAssetEntries(asset)} onEdit={() => openAssetForEditing(asset)}
+                      onDelete={() => confirmDeleteAsset(asset)} />
                   );
                 })
               )}
@@ -1206,50 +1111,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 35,
     gap: 12,
-  },
-  assetListCard: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 14,
-    padding: 12,
-    gap: 12,
-  },
-  assetListTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  assetListValues: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
-  },
-  assetListActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 10,
-  },
-  assetListAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    borderRadius: 9,
-  },
-  movementAction: {
-    backgroundColor: '#EAF1FC',
-  },
-  editAction: {
-    backgroundColor: '#E8F5EE',
-  },
-  deleteAction: {
-    backgroundColor: '#FCEEEE',
-  },
-  assetActionLabel: {
-    color: '#4B5563',
-    fontSize: 12,
-    fontWeight: '600',
   },
 });
