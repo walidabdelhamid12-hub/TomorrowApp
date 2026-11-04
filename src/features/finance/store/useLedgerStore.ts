@@ -299,10 +299,13 @@ function isValidTransferAmounts(
     return false;
   }
 
-  const expectedRate = toAmount / fromAmount;
-  const rateDifference = Math.abs(exchangeRate - expectedRate);
+  const converted = fromAmount * exchangeRate;
+  const expectedLedgerAmount = roundMoney(converted);
 
-  return rateDifference <= Math.max(0.000001, expectedRate * 0.0001);
+  // Validate exactly the three-decimal amounts buildTransfer persists. Display
+  // rounding must not allow a different stored credit for the entered rate.
+  return isValidPositiveAmount(expectedLedgerAmount)
+    && toAmount === expectedLedgerAmount;
 }
 
 function buildTransfer(

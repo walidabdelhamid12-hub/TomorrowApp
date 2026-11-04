@@ -669,6 +669,200 @@ test('debt deletion refuses missing and duplicate IDs without deleting any paren
   assert.deepEqual(fullSnapshot(), previous);
 });
 
+function prepareFxTransfer() {
+  finance.setState({ loans: [], debts: [] });
+  ledger.setState({ transactions: [], transfers: [], accounts: [
+    { ...account('a'), currencyCode: 'EGP', initialBalance: 100 },
+    { ...account('b'), currencyCode: 'USD', initialBalance: 0 },
+  ] });
+  return { fromAccountId: 'a', toAccountId: 'b', fromAmount: 25, toAmount: 0.513,
+    fromCurrencyCode: 'EGP', toCurrencyCode: 'USD', exchangeRate: 0.0205, date, type: 'internal' };
+}
+
+for (const [destination, savedAmount] of [[0.513, 0.513], [25 * 0.0205, 0.513]]) {
+  test(`FX create/edit/delete accepts ${destination} without changing the entered rate`, () => {
+    const input = { ...prepareFxTransfer(), toAmount: destination };
+    const initial = [balance('a'), balance('b')];
+    const id = ledger.getState().addTransfer(input);
+    assert.ok(id);
+    const saved = ledger.getState().transfers[0];
+    assert.equal(saved.exchangeRate, 0.0205);
+    assert.equal(saved.toAmount, savedAmount);
+    const { formatAmount } = require('../src/features/finance/utils/amountFormat.ts');
+    assert.equal(formatAmount(saved.toAmount, 'USD'), '0.51');
+    assert.deepEqual([balance('a'), balance('b')], [75, savedAmount]);
+    assert.equal(ledger.getState().transactions.length, 0);
+    assert.equal(ledger.getState().updateTransfer(id, { note: 'Keep original precision' }), true);
+    assert.equal(ledger.getState().transfers[0].toAmount, savedAmount);
+    assert.equal(ledger.getState().updateTransfer(id, { fromAmount: 50, toAmount: 1.025 }), true);
+    assert.equal(ledger.getState().transfers[0].id, id);
+    assert.equal(ledger.getState().transfers[0].createdAt, saved.createdAt);
+    assert.equal(ledger.getState().transfers[0].exchangeRate, 0.0205);
+    assert.deepEqual([balance('a'), balance('b')], [50, 1.025]);
+    assert.equal(ledger.getState().updateTransfer(id, { note: 'Unchanged amounts and rate' }), true);
+    ledger.getState().removeTransfer(id);
+    assert.deepEqual([balance('a'), balance('b')], initial);
+    assert.equal(ledger.getState().transfers.length, 0);
+  });
+}
+
+test('FX edit preserves a new custom rate and uses three-decimal ledger precision', () => {
+  const input = prepareFxTransfer();
+  ledger.setState(s => ({ accounts: s.accounts.map(a => a.id === 'b' ? { ...a, currencyCode: 'OMR' } : a) }));
+  const id = ledger.getState().addTransfer({ ...input, toCurrencyCode: 'OMR', toAmount: 0.513 });
+  assert.ok(id);
+  assert.equal(ledger.getState().updateTransfer(id, { exchangeRate: 0.021234, toAmount: 0.531 }), true);
+  assert.equal(ledger.getState().transfers[0].exchangeRate, 0.021234);
+  assert.deepEqual([balance('a'), balance('b')], [75, 0.531]);
+});
+
+test('FX editing can use the full original source balance without counting the old debit twice', () => {
+  const input = prepareFxTransfer();
+  const id = ledger.getState().addTransfer(input);
+  assert.equal(ledger.getState().updateTransfer(id, { fromAmount: 100, toAmount: 2.05 }), true);
+  assert.deepEqual([balance('a'), balance('b')], [0, 2.05]);
+});
+
+test('FX persisted credit remains 0.513 after hydration; display-rounded 0.510 cannot replace it', async () => {
+  const input = prepareFxTransfer();
+  const id = ledger.getState().addTransfer({ ...input, toAmount: 25 * 0.0205, note: 'Persist exact credit' });
+  const previous = fullSnapshot();
+  await ledger.persist.rehydrate();
+  assert.deepEqual(fullSnapshot(), previous);
+  assert.equal(ledger.getState().transfers[0].toAmount, 0.513);
+  assert.equal(balance('b'), 0.513);
+  assert.equal(ledger.getState().updateTransfer(id, { toAmount: 0.510 }), false);
+  assert.equal(ledger.getState().addTransfer({ ...input, toAmount: 0.510 }), null);
+  assert.deepEqual(fullSnapshot(), previous);
+  ledger.getState().removeTransfer(id);
+  assert.deepEqual([balance('a'), balance('b')], [100, 0]);
+});
+
+test('FX account reassignment reverses original stored debits/credits and deletion reverses edited amounts', () => {
+  const input = prepareFxTransfer();
+  const id = ledger.getState().addTransfer(input);
+  ledger.setState(s => ({ accounts: [...s.accounts,
+    { ...account('c'), currencyCode: 'EGP', initialBalance: 1000 },
+    { ...account('d'), currencyCode: 'USD', initialBalance: 20 },
+  ] }));
+  assert.equal(ledger.getState().updateTransfer(id, {
+    fromAccountId: 'c', toAccountId: 'd', fromAmount: 50, toAmount: 1.025,
+  }), true);
+  assert.deepEqual(['a', 'b', 'c', 'd'].map(balance), [100, 0, 950, 21.025]);
+  ledger.getState().removeTransfer(id);
+  assert.deepEqual(['a', 'b', 'c', 'd'].map(balance), [100, 0, 1000, 20]);
+});
+
+for (const [amount, rate, destination] of [[100, 0.00001, 0.001], [0.001, 1, 0.001], [0.0014, 1, 0.001]]) {
+  test(`small FX amounts remain valid at ledger precision: ${amount} x ${rate}`, () => {
+    const input = prepareFxTransfer();
+    const id = ledger.getState().addTransfer({ ...input, fromAmount: amount, exchangeRate: rate, toAmount: destination });
+    assert.ok(id);
+    const { roundMoney } = require('../src/features/finance/utils/finance.ts');
+    const saved = ledger.getState().transfers[0];
+    assert.equal(saved.fromAmount, roundMoney(amount));
+    assert.equal(saved.toAmount, roundMoney(saved.fromAmount * saved.exchangeRate));
+    assert.equal(balance('b'), destination);
+    ledger.getState().removeTransfer(id);
+    assert.deepEqual([balance('a'), balance('b')], [100, 0]);
+  });
+}
+
+for (const patch of [
+  { fromAmount: 0.0004, exchangeRate: 1000, toAmount: 0.4 },
+  { fromAmount: 0.0014, exchangeRate: 1000, toAmount: 1.4 },
+  { fromAmount: 100, exchangeRate: 0.000004, toAmount: 0.001 },
+  { fromAmount: 100, exchangeRate: 1e-300, toAmount: 0.001 },
+  { fromAmount: 50, toAmount: 1.03 },
+]) {
+  test(`FX rejects zero-rounded or inconsistent stored amounts: ${JSON.stringify(patch)}`, () => {
+    const input = prepareFxTransfer();
+    const id = ledger.getState().addTransfer(input);
+    const previous = fullSnapshot();
+    assert.equal(ledger.getState().addTransfer({ ...input, ...patch }), null);
+    assert.equal(ledger.getState().updateTransfer(id, patch), false);
+    assert.deepEqual(fullSnapshot(), previous);
+    assert.deepEqual([balance('a'), balance('b')], [75, 0.513]);
+  });
+}
+
+test('same-currency transfers still reject unequal amounts and non-unit rates atomically', () => {
+  prepareFxTransfer();
+  ledger.setState(s => ({ accounts: s.accounts.map(a => ({ ...a, currencyCode: 'USD' })) }));
+  const input = { fromAccountId: 'a', toAccountId: 'b', fromAmount: 25, toAmount: 25,
+    fromCurrencyCode: 'USD', toCurrencyCode: 'USD', exchangeRate: 1, date, type: 'internal' };
+  const id = ledger.getState().addTransfer(input);
+  for (const patch of [{ toAmount: 25.01 }, { exchangeRate: 1.01 }]) {
+    const previous = fullSnapshot();
+    assert.equal(ledger.getState().addTransfer({ ...input, ...patch }), null);
+    assert.equal(ledger.getState().updateTransfer(id, patch), false);
+    assert.deepEqual(fullSnapshot(), previous);
+    assert.deepEqual([balance('a'), balance('b')], [75, 25]);
+  }
+});
+
+const invalidFxPatches = [
+  { toAmount: 0.510 }, { toAmount: 0.52 }, { toAmount: 0.514 }, { toAmount: 0.50 },
+  { fromAmount: 101, toAmount: 2.071 },
+  { fromCurrencyCode: 'USD' }, { toCurrencyCode: 'EGP' },
+  { fromAccountId: 'b', toAccountId: 'a' }, { toAccountId: 'a' },
+  { fromAccountId: 'missing' }, { toAccountId: 'missing' },
+  { type: 'credit_card_payment' },
+  { exchangeRate: 0.000001, toAmount: 0.001 },
+  { exchangeRate: Number.MAX_VALUE, toAmount: 1 },
+  ...['fromAmount', 'toAmount', 'exchangeRate'].flatMap(field =>
+    [0, -1, NaN, Infinity, -Infinity, 0.00000001].map(value => ({ [field]: value }))),
+];
+for (const [index, patch] of invalidFxPatches.entries()) {
+  test(`FX invalid input ${index} leaves records and both balances unchanged on create and edit`, () => {
+    const input = prepareFxTransfer();
+    const id = ledger.getState().addTransfer(input);
+    assert.ok(id);
+    const previous = fullSnapshot();
+    const cash = [balance('a'), balance('b')];
+    assert.equal(ledger.getState().addTransfer({ ...input, ...patch }), null);
+    assert.deepEqual(fullSnapshot(), previous);
+    assert.deepEqual([balance('a'), balance('b')], cash);
+    assert.equal(ledger.getState().updateTransfer(id, patch), false);
+    assert.deepEqual(fullSnapshot(), previous);
+    assert.deepEqual([balance('a'), balance('b')], cash);
+  });
+}
+
+for (const accountPatch of [{ archived: true }, { type: 'credit_card' }]) {
+  test(`FX rejects invalid account state ${JSON.stringify(accountPatch)} without mutations`, () => {
+    const input = prepareFxTransfer();
+    const id = ledger.getState().addTransfer(input);
+    ledger.setState(s => ({ accounts: s.accounts.map(a => a.id === 'a' ? { ...a, ...accountPatch } : a) }));
+    const previous = fullSnapshot();
+    assert.equal(ledger.getState().addTransfer(input), null);
+    assert.equal(ledger.getState().updateTransfer(id, { note: 'Invalid account' }), false);
+    assert.deepEqual(fullSnapshot(), previous);
+  });
+}
+
+test('credit-card payment creation/edit/deletion retains same-currency rules and conserves account totals', () => {
+  prepareFxTransfer();
+  ledger.setState(s => ({ accounts: s.accounts.map(a => ({ ...a, currencyCode: 'USD',
+    ...(a.id === 'b' ? { type: 'credit_card', initialBalance: -80 } : {}) })) }));
+  const input = { fromAccountId: 'a', toAccountId: 'b', fromAmount: 25, toAmount: 25,
+    fromCurrencyCode: 'USD', toCurrencyCode: 'USD', exchangeRate: 1, date, type: 'credit_card_payment' };
+  const id = ledger.getState().addTransfer(input);
+  assert.ok(id);
+  assert.deepEqual([balance('a'), balance('b')], [75, -55]);
+  assert.equal(ledger.getState().updateTransfer(id, { fromAmount: 40, toAmount: 40 }), true);
+  assert.deepEqual([balance('a'), balance('b')], [60, -40]);
+  for (const patch of [{ exchangeRate: 0.99 }, { toAmount: 39 }, { fromAmount: 101, toAmount: 101 },
+    { type: 'internal' }, { fromAccountId: 'b', toAccountId: 'a' }, { toCurrencyCode: 'EGP' }]) {
+    const previous = fullSnapshot();
+    assert.equal(ledger.getState().addTransfer({ ...input, ...patch }), null);
+    assert.equal(ledger.getState().updateTransfer(id, patch), false);
+    assert.deepEqual(fullSnapshot(), previous);
+  }
+  ledger.getState().removeTransfer(id);
+  assert.deepEqual([balance('a'), balance('b')], [100, -80]);
+});
+
 test('ordinary transaction and same-currency transfer lifecycle restores balances and combined account total', () => {
   finance.setState({ loans: [], debts: [] }); ledger.setState({ transactions: [], transfers: [] });
   const initial = balance('a');
