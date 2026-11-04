@@ -18,14 +18,16 @@ export function FinanceDetailsModal({ title, lines = [], metrics = [], children,
           </Pressable>
           <AppText variant="h3" style={{ flex: 1 }}>{title}</AppText>
         </View>
-        <ScrollView contentContainerStyle={{ gap: 8 }}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {metrics.length > 0 && <View style={styles.metrics}>
             {metrics.map(field => <View key={field.label} style={[styles.metric, { backgroundColor: colors.finance.neutral.surface, borderWidth: 1, borderColor: colors.finance.neutral.border }]}>
               <AppText variant="label" color={colors.finance.neutral.accent}>{field.label}</AppText>
               <AppText variant="bodyStrong" style={{ fontVariant: ['tabular-nums'] }}>{field.value}</AppText>
             </View>)}
           </View>}
-          {lines.map((line, index) => <AppText key={index} style={{ flexShrink: 1 }}>{line}</AppText>)}
+          {lines.length > 0 && <View style={[styles.detailGroup, { borderColor: colors.border }]}>
+            {lines.filter(Boolean).map((line, index) => <View key={index} style={styles.detailRow}><AppText style={{ flexShrink: 1 }}>{line}</AppText></View>)}
+          </View>}
           {children}
         </ScrollView>
       </View>
@@ -34,7 +36,11 @@ export function FinanceDetailsModal({ title, lines = [], metrics = [], children,
 }
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'center', padding: 16 },
-  panel: { maxHeight: '90%', borderRadius: 16, padding: 16, gap: 12 },
+  panel: { width: '100%', maxHeight: '85%', borderRadius: 18, padding: 16, gap: 12 },
+  scroll: { flexGrow: 0 },
+  scrollContent: { gap: 12, paddingBottom: 8 },
+  detailGroup: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12 },
+  detailRow: { paddingVertical: 10 },
   heading: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   back: { minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
