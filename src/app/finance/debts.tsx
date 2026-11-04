@@ -1,6 +1,5 @@
 import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { FinanceDetailsModal } from '@/features/finance/components/FinanceDetailsModal';
-import { debtDetailLines } from '@/features/finance/utils/detailLines';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { editLinkedPayment, postLinkedPayment, reverseLinkedPayment } from '@/features/finance/store/paymentOperations';
 
