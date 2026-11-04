@@ -51,12 +51,22 @@ test('1.4 account form validates numeric input before invoking onSave', () => {
   assert.ok(source.indexOf('const parsed = parseAmount(amount)') < source.indexOf('onSave({'));
 });
 
-test('1.4 ledger rejects runtime strings before rounding account and transaction amounts', () => {
+test('1.4 ledger uses shared runtime money guard before rounding', () => {
   const source = fs.readFileSync(path.join(root, 'src/features/finance/store/useLedgerStore.ts'), 'utf8');
-  assert.match(source, /typeof input\.amount !== 'number'/);
-  assert.match(source, /typeof input\.initialBalance !== 'number'/);
-  assert.match(source, /typeof input\.creditLimit !== 'number'/);
-  assert.match(source, /typeof clean\.initialBalance !== 'number'/);
-  assert.match(source, /typeof clean\.creditLimit !== 'number'/);
-  assert.ok(source.indexOf("typeof input.amount !== 'number'") < source.indexOf('const amount = roundMoney(input.amount)'));
+  assert.match(source, /!isFiniteMoneyInput\(input\.amount\)/);
+  assert.match(source, /!isFiniteMoneyInput\(input\.initialBalance\)/);
+  assert.match(source, /!isFiniteMoneyInput\(input\.creditLimit\)/);
+  assert.match(source, /!isFiniteMoneyInput\(clean\.initialBalance\)/);
+  assert.match(source, /!isFiniteMoneyInput\(clean\.creditLimit\)/);
+  assert.ok(source.indexOf('!isFiniteMoneyInput(input.amount)') < source.indexOf('const amount = roundMoney(input.amount)'));
+});
+
+test('1.4 runtime money guard rejects strings, nonfinite and nonnumeric values', () => {
+  const { isFiniteMoneyInput } = require('../src/features/finance/utils/finance.ts');
+  for (const invalid of ['100', '0', '', null, undefined, NaN, Infinity, -Infinity, {}, [], true]) {
+    assert.equal(isFiniteMoneyInput(invalid), false, String(invalid));
+  }
+  for (const valid of [0, -1.234, 0.001, 100, 1.2345]) {
+    assert.equal(isFiniteMoneyInput(valid), true, String(valid));
+  }
 });
