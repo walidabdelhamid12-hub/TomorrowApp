@@ -362,6 +362,9 @@ export const useLedgerStore = create<LedgerStore>()(
           (item) => item.id === input.categoryId
         );
 
+        // Reject runtime strings instead of coercing them through arithmetic.
+        // A numeric-looking string can otherwise be rounded into a wrong value.
+        if (typeof input.amount !== 'number' || !Number.isFinite(input.amount)) return null;
         const amount = roundMoney(input.amount);
 
         const valid =
@@ -438,6 +441,8 @@ export const useLedgerStore = create<LedgerStore>()(
       /* ------------------------------ Accounts ----------------------------- */
 
       addAccount: (input) => {
+        if (typeof input.initialBalance !== 'number' || !Number.isFinite(input.initialBalance)
+          || (input.creditLimit !== undefined && (typeof input.creditLimit !== 'number' || !Number.isFinite(input.creditLimit)))) return '';
         const initialBalance = roundMoney(input.initialBalance);
         const creditLimit =
           input.creditLimit === undefined
@@ -478,6 +483,8 @@ export const useLedgerStore = create<LedgerStore>()(
         set((state) => {
           const clean = definedOnly(patch);
 
+          if (clean.initialBalance !== undefined && (typeof clean.initialBalance !== 'number' || !Number.isFinite(clean.initialBalance))) return state;
+          if (typeof clean.creditLimit !== 'undefined' && (typeof clean.creditLimit !== 'number' || !Number.isFinite(clean.creditLimit))) return state;
           if (typeof clean.initialBalance === 'number') {
             clean.initialBalance = roundMoney(clean.initialBalance);
             if (!Number.isFinite(clean.initialBalance)) return state;
