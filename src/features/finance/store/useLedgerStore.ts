@@ -58,6 +58,8 @@ interface LedgerActions {
   addTransaction: (input: NewTransactionInput) => EntityId | null;
   /** Dedicated posting derives cash and ownership from an existing, unlinked payment. */
   addPaymentTransaction: (ref: PaymentRef, categoryId: string) => EntityId | null;
+  /** Dedicated property posting: generic addTransaction cannot forge this ownership. */
+  addPropertyPaymentTransaction: (input: { contractId: string; paymentId: string; accountId: string; categoryId: string; amount: number; date: string }) => EntityId | null;
   addLoanReceiptTransaction: (input: {
     loanId: string; amount: number; date: string; accountId: string; categoryId: string;
   }) => EntityId | null;
@@ -660,6 +662,23 @@ export const useLedgerStore = create<LedgerStore>()(
         if (['linkedEntityType', 'linkedEntityId', 'linkedPaymentId'].some(key => key in input)
           || ('purpose' in input && input.purpose !== undefined && input.purpose !== 'normal')) return null;
         return createTransaction(input);
+      },
+
+      addPropertyPaymentTransaction: input => {
+        if (!useLedgerStore.persist.hasHydrated() || !useFinanceStore.persist.hasHydrated()
+          || !isValidISODate(input.date) || !Number.isFinite(input.amount)
+          || input.amount <= 0 || roundMoney(input.amount) !== input.amount
+          || !input.contractId || !input.paymentId
+          || get().transactions.some(t => t.linkedEntityType === 'property'
+            && t.linkedEntityId === input.contractId && t.linkedPaymentId === input.paymentId)) return null;
+        const account = get().accounts.filter(a => a.id === input.accountId);
+        if (account.length !== 1 || account[0].archived || account[0].type === 'credit_card') return null;
+        return createTransaction({
+          type: 'expense', purpose: 'property_installment_payment', entryType: 'normal',
+          accountId: input.accountId, categoryId: input.categoryId, amount: input.amount,
+          date: input.date, linkedEntityType: 'property', linkedEntityId: input.contractId,
+          linkedPaymentId: input.paymentId,
+        });
       },
 
       addPaymentTransaction: (ref, categoryId) => {
