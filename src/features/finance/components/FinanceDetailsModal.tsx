@@ -5,8 +5,8 @@ import { AppText } from '@/components/ui';
 import { useTheme } from '@/theme';
 
 /** Read-only details. No record objects or mutation callbacks cross this boundary. */
-export function FinanceDetailsModal({ title, lines = [], metrics = [], children, onClose, compact = false }: {
-  title?: string; lines?: readonly string[]; metrics?: readonly { label: string; value: string }[]; children?: ReactNode; onClose: () => void; compact?: boolean;
+export function FinanceDetailsModal({ title, subtitle, lines = [], metrics = [], children, onClose, compact = false }: {
+  title?: string; subtitle?: string; lines?: readonly string[]; metrics?: readonly { label: string; value: string }[]; children?: ReactNode; onClose: () => void; compact?: boolean;
 }) {
   const { colors } = useTheme();
   return <Modal visible={title !== undefined} transparent animationType="slide" onRequestClose={onClose}>
@@ -16,7 +16,7 @@ export function FinanceDetailsModal({ title, lines = [], metrics = [], children,
           <Pressable accessibilityRole="button" accessibilityLabel="Back to list" onPress={onClose} style={styles.back}>
             <Ionicons name="arrow-back" size={21} color={colors.text} />
           </Pressable>
-          <AppText variant="h3" style={{ flex: 1 }}>{title}</AppText>
+          <View style={{ flex: 1, minWidth: 0 }}><AppText variant="h3" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{title}</AppText>{subtitle ? <AppText variant="caption" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{subtitle}</AppText> : null}</View>
         </View>
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, compact && styles.compactScrollContent]} showsVerticalScrollIndicator={false}>
           {metrics.length > 0 && <View style={[styles.metrics, compact && styles.compactMetrics]}>
