@@ -70,7 +70,8 @@ export type TransactionPurpose =
   | 'debt_collection'
   | 'loan_payment'
   | 'loan_principal_payment'
-  | 'loan_interest_payment';
+  | 'loan_interest_payment'
+  | 'property_installment_payment';
 
 export interface Transaction extends Timestamps {
   id: EntityId;
@@ -101,7 +102,7 @@ export interface Transaction extends Timestamps {
    * Optional link to the debt or loan settled by this transaction.
    * These fields allow the app to prevent duplicate ledger posting.
    */
-  linkedEntityType?: 'debt' | 'loan';
+  linkedEntityType?: 'debt' | 'loan' | 'property';
   linkedEntityId?: EntityId;
   linkedPaymentId?: EntityId;
 
