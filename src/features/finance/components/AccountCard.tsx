@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { FinanceRecordCard } from './FinanceRecordCard';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { AppText, Card } from '@/components/ui';
+import { FinanceActionButtons } from './FinanceActionButtons';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { useTheme } from '@/theme';
@@ -11,8 +13,27 @@ export function AccountCard({ account, balance, amountsVisible = true, onPress, 
   account: Account; balance: number; amountsVisible?: boolean; onPress: () => void; onEdit: () => void; onDelete: () => void;
 }) {
   const { colors } = useTheme();
-  return <FinanceRecordCard icon={<Ionicons name={account.type === 'bank' ? 'business-outline' : account.type === 'credit_card' ? 'card-outline' : 'wallet-outline'} size={20} color={colors.primary} />}
-    kind={ACCOUNT_TYPE_LABELS[account.type]} quantity={account.currencyCode} name={account.name}
-    value={amountsVisible ? formatAmount(balance, account.currencyCode) + ' ' + account.currencyCode : '••••••'} negative={balance < 0}
-    accessibilityLabel={'Details for ' + account.name} onPress={onPress} onEdit={onEdit} onDelete={onDelete} />;
+  const tone = colors.finance.account;
+  return <Card variant="outlined" padded={false} style={{ padding: 8, borderRadius: 14, backgroundColor: tone.surface, borderColor: tone.border }}>
+    <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + account.name} onPress={onPress}
+      style={({ pressed }) => [styles.content, { opacity: pressed ? 0.7 : 1 }]}>
+      <View style={[styles.icon, { backgroundColor: colors.surface }]}>
+        <Ionicons name={account.type === 'bank' ? 'business-outline' : account.type === 'credit_card' ? 'card-outline' : 'wallet-outline'} size={20} color={tone.accent} />
+      </View>
+      <View style={styles.name}>
+        <AppText variant="bodyStrong">{account.name}</AppText>
+        <AppText variant="caption" color={colors.finance.neutral.accent}>{ACCOUNT_TYPE_LABELS[account.type] + ' · ' + account.currencyCode}</AppText>
+      </View>
+      <AppText variant="bodyStrong" color={balance < 0 ? 'danger' : tone.accent} style={styles.balance}>
+        {amountsVisible ? formatAmount(balance, account.currencyCode) + ' ' + account.currencyCode : '••••••'}
+      </AppText>
+    </Pressable>
+    <FinanceActionButtons label={account.name} onEdit={onEdit} onDelete={onDelete} />
+  </Card>;
 }
+const styles = StyleSheet.create({
+  content: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  icon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  name: { flex: 1, minWidth: 0, gap: 2 },
+  balance: { maxWidth: '45%', flexShrink: 1, textAlign: 'right', fontVariant: ['tabular-nums'] },
+});

@@ -40,8 +40,8 @@ export function AppText({
   const { colors, typography } = useTheme();
 
   // If `color` is a theme key use it, otherwise treat it as a raw color value.
-  const resolvedColor =
-    color in colors ? colors[color as keyof typeof colors] : color;
+  const token = color in colors ? colors[color as keyof typeof colors] : undefined;
+  const resolvedColor = typeof token === 'string' ? token : color;
 
   return (
     <Text

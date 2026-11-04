@@ -7,6 +7,7 @@ import {
   Alert,
   Animated,
   Pressable,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -107,18 +108,6 @@ const SOURCE_LABELS: Record<RateSource, string> = {
   default: 'N/C',
 };
 
-const SOURCE_BACKGROUNDS: Record<RateSource, string> = {
-  live: '#E7F5E9',
-  manual: '#E8F0FE',
-  default: '#FCE8E8',
-};
-
-const SOURCE_BORDERS: Record<RateSource, string> = {
-  live: '#A5D6A7',
-  manual: '#AFC7F5',
-  default: '#F0B4B4',
-};
-
 export function RatesModal({
   visible,
   onClose,
@@ -127,6 +116,8 @@ export function RatesModal({
   lastResult = null,
 }: RatesModalProps) {
   const { colors, spacing, radius, sizes } = useTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const stackMetals = width / fontScale < 360;
 
   const rates = useCurrencyStore((s) => s.rates);
   const metals = useCurrencyStore((s) => s.metals);
@@ -261,9 +252,10 @@ export function RatesModal({
   const getMetalSource = (kind: MetalKey): RateSource =>
     metalSources[kind] ?? 'default';
 
+  const sourceTone = (source: RateSource) => colors.finance[source === 'live' ? 'income' : source === 'manual' ? 'account' : 'expense'];
   const getInputStatusStyle = (source: RateSource) => ({
-    backgroundColor: SOURCE_BACKGROUNDS[source],
-    borderColor: SOURCE_BORDERS[source],
+    backgroundColor: sourceTone(source).surface,
+    borderColor: sourceTone(source).border,
     borderWidth: 1,
   });
 
@@ -501,14 +493,14 @@ export function RatesModal({
   } as const;
 
   const metalCardStyle = {
-    flex: 0,
-    width: '40%',
+    flex: 1,
+    minWidth: 0,
     paddingVertical: spacing.xs * 0.56,
     paddingHorizontal: spacing.xs * 0.8,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: colors.finance.asset.border,
+    backgroundColor: colors.finance.asset.surface,
   } as const;
 
   const statusLegend = (
@@ -536,7 +528,7 @@ export function RatesModal({
                 width: 10,
                 height: 10,
                 borderRadius: 5,
-                backgroundColor: SOURCE_BORDERS[status],
+                backgroundColor: sourceTone(status).accent,
               }}
             />
             <AppText variant="caption" color="textSecondary">
@@ -700,8 +692,8 @@ export function RatesModal({
           METALS — PRICE PER GRAM IN {baseCurrency}
         </AppText>
 
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: spacing.sm }}>
-          <View style={metalCardStyle}>
+        <View testID="rates-metals" style={{ flexDirection: stackMetals ? 'column' : 'row', alignItems: 'stretch', gap: spacing.sm }}>
+          <View testID="rates-metal-gold" style={metalCardStyle}>
             <View
               style={{
                 flexDirection: 'row',
@@ -714,10 +706,13 @@ export function RatesModal({
               <AssetTypeIcon category="gold" />
               <AppText
                 variant="label"
+                numberOfLines={stackMetals ? undefined : 1}
+                adjustsFontSizeToFit={!stackMetals}
+                minimumFontScale={0.9}
                 color="text"
                 style={{ fontWeight: '600', flexShrink: 1 }}
               >
-                Gold 24K · 1 gram
+                Gold (gram)
               </AppText>
             </View>
 
@@ -733,12 +728,12 @@ export function RatesModal({
                 paddingVertical: spacing.xs * 0.5,
                 ...getInputStatusStyle(getMetalSource('gold24PerGram')),
               }}
-              fieldStyle={{ minHeight: sizes.inputHeight * 0.392 }}
+              fieldStyle={{ minHeight: 44 }}
               containerStyle={{ width: '100%' }}
             />
           </View>
 
-          <View style={metalCardStyle}>
+          <View testID="rates-metal-silver" style={metalCardStyle}>
             <View
               style={{
                 flexDirection: 'row',
@@ -751,10 +746,13 @@ export function RatesModal({
               <AssetTypeIcon category="silver" />
               <AppText
                 variant="label"
+                numberOfLines={stackMetals ? undefined : 1}
+                adjustsFontSizeToFit={!stackMetals}
+                minimumFontScale={0.9}
                 color="text"
-                style={{ fontWeight: '600' }}
+                style={{ fontWeight: '600', flexShrink: 1 }}
               >
-                Silver · 1 gram
+                Silver (gram)
               </AppText>
             </View>
 
@@ -770,7 +768,7 @@ export function RatesModal({
                 paddingVertical: spacing.xs * 0.5,
                 ...getInputStatusStyle(getMetalSource('silverPerGram')),
               }}
-              fieldStyle={{ minHeight: sizes.inputHeight * 0.392 }}
+              fieldStyle={{ minHeight: 44 }}
               containerStyle={{ width: '100%' }}
             />
           </View>
@@ -778,7 +776,7 @@ export function RatesModal({
 
       </View>
 
-      <AppText variant="caption" color="textSecondary">Metal prices retain full source precision; valuation uses that full price. Silver reference purity is unspecified by the source. Prices are per gram in {baseCurrency}.</AppText>
+      <AppText variant="caption" color="textSecondary">Gold is 24K. Metal prices retain full source precision; valuation uses that full price. Silver reference purity is unspecified by the source. Prices are per gram in {baseCurrency}.</AppText>
       {error ? (
         <AppText variant="caption" color="danger">
           {error}

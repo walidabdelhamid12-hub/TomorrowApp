@@ -298,9 +298,9 @@ for (const [scheme, palette] of [['light', lightColors], ['dark', darkColors]]) 
       render();
       const row = nodes('Card')[0].props.children[0];
       const amount = nodes('AppText', row).find(n => n.props.children.includes?.('123,456,789.12 USD'));
-      assert.equal(amount.props.color, colorKey);
-      assert.equal(nodes('Icon', row)[0].props.color, palette[colorKey]);
-      assert.ok(nodes('View', row).some(n => styles(n.props.style).backgroundColor === palette[colorKey] + '18'));
+      assert.equal(amount.props.color, palette.finance[colorKey].accent);
+      assert.equal(nodes('Icon', row)[0].props.color, palette.finance[colorKey].accent);
+      assert.ok(nodes('View', row).some(n => styles(n.props.style).backgroundColor === palette.finance[colorKey].surface));
       assert.deepEqual(ledger, previous);
     });
   }
@@ -312,9 +312,9 @@ for (const [scheme, palette] of [['light', lightColors], ['dark', darkColors]]) 
       const row = nodes('Card')[0].props.children[0];
       const amounts = nodes('AppText', row).filter(n => n.props.textBreakStrategy === 'simple');
       assert.equal(amounts.length, 2);
-      assert.ok(amounts.every(n => n.props.color === 'info'));
-      assert.equal(nodes('Icon', row)[0].props.color, palette.info);
-      assert.ok(nodes('View', row).some(n => styles(n.props.style).backgroundColor === palette.info + '18'));
+      assert.ok(amounts.every(n => n.props.color === palette.finance.transfer.accent));
+      assert.equal(nodes('Icon', row)[0].props.color, palette.finance.transfer.accent);
+      assert.ok(nodes('View', row).some(n => styles(n.props.style).backgroundColor === palette.finance.transfer.surface));
     });
   }
 }
@@ -330,7 +330,7 @@ test('one outlined card shares hairline dividers without nested cards or per-row
   rows.forEach((row, index) => {
     const style = styles(typeof row.props.style === 'function' ? row.props.style({ pressed: false }) : row.props.style);
     assert.equal(style.borderTopWidth, index ? 1 : undefined); // mocked hairlineWidth
-    if (index) assert.equal(style.borderTopColor, lightColors.border);
+    if (index) assert.equal(style.borderTopColor, lightColors.finance.neutral.border);
     assert.equal(style.elevation, undefined);
     assert.equal(style.shadowOpacity, undefined);
   });
@@ -354,7 +354,7 @@ test('protected rows retain expense semantics and hide money in both text and ac
   render({ amountsVisible: false });
   const row = nodes('Card')[0].props.children[0];
   assert.equal(row.type, 'Pressable');
-  assert.equal(nodes('Icon', row)[0].props.color, lightColors.expense);
+  assert.equal(nodes('Icon', row)[0].props.color, lightColors.finance.expense.accent);
   assert.ok(!row.props.accessibilityLabel.includes('123,456,789'));
   assert.ok(row.props.accessibilityLabel.includes('••••••'));
   assert.equal(nodes('Pressable', row).length, 1);

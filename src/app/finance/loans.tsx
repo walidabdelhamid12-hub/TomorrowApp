@@ -301,12 +301,12 @@ export default function LoansScreen() {
         visibleLoans.map(loan => {
           const paid = getLoanPaidAmount(loan);
           const due = remaining(loan);
-          return <Card key={loan.id} style={styles.loanCard}>
+          return <Card key={loan.id} variant="outlined" style={[styles.loanCard, { backgroundColor: colors.finance.liability.surface, borderColor: colors.finance.liability.border }]}>
             <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + loan.name} onPress={() => setDetailLoanId(loan.id)} style={{ minHeight: 48, gap: 8 }}>
             <View style={styles.row}><View style={{ flex: 1 }}><AppText variant="bodyStrong">{loan.name}</AppText><AppText color="textSecondary" variant="caption">{loan.lenderName} · {loan.currencyCode}</AppText></View>
-              <AppText style={{ color: loan.status === 'active' || !loan.status ? colors.warning : colors.success }}>{loan.status === 'settled' ? 'Settled' : loan.status === 'completed' ? 'Completed' : loan.status === 'closed' ? 'Closed without payment' : 'Active'}</AppText>
+              <AppText style={{ color: loan.status === 'active' || !loan.status ? colors.finance.liability.accent : colors.finance.income.accent }}>{loan.status === 'settled' ? 'Settled' : loan.status === 'completed' ? 'Completed' : loan.status === 'closed' ? 'Closed without payment' : 'Active'}</AppText>
             </View>
-            <View style={styles.metrics}>
+            <View style={[styles.metrics, { backgroundColor: colors.surface, borderRadius: 12, padding: 8 }]}>
               <View style={styles.metric}><AppText variant="caption" color="textSecondary">Original principal</AppText><AppText>{(loan.receivedAmount ?? loan.principalAmount) === undefined ? 'Unknown' : formatAmount((loan.receivedAmount ?? loan.principalAmount)!, loan.currencyCode) + ' ' + loan.currencyCode}</AppText></View>
               <View style={styles.metric}><AppText variant="caption" color="textSecondary">Contractual total</AppText><AppText>{formatAmount(getLoanTotal(loan), loan.currencyCode)} {loan.currencyCode}</AppText></View>
               <View style={styles.metric}><AppText variant="caption" color="textSecondary">Remaining contractual</AppText><AppText style={styles.remaining}>{formatAmount(due, loan.currencyCode)} {loan.currencyCode}</AppText></View>
@@ -338,8 +338,8 @@ export default function LoansScreen() {
               });
               const saved = Math.max(0, scheduled - paidBeforeSettlement - (loan.settlementAmount ?? 0));
               return <View style={{ gap: 4 }}>
-                <AppText color="success">Settlement: {formatAmount(loan.settlementAmount ?? 0, loan.currencyCode)} {loan.currencyCode} on {loan.settlementDate}</AppText>
-                {saved > 0.001 && <AppText color="success" variant="caption">Early settlement saving: {formatAmount(saved, loan.currencyCode)} {loan.currencyCode}</AppText>}
+                <AppText color={colors.finance.income.accent}>Settlement: {formatAmount(loan.settlementAmount ?? 0, loan.currencyCode)} {loan.currencyCode} on {loan.settlementDate}</AppText>
+                {saved > 0.001 && <AppText color={colors.finance.income.accent} variant="caption">Early settlement saving: {formatAmount(saved, loan.currencyCode)} {loan.currencyCode}</AppText>}
               </View>;
             })()}
             <FinanceDisclosure title="Payment history" count={loan.payments.length}>

@@ -12,12 +12,12 @@ interface FinanceActionButtonsProps {
 
 /** Labeled Accounts actions from ad7d5c6, with larger targets and dark surfaces. */
 export function FinanceActionButtons({ label, onEdit, onDelete, deleteTitle = 'Delete' }: FinanceActionButtonsProps) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const actions = [
     ...(onEdit ? [{ title: 'Edit', icon: 'create-outline' as const, onPress: onEdit,
-      tint: isDark ? colors.success : '#27845B', background: isDark ? colors.success + '18' : '#E8F5EE' }] : []),
+      tint: colors.finance.edit.text, background: colors.finance.edit.surface }] : []),
     ...(onDelete ? [{ title: deleteTitle, icon: 'trash-outline' as const, onPress: onDelete,
-      tint: isDark ? colors.danger : '#B42323', background: isDark ? colors.danger + '18' : '#FCEEEE' }] : []),
+      tint: colors.finance.delete.text, background: colors.finance.delete.surface }] : []),
   ];
   return (
     <View style={styles.actions}>

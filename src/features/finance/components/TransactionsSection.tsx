@@ -86,7 +86,7 @@ export function TransactionsSection({
       <FinanceDetailsModal title={detailItem ? detailItem.kind === 'transfer' ? 'Transfer details' : 'Transaction details' : undefined} lines={detailLines} onClose={() => setDetailItem(null)} />
       <View style={styles.toolbar}>
         <View style={styles.sectionHeader}>
-          <Ionicons name="swap-horizontal-outline" size={20} color={colors.textSecondary} accessible={false} />
+          <Ionicons name="receipt-outline" size={20} color={colors.finance.balance.accent} accessible={false} />
           <AppText variant="bodyStrong" numberOfLines={1} ellipsizeMode="tail"
             accessibilityRole="header" accessibilityLabel="Recent Transactions" style={styles.headingText}>
             Recent Transactions
@@ -97,11 +97,11 @@ export function TransactionsSection({
           accessibilityHint={sorted.length <= PREVIEW_COUNT ? 'All transactions are already visible'
             : expanded ? 'Return to the most recent transaction' : 'Show every transaction'}
           onPress={toggleAll} style={({ pressed }) => [styles.listToggle, { opacity: pressed ? 0.65 : 1 }]}>
-          <AppText variant="caption" color={sorted.length <= PREVIEW_COUNT ? 'textSecondary' : 'primary'} style={styles.actionLabel}>
+          <AppText variant="caption" color={sorted.length <= PREVIEW_COUNT ? 'textSecondary' : colors.finance.balance.accent} style={styles.actionLabel}>
             {expanded ? 'Show less' : 'View all (' + sorted.length + ')'}
           </AppText>
           <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16}
-            color={sorted.length <= PREVIEW_COUNT ? colors.textSecondary : colors.primary} accessible={false} />
+            color={sorted.length <= PREVIEW_COUNT ? colors.textSecondary : colors.finance.balance.accent} accessible={false} />
         </Pressable>
       </View>
       <AppText variant="label" color="textSecondary" style={{ marginBottom: spacing.sm }}>
@@ -111,10 +111,10 @@ export function TransactionsSection({
       {sorted.length === 0 ? (
         <Card variant="filled"><AppText color="textSecondary">No transactions yet. Tap "Add transaction" to start.</AppText></Card>
       ) : (
-        <Card padded={false} variant="outlined">
+        <Card padded={false} variant="outlined" style={{ backgroundColor: colors.finance.neutral.surface, borderColor: colors.finance.neutral.border, borderRadius: 14 }}>
           {visible.map((item, index) => {
             const rowStyle = [styles.row, stacked && styles.stacked,
-              index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }];
+              index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.finance.neutral.border }];
             if (item.kind === 'transfer') {
               const transfer = item.transfer;
               const fromCurrency = transfer.fromCurrencyCode ?? transfer.currencyCode;
@@ -123,25 +123,25 @@ export function TransactionsSection({
               return (
                 <View key={'transfer-' + item.id} style={rowStyle}>
                   <Pressable accessibilityRole="button" accessibilityLabel="Transfer details" onPress={() => setDetailItem({ kind: 'transfer', id: transfer.id })} style={styles.rowBody}>
-                  <View style={[styles.iconCircle, { backgroundColor: colors.info + '18' }]}>
+                  <View style={[styles.iconCircle, { backgroundColor: colors.finance.transfer.surface }]}>
                     <Ionicons name={cardPayment ? 'card-outline' : 'swap-horizontal-outline'} size={20}
-                      color={colors.info} accessible={false} />
+                      color={colors.finance.transfer.accent} accessible={false} />
                   </View>
                   <View style={styles.details}>
                     <View style={styles.primary}>
                       <AppText variant="caption" style={styles.name}>{cardPayment ? 'Credit card payment' : 'Transfer'}</AppText>
                     </View>
-                    <AppText variant="label" color="textSecondary" style={styles.metadata}>
+                    <AppText variant="label" color={colors.finance.neutral.accent} style={styles.metadata}>
                       {transfer.date + ' · ' + (accountById.get(transfer.fromAccountId)?.name ?? 'Unavailable account')
                         + ' → ' + (accountById.get(transfer.toAccountId)?.name ?? 'Unavailable account')}
                     </AppText>
                   </View>
                   </Pressable>
                   <View style={[styles.right, stacked && { maxWidth: '100%' }]}>
-                    <AppText variant="caption" color="info" style={styles.amount} textBreakStrategy="simple">
+                    <AppText variant="caption" color={colors.finance.transfer.accent} style={styles.amount} textBreakStrategy="simple">
                       {amountsVisible ? formatAmount(transfer.fromAmount ?? transfer.amount, fromCurrency) + ' ' + fromCurrency : '••••••'}
                     </AppText>
-                    {fromCurrency !== toCurrency && <AppText variant="caption" color="info" style={styles.amount} textBreakStrategy="simple">
+                    {fromCurrency !== toCurrency && <AppText variant="caption" color={colors.finance.transfer.accent} style={styles.amount} textBreakStrategy="simple">
                       {amountsVisible ? '→ ' + formatAmount(transfer.toAmount ?? transfer.amount, toCurrency) + ' ' + toCurrency : '••••••'}
                     </AppText>}
                     {rowActions('transfer', transfer.id)}
@@ -153,7 +153,7 @@ export function TransactionsSection({
             const category = categoryById.get(tx.categoryId);
             const account = accountById.get(tx.accountId);
             const expense = tx.type === 'expense' && tx.entryType !== 'refund';
-            const movementColor = expense ? colors.expense : colors.income;
+            const movementColor = (expense ? colors.finance.expense : colors.finance.income).accent;
             const icon: IconName = tx.entryType === 'refund' ? 'return-down-back-outline' : expense ? 'trending-down-outline' : 'trending-up-outline';
             const protectedRecord = isProtectedTransaction(tx, { loans, debts });
             const destination = protectedRecord ? getTransactionDestination(tx, { loans, debts }) : null;
@@ -163,18 +163,18 @@ export function TransactionsSection({
             const metadata = tx.date + ' · ' + (account?.name ?? 'Unavailable account');
             const content = (
               <>
-                <View style={[styles.iconCircle, { backgroundColor: movementColor + '18' }]}>
+                <View style={[styles.iconCircle, { backgroundColor: (expense ? colors.finance.expense : colors.finance.income).surface }]}>
                   <Ionicons name={protectedRecord ? destination?.href.pathname === '/finance/loans' ? 'cash-outline' : 'people-outline' : icon}
                     size={20} color={movementColor} accessible={false} />
                 </View>
                 <View style={styles.details}>
                   <View style={styles.primary}>
                     <AppText variant="caption" style={styles.name}>{description}</AppText>
-                    {protectedRecord && <AppText variant="caption" style={styles.amount} color={expense ? 'expense' : 'income'} textBreakStrategy="simple">
+                    {protectedRecord && <AppText variant="caption" style={styles.amount} color={movementColor} textBreakStrategy="simple">
                       {amount}
                     </AppText>}
                   </View>
-                  <AppText variant="label" color="textSecondary" style={styles.metadata}>{metadata}</AppText>
+                  <AppText variant="label" color={colors.finance.neutral.accent} style={styles.metadata}>{metadata}</AppText>
                 </View>
               </>
             );
@@ -190,7 +190,7 @@ export function TransactionsSection({
               <View key={'transaction-' + item.id} style={rowStyle}>
                 <Pressable accessibilityRole="button" accessibilityLabel="Transaction details" onPress={() => setDetailItem({ kind: 'transaction', id: tx.id })} style={styles.rowBody}>{content}</Pressable>
                 <View style={[styles.right, stacked && { maxWidth: '100%' }]}>
-                  <AppText variant="caption" style={styles.amount} color={expense ? 'expense' : 'income'} textBreakStrategy="simple">{amount}</AppText>
+                  <AppText variant="caption" style={styles.amount} color={movementColor} textBreakStrategy="simple">{amount}</AppText>
                   {rowActions('transaction', tx.id)}
                 </View>
               </View>
@@ -215,10 +215,10 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 8, minHeight: 60 },
   primary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 8 },
   details: { flex: 1, minWidth: 0, gap: 2 },
-  iconCircle: { width: 24, height: 24, flexShrink: 0, alignSelf: 'flex-start', marginTop: 2, borderRadius: 12, alignItems: 'center',
+  iconCircle: { width: 28, height: 28, flexShrink: 0, alignSelf: 'flex-start', marginTop: 2, borderRadius: 12, alignItems: 'center',
     justifyContent: 'center' },
   name: { fontWeight: '600', flexGrow: 1, flexShrink: 1, flexBasis: 72 },
-  amount: { textAlign: 'right', fontWeight: '600', fontVariant: ['tabular-nums'], maxWidth: '100%' },
+  amount: { textAlign: 'right', fontWeight: '700', fontVariant: ['tabular-nums'], maxWidth: '100%' },
   metadata: { letterSpacing: 0 },
   moreButton: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   modalBackdrop: { flex: 1, justifyContent: 'center', padding: 24 },

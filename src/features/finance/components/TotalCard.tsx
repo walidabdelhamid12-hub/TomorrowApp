@@ -1,3 +1,4 @@
+import type { FinanceTone } from '@/theme/colors';
 
 import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
@@ -55,8 +56,6 @@ interface NetworkItem {
   label: string;
   description: string;
   icon: IconName;
-  color: string;
-  background: string;
   amount?: number;
   sign?: '+' | '-';
 }
@@ -67,8 +66,6 @@ const NETWORK_ITEMS: NetworkItem[] = [
     label: 'Accounts',
     description: 'Manage your accounts',
     icon: 'wallet-outline',
-    color: '#2878D0',
-    background: '#EAF3FC',
     amount: 0,
   },
   {
@@ -76,18 +73,14 @@ const NETWORK_ITEMS: NetworkItem[] = [
     label: 'Assets',
     description: 'Track your assets',
     icon: 'diamond-outline',
-    color: '#7556B8',
-    background: '#F0EBFA',
     amount: 0,
   },
-  { key: 'debts', label: 'Debts', description: 'Receivables and payables', icon: 'people-outline', color: '#2878D0', background: '#EAF3FC' },
+  { key: 'debts', label: 'Debts', description: 'Receivables and payables', icon: 'people-outline' },
   {
     key: 'income',
     label: 'Income',
     description: 'Record your income',
     icon: 'trending-up-outline',
-    color: '#209B70',
-    background: '#E7F5EF',
     amount: 0,
     sign: '+',
   },
@@ -96,8 +89,6 @@ const NETWORK_ITEMS: NetworkItem[] = [
     label: 'Expenses',
     description: 'Track your expenses',
     icon: 'trending-down-outline',
-    color: '#D65353',
-    background: '#FBECEC',
     amount: 0,
     sign: '-',
   },
@@ -106,8 +97,6 @@ const NETWORK_ITEMS: NetworkItem[] = [
     label: 'Loans',
     description: 'Manage your loans',
     icon: 'cash-outline',
-    color: '#B98218',
-    background: '#FBF3E2',
     amount: 0,
     sign: '-',
   },
@@ -116,26 +105,25 @@ const NETWORK_ITEMS: NetworkItem[] = [
     label: 'Installments',
     description: 'Manage your cheques',
     icon: 'document-text-outline',
-    color: '#159BB5',
-    background: '#E6F7FA',
   },
   {
     key: 'categories',
     label: 'Categories',
     description: 'Manage your categories',
     icon: 'grid-outline',
-    color: '#7556B8',
-    background: '#F0EBFA',
   },
   {
     key: 'transfers',
     label: 'Transfers',
     description: 'Move money between accounts',
     icon: 'swap-horizontal-outline',
-    color: '#2878D0',
-    background: '#EAF3FC',
   },
 ];
+
+const NETWORK_TONES: Partial<Record<FinanceNetworkKey, FinanceTone>> = {
+  expenses: 'expense', income: 'income', accounts: 'account', assets: 'asset',
+  cheques: 'transfer', loans: 'liability', debts: 'liability', transfers: 'transfer',
+};
 
 function countOf(value: unknown): number {
   if (Array.isArray(value)) return value.length;
@@ -155,6 +143,7 @@ function NetworkCard({
   onPress: () => void;
 }) {
   const { colors } = useTheme();
+  const tone = colors.finance[NETWORK_TONES[item.key] ?? 'neutral'];
   const hasAmount = typeof item.amount === 'number';
 
   const formattedAmount = hasAmount
@@ -167,8 +156,8 @@ function NetworkCard({
         styles.networkCard,
         item.key === 'categories' && { width: '100%' },
         {
-          backgroundColor: colors.surfaceAlt,
-          borderColor: colors.border,
+          backgroundColor: tone.surface,
+          borderColor: tone.border,
         },
       ]}
     >
@@ -186,12 +175,12 @@ function NetworkCard({
         <View style={styles.networkMain}>
           <View style={styles.networkInfo}>
             <View style={styles.networkTitleRow}>
-              <View style={[styles.networkIcon, { backgroundColor: `${item.color}18` }]}>
-                <Ionicons name={item.icon} size={18} color={colors.primary} />
+              <View style={[styles.networkIcon, { backgroundColor: colors.surface }]}>
+                <Ionicons name={item.icon} size={18} color={tone.accent} />
               </View>
               <AppText style={[styles.networkLabel, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{item.label}</AppText>
             </View>
-            <AppText style={[styles.networkAmount, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
+            <AppText style={[styles.networkAmount, { color: tone.accent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
               {item.key === 'cheques' ? 'Coming soon' : visible ? (formattedAmount ?? (item.key === 'categories' ? 'Manage categories' : 'Open to view')) : '••••••'}
             </AppText>
           </View>
@@ -284,7 +273,7 @@ export function TotalCard({
 
   return (
     <View style={{ marginTop: spacing.lg }}>
-      <Card>
+      <Card variant="outlined" style={{ backgroundColor: colors.finance.balance.surface, borderColor: colors.finance.balance.border, borderRadius: 14 }}>
         <View style={styles.headingRow}>
           <View style={styles.netWorthHeading}>
             <View style={[styles.netWorthIcon, { backgroundColor: colors.surfaceAlt }]}>
@@ -299,15 +288,15 @@ export function TotalCard({
               TOTAL BALANCE
             </AppText>
           </View>
-
+          <Pressable accessibilityRole="button" accessibilityLabel={amountsVisible ? 'Hide Finance amounts' : 'Show Finance amounts'}
+            accessibilityState={{ selected: amountsVisible }} onPress={onToggleAmounts}
+            style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name={amountsVisible ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.textSecondary} />
+          </Pressable>
         </View>
 
         <View style={[styles.balanceRow, { marginTop: spacing.xs }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={amountsVisible ? 'Hide Finance amounts' : 'Show Finance amounts'}
-            accessibilityState={{ selected: amountsVisible }} onPress={onToggleAmounts}
-            style={{ minWidth: 48, minHeight: 48, alignSelf: 'flex-start', alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name={amountsVisible ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.textSecondary} />
-          </Pressable>
+
           <View style={styles.balanceAmount}>
             <AppText
               variant="h1"
@@ -370,7 +359,7 @@ export function TotalCard({
             Finance Shortcuts
           </AppText>
 
-          <AppText style={[styles.shortcutsCount, { color: colors.textSecondary }]}>
+          <AppText style={[styles.shortcutsCount, { color: colors.finance.neutral.accent }]}>
             {networkItems.length} sections
           </AppText>
         </View>

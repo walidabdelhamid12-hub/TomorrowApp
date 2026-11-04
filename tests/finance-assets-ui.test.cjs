@@ -115,7 +115,7 @@ test('the active Assets screen uses the same Rates symbols and corrected gold/si
 test('the compact shared card has small padding, no fixed height, and scalable untruncated names/values', () => {
   render(AssetRow, rowProps({ ...gold, name: 'A long gold asset name with room to wrap at large Android font scales' }));
   const cardStyle = style(nodes('Card')[0].props.style);
-  assert.equal(cardStyle.padding, 8); assert.equal(cardStyle.gap, undefined);
+  assert.equal(cardStyle.padding, 8); assert.equal(cardStyle.gap, 4);
   assert.equal(cardStyle.height, undefined); assert.equal(cardStyle.minHeight, undefined);
   for (const text of nodes('AppText')) {
     assert.equal(text.props.numberOfLines, undefined);
@@ -171,7 +171,7 @@ for (const isDark of [false, true]) test('shared labeled action buttons, targets
   theme.colors = isDark ? darkColors : lightColors; theme.isDark = isDark;
   render(FinanceActionButtons, { label: 'Test record', onEdit: () => calls.push('edit'), onDelete: () => calls.push('delete') });
   assert.deepEqual(nodes('Ionicon').map(n => [n.props.name, n.props.size, n.props.color]), [
-    ['create-outline', 13, isDark ? darkColors.success : '#27845B'], ['trash-outline', 13, isDark ? darkColors.danger : '#B42323'],
+    ['create-outline', 13, theme.colors.finance.edit.text], ['trash-outline', 13, theme.colors.finance.delete.text],
   ]);
   assert.deepEqual(texts(), ['Edit', 'Delete']);
   assert.deepEqual(nodes('Pressable').map(n => n.props.accessibilityLabel), ['Edit Test record', 'Delete Test record']);
@@ -241,7 +241,7 @@ test('Rates exposes canonical silver precision, reuses metal symbols, and Save s
   const props = { visible: true, onClose: () => calls.push('close'), refreshRates: async () => null, isRefreshing: false };
   render(RatesModal, props); flushEffects(); render(RatesModal, props);
   assert.ok(nodes('AppInput').some(n => n.props.value === '88.925'));
-  assert.ok(texts().includes('Gold 24K · 1 gram')); assert.ok(texts().includes('Silver · 1 gram'));
+  assert.ok(texts().includes('Gold (gram)')); assert.ok(texts().includes('Silver (gram)'));
   assert.ok(texts().includes('🥇') && texts().includes('🥈'));
   nodes('AppButton').find(n => n.props.title === 'Save rates').props.onPress();
   assert.equal(calls.includes('close'), false); assert.deepEqual(calls, []);
@@ -530,14 +530,13 @@ test('Finance date refreshes over local midnight and app resume, and cleans up i
   assert.equal(cleared, 42); assert.equal(appStateRemoved, true);
 });
 
-test('asset value and Edit/Delete share a compact right zone outside the type/name details target', () => {
+test('restored asset hierarchy contains quantity and right-side valuation in its details body, with actions below', () => {
   render(AssetRow, rowProps(gold));
-  const right = nodes('View').find(n => nodes('AppText', n).some(t => t.props.children === '≈ 12,254.52 EGP') && nodes('Pressable', n).length === 2);
-  assert.ok(right);
-  assert.deepEqual(nodes('Pressable', right).map(n => n.props.accessibilityLabel), ['Edit GOLD TEST', 'Delete GOLD TEST']);
   const body = nodes('Pressable').find(n => n.props.accessibilityLabel.startsWith('Movements for'));
-  assert.ok(nodes('AppText', body).some(n => n.props.children === '2.000 g'));
-  assert.equal(nodes('AppText', body).some(n => n.props.children === '≈ 12,254.52 EGP'), false);
+  assert.equal(nodes('Pressable', body).length, 1);
+  for (const value of ['GOLD TEST', '2.000 g', '≈ 12,254.52 EGP']) assert.ok(nodes('AppText', body).some(n => n.props.children === value));
+  assert.ok(nodes('Ionicon', body).some(n => n.props.name === 'chevron-forward'));
+  assert.deepEqual(nodes('Pressable').filter(n => n !== body).map(n => n.props.accessibilityLabel), ['Edit GOLD TEST', 'Delete GOLD TEST']);
 });
 
 function settleTransfer(props) { for (let i = 0; i < 4; i++) { render(RealTransferModal, props); flushEffects(); } render(RealTransferModal, props); }
@@ -562,3 +561,76 @@ test('credit-card transfer mode keeps matching-account validation and a fixed ra
   nodes('AppButton').find(n => n.props.title === 'Save changes').props.onPress();
   assert.equal(calls[0][2].type, 'credit_card_payment'); assert.equal(calls[0][2].toAmount, 10); assert.equal(calls[0][2].exchangeRate, 1);
 });
+
+const { AccountCard } = require('../src/features/finance/components/AccountCard.tsx');
+function luminance(hex) {
+  const values = hex.match(/[a-f0-9]{2}/ig).map(value => parseInt(value, 16) / 255).map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+}
+function contrast(a, b) { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+for (const [mode, colors] of [['light', lightColors], ['dark', darkColors]]) {
+  test(mode + ' Finance accent/action text meets 4.5:1 contrast against its tinted surface', () => {
+    for (const [name, tone] of Object.entries(colors.finance)) assert.ok(contrast(tone.accent ?? tone.text, tone.surface) >= 4.5, name);
+    for (const name of ['income', 'expense', 'transfer', 'balance']) assert.ok(contrast(colors.finance[name].accent, colors.finance.neutral.surface) >= 4.5, name + ' list accent');
+  });
+  test(mode + ' account name/type is next to its icon with balance in the body and independent actions below', () => {
+    theme.colors = colors; theme.isDark = mode === 'dark';
+    const account = { id: 'bank', name: 'Household bank', type: 'bank', currencyCode: 'EGP' };
+    render(AccountCard, { account, balance: 1234.56, onPress: () => calls.push('details'), onEdit: () => calls.push('edit'), onDelete: () => calls.push('delete') });
+    const card = style(nodes('Card')[0].props.style);
+    assert.equal(card.backgroundColor, colors.finance.account.surface); assert.equal(card.borderColor, colors.finance.account.border);
+    const body = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Details for Household bank');
+    for (const value of ['Household bank', 'Bank · EGP', '1,234.56 EGP']) assert.ok(nodes('AppText', body).some(n => n.props.children === value));
+    assert.equal(nodes('Pressable', body).length, 1);
+    body.props.onPress(); nodes('Pressable').find(n => n.props.accessibilityLabel === 'Edit Household bank').props.onPress();
+    assert.deepEqual(calls, ['details', 'edit']);
+  });
+}
+
+test('asset color variants change surfaces, not the approved content geometry or details/action structure', () => {
+  const geometries = [];
+  for (const colors of [lightColors, darkColors]) {
+    theme.colors = colors; render(AssetRow, rowProps(gold));
+    const card = style(nodes('Card')[0].props.style);
+    assert.equal(card.backgroundColor, colors.finance.asset.surface); assert.equal(card.borderColor, colors.finance.asset.border);
+    const body = nodes('Pressable').find(n => n.props.accessibilityLabel.startsWith('Movements for'));
+    assert.ok(nodes('AppText', body).some(n => n.props.children === '≈ 12,254.52 EGP'));
+    assert.equal(nodes('Pressable', body).length, 1);
+    geometries.push({ ...card, backgroundColor: undefined, borderColor: undefined });
+  }
+  assert.deepEqual(geometries[0], geometries[1]);
+});
+
+test('Total Balance label and single eye share one heading row; all eight shortcuts stay in two columns', () => {
+  const props = { baseCurrency: 'EGP', accountsTotal: 100, assetsTotal: 0, loansRemainingTotal: 0, receivablesTotal: 0, payablesTotal: 0, income: 0, expense: 0,
+    amountsVisible: true, onToggleAmounts: () => calls.push('eye'), onNetworkPress: key => calls.push(key) };
+  const geometries = [];
+  for (const colors of [lightColors, darkColors]) {
+    theme.colors = colors; render(TotalCard, props);
+    const row = nodes('View').find(n => style(n.props.style).flexDirection === 'row' && nodes('AppText', n).some(t => t.props.children === 'TOTAL BALANCE')
+      && nodes('Pressable', n).some(p => p.props.accessibilityLabel === 'Hide Finance amounts') && !nodes('AppText', n).some(t => t.props.children === '100.00'));
+    assert.ok(row);
+    const grid = nodes('View').find(n => style(n.props.style).flexWrap === 'wrap' && Array.isArray(n.props.children) && n.props.children.length === 8);
+    assert.ok(grid);
+    assert.deepEqual(grid.props.children.map(n => style(n.props.style).width), Array(8).fill('48.5%'));
+    geometries.push(grid.props.children.map(n => { const value = style(n.props.style); return { ...value, backgroundColor: undefined, borderColor: undefined }; }));
+  }
+  assert.deepEqual(geometries[0], geometries[1]);
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Hide Finance amounts').props.onPress();
+  assert.deepEqual(calls, ['eye']);
+});
+
+for (const view of [{ width: 390, fontScale: 1, direction: 'row' }, { width: 320, fontScale: 1, direction: 'column' }, { width: 390, fontScale: 1.6, direction: 'column' }]) {
+  test('Rates metal fields use ' + view.direction + ' at width ' + view.width + ' and font scale ' + view.fontScale, () => {
+    const props = preparePreciseRates(); dimensions = { ...dimensions, ...view };
+    render(RatesModal, props); flushEffects(); render(RatesModal, props);
+    assert.equal(style(nodes('View').find(n => n.props.testID === 'rates-metals').props.style).flexDirection, view.direction);
+    for (const kind of ['gold', 'silver']) {
+      const card = nodes('View').find(n => n.props.testID === 'rates-metal-' + kind);
+      assert.equal(style(card.props.style).flex, 1); assert.equal(style(card.props.style).width, undefined);
+      const label = nodes('AppText', card).find(n => typeof n.props.children === 'string' && n.props.children.includes('(gram)'));
+      assert.equal(label.props.numberOfLines, view.direction === 'row' ? 1 : undefined);
+    }
+    dimensions = { width: 390, height: 844, fontScale: 1 };
+  });
+}

@@ -20,8 +20,8 @@ export function FinanceDetailsModal({ title, lines = [], metrics = [], children,
         </View>
         <ScrollView contentContainerStyle={{ gap: 8 }}>
           {metrics.length > 0 && <View style={styles.metrics}>
-            {metrics.map(field => <View key={field.label} style={[styles.metric, { backgroundColor: colors.surfaceAlt }]}>
-              <AppText variant="label" color="textSecondary">{field.label}</AppText>
+            {metrics.map(field => <View key={field.label} style={[styles.metric, { backgroundColor: colors.finance.neutral.surface, borderWidth: 1, borderColor: colors.finance.neutral.border }]}>
+              <AppText variant="label" color={colors.finance.neutral.accent}>{field.label}</AppText>
               <AppText variant="bodyStrong" style={{ fontVariant: ['tabular-nums'] }}>{field.value}</AppText>
             </View>)}
           </View>}
