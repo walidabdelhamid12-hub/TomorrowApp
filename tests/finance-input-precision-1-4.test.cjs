@@ -42,3 +42,11 @@ test('1.4 identify legacy rounding behavior without silently changing stored ari
   assert.equal(roundMoney(1.2345), 1.235);
   assert.equal(roundMoney(-1.2345), -1.234);
 });
+
+test('1.4 account form validates numeric input before invoking onSave', () => {
+  const source = fs.readFileSync(path.join(root, 'src/features/finance/components/AddAccountModal.tsx'), 'utf8');
+  assert.match(source, /const parsed = parseAmount\(amount\)/);
+  assert.match(source, /parsed === null \|\| parsed < 0/);
+  assert.match(source, /Number\.isSafeInteger\(Math\.round\(parsed \* 1000\)\)/);
+  assert.ok(source.indexOf('const parsed = parseAmount(amount)') < source.indexOf('onSave({'));
+});
