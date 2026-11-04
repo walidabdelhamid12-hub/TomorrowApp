@@ -8,6 +8,7 @@ import { DEFAULT_CATEGORIES } from '@/features/finance/constants/defaultCategori
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { registerLedgerProtectionReader } from '@/features/finance/store/ledgerProtectionReader';
+import { isFiniteMoneyInput } from '@/features/finance/utils/finance';
 import { isProtectedTransaction, isVerifiedLoanReceipt } from '@/features/finance/utils/paymentTransactionOwnership';
 import type { PaymentRef } from '@/features/finance/utils/paymentTransactionOwnership';
 import { isValidISODate } from '@/features/finance/utils/input';
@@ -364,7 +365,7 @@ export const useLedgerStore = create<LedgerStore>()(
 
         // Reject runtime strings instead of coercing them through arithmetic.
         // A numeric-looking string can otherwise be rounded into a wrong value.
-        if (typeof input.amount !== 'number' || !Number.isFinite(input.amount)) return null;
+        if (!isFiniteMoneyInput(input.amount)) return null;
         const amount = roundMoney(input.amount);
 
         const valid =
@@ -441,8 +442,8 @@ export const useLedgerStore = create<LedgerStore>()(
       /* ------------------------------ Accounts ----------------------------- */
 
       addAccount: (input) => {
-        if (typeof input.initialBalance !== 'number' || !Number.isFinite(input.initialBalance)
-          || (input.creditLimit !== undefined && (typeof input.creditLimit !== 'number' || !Number.isFinite(input.creditLimit)))) return '';
+        if (!isFiniteMoneyInput(input.initialBalance)
+          || (input.creditLimit !== undefined && (!isFiniteMoneyInput(input.creditLimit)))) return '';
         const initialBalance = roundMoney(input.initialBalance);
         const creditLimit =
           input.creditLimit === undefined
@@ -483,8 +484,8 @@ export const useLedgerStore = create<LedgerStore>()(
         set((state) => {
           const clean = definedOnly(patch);
 
-          if (clean.initialBalance !== undefined && (typeof clean.initialBalance !== 'number' || !Number.isFinite(clean.initialBalance))) return state;
-          if (typeof clean.creditLimit !== 'undefined' && (typeof clean.creditLimit !== 'number' || !Number.isFinite(clean.creditLimit))) return state;
+          if (clean.initialBalance !== undefined && (!isFiniteMoneyInput(clean.initialBalance))) return state;
+          if (typeof clean.creditLimit !== 'undefined' && (!isFiniteMoneyInput(clean.creditLimit))) return state;
           if (typeof clean.initialBalance === 'number') {
             clean.initialBalance = roundMoney(clean.initialBalance);
             if (!Number.isFinite(clean.initialBalance)) return state;
