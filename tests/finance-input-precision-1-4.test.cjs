@@ -50,3 +50,13 @@ test('1.4 account form validates numeric input before invoking onSave', () => {
   assert.match(source, /Number\.isSafeInteger\(Math\.round\(parsed \* 1000\)\)/);
   assert.ok(source.indexOf('const parsed = parseAmount(amount)') < source.indexOf('onSave({'));
 });
+
+test('1.4 ledger rejects runtime strings before rounding account and transaction amounts', () => {
+  const source = fs.readFileSync(path.join(root, 'src/features/finance/store/useLedgerStore.ts'), 'utf8');
+  assert.match(source, /typeof input\.amount !== 'number'/);
+  assert.match(source, /typeof input\.initialBalance !== 'number'/);
+  assert.match(source, /typeof input\.creditLimit !== 'number'/);
+  assert.match(source, /typeof clean\.initialBalance !== 'number'/);
+  assert.match(source, /typeof clean\.creditLimit !== 'number'/);
+  assert.ok(source.indexOf("typeof input.amount !== 'number'") < source.indexOf('const amount = roundMoney(input.amount)'));
+});
