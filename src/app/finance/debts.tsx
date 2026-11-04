@@ -162,14 +162,12 @@ export default function DebtsScreen() {
     onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
     onPanResponderRelease: (_, g) => { if (Math.abs(g.dx) > 60 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5) setActiveTab(g.dx < 0 ? 'payable' : 'receivable'); },
   }), []);
-  const [expandedDebtId, setExpandedDebtId] = useState<string | null>(null);
   const linkedDebt = params.debtId === undefined ? undefined : focusLinkedRecords(debts, params.debtId)[0];
   const linkedDebtId = linkedDebt?.id;
   const linkedDebtDirection = linkedDebt?.direction;
   useEffect(() => {
     if (linkedDebtId && linkedDebtDirection) {
       setActiveTab(linkedDebtDirection);
-      setExpandedDebtId(linkedDebtId);
     }
   }, [linkedDebtId, linkedDebtDirection]);
 
@@ -693,13 +691,12 @@ export default function DebtsScreen() {
           const paid = getPaidAmount(debt);
           const remaining = getRemainingAmount(debt);
           const status = getStatus(debt);
-          const expanded = expandedDebtId === debt.id;
 
           return (
             <Card key={debt.id} style={styles.debtCard}>
               <Pressable
                 onPress={() =>
-                  { setExpandedDebtId(expanded ? null : debt.id); setDetailDebtId(debt.id); }
+                  setDetailDebtId(debt.id)
                 }
                 accessibilityRole="button" accessibilityLabel={'Details for ' + debt.personName}
                 style={styles.debtMain}
@@ -771,94 +768,14 @@ export default function DebtsScreen() {
                     Paid / collected: {formatAmount(paid, debt.currencyCode)}
                   </AppText>
                   <Ionicons
-                    name={expanded ? 'chevron-up' : 'chevron-down'}
+                    name="chevron-forward"
                     size={18}
                     color={colors.textSecondary}
                   />
                 </View>
               </Pressable>
 
-              {expanded && (
-                <View style={styles.expandedContent}>
-                  {debt.notes ? (
-                    <View style={styles.notesBox}>
-                      <AppText variant="caption" color="textSecondary">
-                        Notes
-                      </AppText>
-                      <AppText>{debt.notes}</AppText>
-                    </View>
-                  ) : null}
 
-                  {debt.payments.length > 0 && (
-                    <View style={styles.paymentHistory}>
-                      <AppText style={styles.historyTitle}>
-                        Payment history
-                      </AppText>
-
-                      {debt.payments.map((payment) => (
-                        <View key={payment.id} style={styles.paymentRow}>
-                          <View style={styles.paymentInfo}>
-                            <AppText style={styles.paymentDate}>
-                              {formatDate(payment.date)}
-                            </AppText>
-
-                            {payment.note ? (
-                              <AppText
-                                variant="caption"
-                                color="textSecondary"
-                              >
-                                {payment.note}
-                              </AppText>
-                            ) : null}
-                          </View>
-
-                          <View style={styles.paymentActions}>
-                            <AppText style={styles.paymentAmount}>
-                              {formatAmount(payment.amount, debt.currencyCode)} {debt.currencyCode}
-                            </AppText>
-
-                            <FinanceActionButtons label={'payment dated ' + formatDate(payment.date)} onEdit={() => openEditPayment(debt, payment)} onDelete={() => confirmDeletePayment(debt, payment)} />
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  <View style={styles.actionRow}>
-                    {remaining > 0 && (
-                      <Pressable
-                        onPress={() => openPayment(debt)}
-                        style={[
-                          styles.primaryAction,
-                          {
-                            backgroundColor:
-                              activeTab === 'receivable'
-                                ? '#059669'
-                                : '#DC2626',
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name={
-                            activeTab === 'receivable'
-                              ? 'download-outline'
-                              : 'card-outline'
-                          }
-                          size={17}
-                          color="#fff"
-                        />
-                        <AppText style={styles.primaryActionText}>
-                          {activeTab === 'receivable'
-                            ? 'Record collection'
-                            : 'Record payment'}
-                        </AppText>
-                      </Pressable>
-                    )}
-
-                    <FinanceActionButtons label={debt.personName} onEdit={() => openEditDebt(debt)} onDelete={() => confirmDeleteDebt(debt)} />
-                  </View>
-                </View>
-              )}
             </Card>
           );
         })
@@ -901,7 +818,52 @@ export default function DebtsScreen() {
         onClose={closeEditPayment}
         onSave={handleSavePaymentEdit}
       />
-      <FinanceDetailsModal title={detailDebtId === null ? undefined : detailDebt?.personName ?? 'Debt unavailable'} onClose={() => setDetailDebtId(null)} lines={detailDebt ? debtDetailLines(detailDebt) : ['No unique debt is available.']} />
+      <FinanceDetailsModal
+        title={detailDebtId === null ? undefined : detailDebt?.personName ?? 'Debt unavailable'}
+        onClose={() => setDetailDebtId(null)}
+        metrics={detailDebt ? [
+          { label: 'Remaining', value: formatAmount(getRemainingAmount(detailDebt), detailDebt.currencyCode) + ' ' + detailDebt.currencyCode },
+          { label: 'Original', value: formatAmount(detailDebt.amount, detailDebt.currencyCode) + ' ' + detailDebt.currencyCode },
+          { label: 'Paid / collected', value: formatAmount(getPaidAmount(detailDebt), detailDebt.currencyCode) + ' ' + detailDebt.currencyCode },
+          { label: 'Type', value: detailDebt.direction === 'receivable' ? 'Receivable' : 'Payable' },
+        ] : []}
+        lines={detailDebt ? debtDetailLines(detailDebt) : ['No unique debt is available.']}
+      >
+        {detailDebt && (
+          <View style={{ gap: 12, paddingTop: 8 }}>
+            {detailDebt.payments.length > 0 && (
+              <View style={styles.paymentHistory}>
+                <AppText style={styles.historyTitle}>Payment history</AppText>
+                {detailDebt.payments.map(payment => (
+                  <View key={payment.id} style={styles.paymentRow}>
+                    <View style={styles.paymentInfo}>
+                      <AppText style={styles.paymentDate}>{formatDate(payment.date)}</AppText>
+                      {payment.note ? <AppText variant="caption" color="textSecondary">{payment.note}</AppText> : null}
+                    </View>
+                    <View style={styles.paymentActions}>
+                      <AppText style={styles.paymentAmount}>{formatAmount(payment.amount, detailDebt.currencyCode)} {detailDebt.currencyCode}</AppText>
+                      <FinanceActionButtons label={'payment dated ' + formatDate(payment.date)}
+                        onEdit={() => { setDetailDebtId(null); openEditPayment(detailDebt, payment); }}
+                        onDelete={() => confirmDeletePayment(detailDebt, payment)} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+            {getRemainingAmount(detailDebt) > 0 && (
+              <Pressable accessibilityRole="button"
+                onPress={() => { setDetailDebtId(null); openPayment(detailDebt); }}
+                style={[styles.primaryAction, { backgroundColor: detailDebt.direction === 'receivable' ? '#059669' : '#DC2626' }]}>
+                <Ionicons name={detailDebt.direction === 'receivable' ? 'download-outline' : 'card-outline'} size={17} color="#fff" />
+                <AppText style={styles.primaryActionText}>{detailDebt.direction === 'receivable' ? 'Record collection' : 'Record payment'}</AppText>
+              </Pressable>
+            )}
+            <FinanceActionButtons label={detailDebt.personName}
+              onEdit={() => { setDetailDebtId(null); openEditDebt(detailDebt); }}
+              onDelete={() => confirmDeleteDebt(detailDebt)} />
+          </View>
+        )}
+      </FinanceDetailsModal>
       </View>
     </Screen>
   );
