@@ -67,7 +67,7 @@ interface FinanceActions {
   deleteAssetEntry: (assetId: EntityId, entryId: EntityId) => void;
 
   addDebt: (input: NewDebtInput) => EntityId | null;
-  updateDebt: (id: EntityId, patch: DebtPatch) => void;
+  updateDebt: (id: EntityId, patch: DebtPatch) => boolean;
   deleteDebt: (id: EntityId) => boolean;
   addDebtPayment: (
     debtId: EntityId,
@@ -359,10 +359,19 @@ export const useFinanceStore = create<FinanceStore>()(
       },
 
       updateDebt: (id, patch) => {
-        const debt = get().debts.find((item) => item.id === id);
-        if (!debt) return;
+        const matches = get().debts.filter((item) => item.id === id);
+        if (matches.length !== 1) return false;
+        const debt = matches[0];
 
         const cleanPatch = withRounded(definedOnly(patch), ['amount']);
+        if (cleanPatch.currencyCode !== undefined && cleanPatch.currencyCode !== debt.currencyCode) {
+          const ledger = readLedgerProtection();
+          // Legacy/orphan ledger ownership counts even when payment history is empty.
+          // Unavailable accounting data cannot prove that a currency change is safe.
+          if (!useFinanceStore.persist.hasHydrated() || !ledger?.hydrated
+            || (debt.payments ?? []).length > 0
+            || ledger.transactions.some(transaction => transaction.linkedEntityId === id)) return false;
+        }
         if (typeof cleanPatch.amount === 'number') {
           const alreadyPaid = getDebtPaid(debt);
           if (
@@ -370,7 +379,7 @@ export const useFinanceStore = create<FinanceStore>()(
             cleanPatch.amount <= 0 ||
             cleanPatch.amount < alreadyPaid
           ) {
-            return;
+            return false;
           }
         }
 
@@ -380,6 +389,7 @@ export const useFinanceStore = create<FinanceStore>()(
             ...cleanPatch,
           })),
         }));
+        return true;
       },
 
       deleteDebt: (id) => {

@@ -136,6 +136,7 @@ export default function DebtsScreen() {
 
   const accounts = useLedgerStore((state) => state.accounts);
   const categories = useLedgerStore((state) => state.categories);
+  const transactions = useLedgerStore((state) => state.transactions);
 
   const [activeTab, setActiveTab] = useState<DebtTab>(
     params.direction === 'payable' ? 'payable' : 'receivable',
@@ -242,7 +243,10 @@ export default function DebtsScreen() {
         return;
       }
 
-      updateDebt(editingDebt.id, data);
+      if (!updateDebt(editingDebt.id, data)) {
+        Alert.alert('Cannot update debt', 'Currency cannot change while payment history or linked account transactions exist, or accounting data is not ready. The amount must also cover all recorded payments.');
+        return;
+      }
     } else {
       addDebt(data);
     }
@@ -864,6 +868,9 @@ export default function DebtsScreen() {
         visible={debtModalVisible}
         direction={activeTab as DebtDirection}
         debt={editingDebt}
+        currencyLocked={!!editingDebt && (!ready
+          || (debts.find(debt => debt.id === editingDebt.id)?.payments ?? []).length > 0
+          || transactions.some(transaction => transaction.linkedEntityId === editingDebt.id))}
         onClose={closeDebtModal}
         onSave={handleSaveDebt}
       />

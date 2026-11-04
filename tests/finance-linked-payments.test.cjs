@@ -552,6 +552,68 @@ test('direct debt deletion preserves existing payments and linked cash', () => {
   assert.deepEqual(fullSnapshot(), previous);
 });
 
+test('debt currency rejection is atomic and preserves payment editing and reversal', () => {
+  const previous = fullSnapshot();
+  const cash = balance('a');
+  assert.equal(finance.getState().updateDebt('debt', { currencyCode: 'EUR', personName: 'Changed' }), false);
+  assert.deepEqual(fullSnapshot(), previous);
+  assert.equal(balance('a'), cash);
+  assert.equal(editLinkedPayment(debtRef, { amount: 80, date }).ok, true);
+  assert.equal(reverseLinkedPayment(debtRef).ok, true);
+  assert.equal(balance('a'), 1895);
+});
+
+for (const evidence of [{ linkedEntityType: 'debt', linkedEntityId: 'debt' },
+  { linkedEntityId: 'debt' }, { linkedEntityType: 'loan', linkedEntityId: 'debt' }]) {
+  test(`orphan ownership blocks debt currency changes: ${JSON.stringify(evidence)}`, () => {
+    changeDebt(d => ({ ...d, payments: [] }));
+    ledger.setState({ transactions: [{ ...tx('orphan', 'debt', 'debt', 'missing', 50, 'debt_payment'), ...evidence }] });
+    const previous = fullSnapshot();
+    assert.equal(finance.getState().updateDebt('debt', { currencyCode: 'EUR' }), false);
+    assert.deepEqual(fullSnapshot(), previous);
+  });
+}
+
+test('unlinked payment history also locks debt currency; same-currency detail edits remain allowed', () => {
+  changeDebt(d => ({ ...d, payments: [{ id: 'legacy', amount: 50, date }] }));
+  ledger.setState({ transactions: [] });
+  assert.equal(finance.getState().updateDebt('debt', { currencyCode: 'EUR' }), false);
+  assert.equal(finance.getState().updateDebt('debt', { currencyCode: 'USD', personName: 'Updated' }), true);
+  assert.equal(finance.getState().debts[0].personName, 'Updated');
+});
+
+test('empty unlinked debt can change currency without altering ledger records', () => {
+  changeDebt(d => ({ ...d, payments: [] }));
+  changeTx('dt', t => ({ ...t, linkedEntityId: 'other-debt' }));
+  const previousLedger = structuredClone(ledger.getState().transactions);
+  assert.equal(finance.getState().updateDebt('debt', { currencyCode: 'EUR' }), true);
+  assert.equal(finance.getState().debts[0].currencyCode, 'EUR');
+  assert.deepEqual(ledger.getState().transactions, previousLedger);
+});
+
+for (const store of [finance, ledger]) {
+  test(`debt currency change fails closed during ${store === finance ? 'Finance' : 'ledger'} hydration`, () => {
+    changeDebt(d => ({ ...d, payments: [] }));
+    ledger.setState({ transactions: [] });
+    const previous = fullSnapshot();
+    const ready = store.persist.hasHydrated;
+    store.persist.hasHydrated = () => false;
+    try {
+      assert.equal(finance.getState().updateDebt('debt', { currencyCode: 'EUR' }), false);
+      assert.deepEqual(fullSnapshot(), previous);
+    } finally { store.persist.hasHydrated = ready; }
+  });
+}
+
+test('debt currency change fails closed without a ledger reader', () => {
+  changeDebt(d => ({ ...d, payments: [] }));
+  const protection = require('../src/features/finance/store/ledgerProtectionReader.ts');
+  const reader = protection.readLedgerProtection;
+  protection.readLedgerProtection = () => undefined;
+  try { assert.equal(finance.getState().updateDebt('debt', { currencyCode: 'EUR' }), false); }
+  finally { protection.readLedgerProtection = reader; }
+});
+
 test('a truly empty unlinked debt can be deleted without changing other accounting', () => {
   changeDebt(d => ({ ...d, payments: [] }));
   changeTx('dt', t => ({ ...t, linkedEntityId: 'another-debt' }));

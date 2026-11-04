@@ -52,6 +52,7 @@ interface AddDebtModalProps {
   visible: boolean;
   direction: DebtDirection;
   debt?: Debt | null;
+  currencyLocked?: boolean;
   onClose: () => void;
   onSave: (data: NewDebtInput) => void;
 }
@@ -123,6 +124,7 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
   visible,
   direction,
   debt = null,
+  currencyLocked = false,
   onClose,
   onSave,
 }) => {
@@ -467,6 +469,7 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
               </View>
 
               <Text style={styles.label}>CURRENCY</Text>
+              {currencyLocked && <Text>Currency is locked to preserve payment history and linked account transactions.</Text>}
 
               <View style={styles.currenciesGrid}>
                 {CURRENCY_OPTIONS.map((currency) => {
@@ -480,8 +483,9 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
                         active && styles.currencyCardActive,
                       ]}
                       onPress={() => setSelectedCurrency(currency.code)}
+                      disabled={currencyLocked}
                       accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
+                      accessibilityState={{ selected: active, disabled: currencyLocked }}
                     >
                       <Text style={styles.currencyFlag}>
                         {currency.flag}
