@@ -14,6 +14,12 @@ import type {
 
 export const MONEY_DECIMALS = 3;
 
+/** Rejects strings and nonfinite values at runtime, before monetary arithmetic. */
+export function isFiniteMoneyInput(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+
 /** Rounds to 3 decimals to avoid floating point drift (0.1 + 0.2). */
 export function roundMoney(value: number, decimals = MONEY_DECIMALS): number {
   const factor = 10 ** decimals;
