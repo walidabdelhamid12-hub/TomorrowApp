@@ -846,6 +846,7 @@ export default function DebtsScreen() {
         onSave={handleSavePaymentEdit}
       />
       <FinanceDetailsModal
+        compact
         title={detailDebtId === null ? undefined : detailDebt?.personName ?? 'Debt unavailable'}
         onClose={() => setDetailDebtId(null)}
         metrics={detailDebt ? [
