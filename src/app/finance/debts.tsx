@@ -1,3 +1,4 @@
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { editLinkedPayment, postLinkedPayment, reverseLinkedPayment } from '@/features/finance/store/paymentOperations';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -820,36 +821,7 @@ export default function DebtsScreen() {
                               {formatAmount(payment.amount, debt.currencyCode)} {debt.currencyCode}
                             </AppText>
 
-                            <View style={styles.paymentActionButtons}>
-                              <Pressable
-                                onPress={() => openEditPayment(debt, payment)}
-                                style={styles.editPaymentButton}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Edit payment dated ${formatDate(payment.date)}`}
-                              >
-                                <Ionicons
-                                  name="create-outline"
-                                  size={16}
-                                  color={moduleColors.finance}
-                                />
-                                <AppText style={styles.editPaymentText}>
-                                  Edit
-                                </AppText>
-                              </Pressable>
-
-                              <Pressable
-                                onPress={() => confirmDeletePayment(debt, payment)}
-                                style={styles.deletePaymentButton}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Delete payment dated ${formatDate(payment.date)}`}
-                              >
-                                <Ionicons
-                                  name="trash-outline"
-                                  size={16}
-                                  color="#DC2626"
-                                />
-                              </Pressable>
-                            </View>
+                            <FinanceActionButtons label={'payment dated ' + formatDate(payment.date)} onEdit={() => openEditPayment(debt, payment)} onDelete={() => confirmDeletePayment(debt, payment)} />
                           </View>
                         </View>
                       ))}
@@ -887,27 +859,7 @@ export default function DebtsScreen() {
                       </Pressable>
                     )}
 
-                    <Pressable
-                      onPress={() => openEditDebt(debt)}
-                      style={styles.secondaryAction}
-                    >
-                      <Ionicons
-                        name="create-outline"
-                        size={18}
-                        color={moduleColors.finance}
-                      />
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() => confirmDeleteDebt(debt)}
-                      style={styles.secondaryAction}
-                    >
-                      <Ionicons
-                        name="trash-outline"
-                        size={18}
-                        color={colors.danger}
-                      />
-                    </Pressable>
+                    <FinanceActionButtons label={debt.personName} onEdit={() => openEditDebt(debt)} onDelete={() => confirmDeleteDebt(debt)} />
                   </View>
                 </View>
               )}
@@ -1856,36 +1808,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 7,
   },
-  paymentActionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  editPaymentButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-  },
-  editPaymentText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: moduleColors.finance,
-  },
-  deletePaymentButton: {
-    width: 31,
-    height: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    borderRadius: 8,
-    backgroundColor: '#FEF2F2',
-  },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1905,15 +1827,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '700',
-  },
-  secondaryAction: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   modalOverlay: {
     flex: 1,

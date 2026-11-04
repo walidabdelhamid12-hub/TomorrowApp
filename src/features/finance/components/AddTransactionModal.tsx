@@ -1,3 +1,4 @@
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
@@ -775,31 +776,7 @@ export function AddTransactionModal({
                         </AppText>
                       </View>
 
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Edit ${category.name}`}
-                        onPress={() => openEditCategoryForm(category)}
-                        style={styles.categoryRowAction}
-                      >
-                        <Ionicons
-                          name="create-outline"
-                          size={21}
-                          color={colors.primary}
-                        />
-                      </Pressable>
-
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Delete ${category.name}`}
-                        onPress={() => requestDeleteCategory(category)}
-                        style={styles.categoryRowAction}
-                      >
-                        <Ionicons
-                          name="trash-outline"
-                          size={20}
-                          color={colors.danger}
-                        />
-                      </Pressable>
+                      <FinanceActionButtons label={category.name} onEdit={() => openEditCategoryForm(category)} onDelete={() => requestDeleteCategory(category)} />
                     </View>
                   );
                 })
@@ -1172,13 +1149,6 @@ const styles = StyleSheet.create({
   categoryManagerInfo: {
     flex: 1,
     gap: 3,
-  },
-  categoryRowAction: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 9,
   },
   categoryNameInput: {
     minHeight: 48,

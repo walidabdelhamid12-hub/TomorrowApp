@@ -27,6 +27,7 @@ Module._load = function(id, parent, main) {
   if (id === '@/components/ui') return { Card: 'Card', AppText: 'AppText', AppButton: 'AppButton', Screen: 'Screen' };
   if (id === '@/features/finance/components/AddAssetModal') return { AddAssetModal: 'AddAssetModal' };
   if (id === '@/features/finance/components/AssetEntriesModal') return { AssetEntriesModal: 'AssetEntriesModal' };
+  if (id === '@/features/finance/store/useLedgerStore') return { useLedgerStore: select => select({ transactions: [], transfers: [] }) };
   if (id === '@/features/finance/store/useFinanceStore') return { useFinanceHydrated: () => true,
     useFinanceStore: Object.assign(select => select(finance), { getState: () => finance }) };
   if (id === '@/features/finance/store/useCurrencyStore') return { useCurrencyHydrated: () => true, useCurrencyStore: select => select(currency) };
@@ -41,6 +42,8 @@ const { GOLD_COLORS } = require('../src/features/finance/constants/metals.ts');
 const { AssetRow } = require('../src/features/finance/components/AssetRow.tsx');
 const { AssetCard } = require('../src/features/finance/components/AssetCard.tsx');
 const { default: AssetsScreen } = require('../src/features/finance/screens/AssetsScreen.tsx');
+const { FinanceActionButtons } = require('../src/features/finance/components/FinanceActionButtons.tsx');
+const { AccountsSection } = require('../src/features/finance/components/AccountsSection.tsx');
 let tree;
 const gold = { id: 'gold', name: 'GOLD TEST', category: 'gold', karat: 21,
   entries: [{ id: 'entry', amount: 2, date: '2026-11-04' }] };
@@ -118,14 +121,14 @@ test('the compact shared card has small padding, no fixed height, and scalable u
 test('AssetRow Movements, Edit, and Delete callbacks remain independently accessible', () => {
   render(AssetRow, rowProps(gold));
   for (const label of ['Movements GOLD TEST', 'Edit GOLD TEST', 'Delete GOLD TEST']) {
-    const action = nodes('Pressable').find(n => n.props.accessibilityLabel === label);
+    const action = nodes('Pressable').find(n => label.startsWith('Movements') ? n.props.accessibilityLabel.startsWith('Movements for GOLD TEST,') : n.props.accessibilityLabel === label);
     assert.ok(action); action.props.onPress();
   }
   assert.deepEqual(calls, ['movements', 'edit', 'delete']);
 });
 test('Assets screen actions open the correct movement/edit modals and preserve delete confirmation', () => {
   render(AssetsScreen);
-  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Movements GOLD TEST').props.onPress(); render(AssetsScreen);
+  nodes('Pressable').find(n => n.props.accessibilityLabel.startsWith('Movements for GOLD TEST,')).props.onPress(); render(AssetsScreen);
   const entries = nodes('AssetEntriesModal')[0];
   assert.equal(entries.props.visible, true); assert.equal(entries.props.asset.id, 'gold');
   nodes('Pressable').find(n => n.props.accessibilityLabel === 'Edit GOLD TEST').props.onPress(); render(AssetsScreen);
@@ -154,4 +157,49 @@ test('unconfirmed metal prices remain unavailable on the active Assets screen', 
   render(AssetsScreen);
   assert.ok(texts().includes('Valuation unavailable'));
   assert.equal(texts().includes('12,254.52 EGP'), false);
+});
+
+for (const isDark of [false, true]) test('shared labeled action buttons, targets and callbacks in ' + (isDark ? 'dark' : 'light') + ' theme', () => {
+  theme.colors = isDark ? darkColors : lightColors; theme.isDark = isDark;
+  render(FinanceActionButtons, { label: 'Test record', onEdit: () => calls.push('edit'), onDelete: () => calls.push('delete') });
+  assert.deepEqual(nodes('Ionicon').map(n => [n.props.name, n.props.size, n.props.color]), [
+    ['create-outline', 17, isDark ? darkColors.success : '#27845B'], ['trash-outline', 17, isDark ? darkColors.danger : '#B42323'],
+  ]);
+  assert.deepEqual(texts(), ['Edit', 'Delete']);
+  assert.deepEqual(nodes('Pressable').map(n => n.props.accessibilityLabel), ['Edit Test record', 'Delete Test record']);
+  for (const button of nodes('Pressable')) {
+    assert.equal(button.props.accessibilityRole, 'button');
+    const target = style(button.props.style({ pressed: false }));
+    assert.ok(target.minWidth >= 48 && target.minHeight >= 48);
+    assert.equal(target.borderRadius, 9); assert.equal(target.paddingHorizontal, 9);
+    assert.ok(target.backgroundColor && target.borderColor);
+    button.props.onPress();
+  }
+  assert.deepEqual(calls, ['edit', 'delete']);
+});
+test('edit-only lists do not acquire a delete action', () => {
+  render(FinanceActionButtons, { label: 'Default category', onEdit: () => calls.push('edit') });
+  assert.equal(nodes('Pressable').length, 1);
+  assert.equal(nodes('Ionicon')[0].props.name, 'create-outline');
+});
+test('asset body remains the movements target and labeled actions are siblings without a separate full-width action strip', () => {
+  render(AssetRow, rowProps(gold));
+  assert.equal(nodes('Pressable').length, 3);
+  assert.ok(texts().includes('Edit') && texts().includes('Delete'));
+  assert.equal(texts().includes('Movements'), false);
+  const body = nodes('Pressable').find(n => n.props.accessibilityLabel.startsWith('Movements for'));
+  assert.equal(nodes('Pressable', body).length, 1);
+  assert.equal(nodes('Ionicon', body).some(n => n.props.name === 'chevron-forward'), true);
+  body.props.onPress();
+  assert.deepEqual(calls, ['movements']);
+});
+test('Accounts reference uses the shared controls and retains exact record callbacks', () => {
+  const account = { id: 'bank', name: 'My bank', type: 'bank', currencyCode: 'EGP', initialBalance: 100 };
+  const props = { accounts: [account], amountsVisible: true, onEdit: a => calls.push(['edit', a.id]), onDelete: a => calls.push(['delete', a.id]) };
+  render(AccountsSection, props);
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Toggle accounts section').props.onPress();
+  render(AccountsSection, props);
+  for (const label of ['Edit My bank', 'Delete My bank']) nodes('Pressable').find(n => n.props.accessibilityLabel === label).props.onPress();
+  assert.deepEqual(calls, [['edit', 'bank'], ['delete', 'bank']]);
+  assert.deepEqual(nodes('Ionicon').filter(n => ['create-outline', 'trash-outline'].includes(n.props.name)).map(n => n.props.size), [17, 17]);
 });

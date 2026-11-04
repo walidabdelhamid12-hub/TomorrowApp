@@ -1,3 +1,4 @@
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
@@ -211,12 +212,8 @@ export function TransactionsSection({
               {selectedProtected ? (
                 <RowAction label="Open linked record" icon="open-outline" onPress={() => performAction('edit')} />
               ) : (
-                <>
-                  <RowAction label={actionItem.kind === 'transfer' ? 'Edit transfer' : 'Edit transaction'}
-                    icon="create-outline" onPress={() => performAction('edit')} />
-                  <RowAction label={actionItem.kind === 'transfer' ? 'Delete transfer' : 'Delete transaction'}
-                    icon="trash-outline" danger onPress={() => performAction('delete')} />
-                </>
+                <FinanceActionButtons label={actionItem.kind === 'transfer' ? 'transfer' : 'transaction'}
+                  onEdit={() => performAction('edit')} onDelete={() => performAction('delete')} />
               )}
               <RowAction label="Cancel" icon="close-outline" onPress={() => setActionItem(null)} />
             </View>

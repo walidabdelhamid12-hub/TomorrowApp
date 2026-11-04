@@ -1,3 +1,4 @@
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -328,7 +329,7 @@ export default function LoansScreen() {
             {loan.payments.length > 0 && <View style={styles.history}><AppText style={{ fontWeight: '600' }}>Payment history</AppText>
               {loan.payments.map(payment => <View key={payment.id} style={styles.paymentRow}>
                 <View style={{ flex: 1 }}><AppText>{formatAmount(payment.amount, loan.currencyCode)} {loan.currencyCode}{(payment.latePaymentFee ?? 0) > 0 ? ` · Fee: ${formatAmount(payment.latePaymentFee!, loan.currencyCode)} ${loan.currencyCode}` : ''}</AppText><AppText variant="caption" color="textSecondary">{payment.date} · {payment.note || 'Installment'}</AppText></View>
-                <View style={styles.row}><Pressable onPress={() => openEditPayment(loan, payment)} hitSlop={8}><Ionicons name="create-outline" size={16} color={moduleColors.finance} /></Pressable><Pressable onPress={() => confirmDeletePayment(loan, payment)} hitSlop={8}><Ionicons name="trash-outline" size={16} color={colors.danger} /></Pressable></View>
+                <FinanceActionButtons label={'payment dated ' + payment.date} onEdit={() => openEditPayment(loan, payment)} onDelete={() => confirmDeletePayment(loan, payment)} />
               </View>)}
             </View>}
           </Card>;

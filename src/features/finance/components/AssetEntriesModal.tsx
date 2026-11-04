@@ -1,3 +1,4 @@
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
@@ -286,33 +287,7 @@ export function AssetEntriesModal({
                             ) : null}
                           </View>
 
-                          <View style={styles.actions}>
-                            <Pressable
-                              onPress={() => startEditing(entry)}
-                              hitSlop={8}
-                              accessibilityRole="button"
-                              accessibilityLabel="Edit entry"
-                            >
-                              <Ionicons
-                                name="create-outline"
-                                size={20}
-                                color={moduleColors.finance}
-                              />
-                            </Pressable>
-
-                            <Pressable
-                              onPress={() => confirmDelete(entry)}
-                              hitSlop={8}
-                              accessibilityRole="button"
-                              accessibilityLabel="Delete entry"
-                            >
-                              <Ionicons
-                                name="trash-outline"
-                                size={19}
-                                color="#DC2626"
-                              />
-                            </Pressable>
-                          </View>
+                          <FinanceActionButtons label={'entry dated ' + entry.date} onEdit={() => startEditing(entry)} onDelete={() => confirmDelete(entry)} />
                         </View>
                       </>
                     )}
@@ -369,11 +344,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
   },
   input: {
     minHeight: 44,

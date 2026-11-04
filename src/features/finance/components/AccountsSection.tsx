@@ -1,3 +1,4 @@
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
@@ -8,7 +9,7 @@ import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
-import { moduleColors, useTheme } from '@/theme';
+import { useTheme } from '@/theme';
 
 const PREVIEW_COUNT = 1;
 
@@ -142,35 +143,7 @@ export function AccountsSection({
                         : '••••••'}
                     </AppText>
 
-                    <View style={[styles.actions, { marginStart: spacing.sm }]}>
-                      <Pressable
-                        onPress={() => onEdit(account)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Edit ${account.name}`}
-                        style={styles.actionButton}
-                      >
-                        <Ionicons
-                          name="create-outline"
-                          size={17}
-                          color={moduleColors.finance}
-                        />
-                      </Pressable>
-
-                      <Pressable
-                        onPress={() => onDelete(account)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Delete ${account.name}`}
-                        style={styles.actionButton}
-                      >
-                        <Ionicons
-                          name="trash-outline"
-                          size={15}
-                          color={colors.textSecondary}
-                        />
-                      </Pressable>
-                    </View>
+                    <FinanceActionButtons label={account.name} onEdit={() => onEdit(account)} onDelete={() => onDelete(account)} />
                   </View>
                 );
               })}
@@ -228,13 +201,5 @@ const styles = StyleSheet.create({
   balance: {
     fontWeight: '600',
     flexShrink: 1,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  actionButton: {
-    padding: 2,
   },
 });

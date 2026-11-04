@@ -1,3 +1,4 @@
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -219,29 +220,7 @@ export default function AccountsScreen() {
                   </AppText>
                 </View>
 
-                <View style={styles.actions}>
-                  <Pressable
-                    onPress={() => openEdit(account)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit ${account.name}`}
-                    hitSlop={8}
-                    style={[styles.actionButton, styles.editAction]}
-                  >
-                    <Ionicons name="create-outline" size={17} color="#27845B" />
-                    <AppText style={styles.actionLabel}>Edit</AppText>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => confirmDelete(account)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete ${account.name}`}
-                    hitSlop={8}
-                    style={[styles.actionButton, styles.deleteAction]}
-                  >
-                    <Ionicons name="trash-outline" size={17} color="#D94B4B" />
-                    <AppText style={styles.actionLabel}>Delete</AppText>
-                  </Pressable>
-                </View>
+                <FinanceActionButtons label={account.name} onEdit={() => openEdit(account)} onDelete={() => confirmDelete(account)} />
               </View>
             );
           })}
@@ -301,31 +280,5 @@ const styles = StyleSheet.create({
   balance: {
     fontWeight: '700',
     marginTop: 3,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionButton: {
-    minHeight: 34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 9,
-  },
-  editAction: {
-    backgroundColor: '#E8F5EE',
-  },
-  deleteAction: {
-    backgroundColor: '#FCEEEE',
-  },
-  actionLabel: {
-    color: '#4B5563',
-    fontSize: 12,
-    fontWeight: '600',
   },
 });

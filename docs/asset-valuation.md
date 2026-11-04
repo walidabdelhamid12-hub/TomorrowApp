@@ -41,12 +41,33 @@ The outlined card uses 8 dp padding, 4 dp internal gaps, compact category/value
 labels, and wrapping balance/valuation columns instead of the previous larger
 padding/vertical gaps. There are no fixed card heights or text line caps. Movements,
 Edit, Delete, and the movement-summary target retain at least 48 dp touch areas;
-actions wrap at large font sizes. Labels, surfaces, borders, and action colors
-support the existing light/dark palettes. AssetRow now exposes its existing
-Movements callback alongside Edit/Delete and retains the amount privacy toggle.
+labeled action buttons wrap at large font sizes. Labels, surfaces, borders, and action colors
+support the existing light/dark palettes. The body/chevron opens Movements; separate compact green Edit and red Delete
+buttons retain visible labels, 48 dp targets, and the amount privacy toggle.
 
 UI tests exercise actual component elements and handlers with mocked native
 surfaces, including the active Assets screen's modal/deletion bindings. They do
 not measure native layout or font loading. Check Expo Go on Android for bullion
 font loading, light/dark colors, long names/large values, font scaling, and touch
 targets. Existing asset save/delete/persistence flows are not rewritten.
+
+## Shared Finance actions
+
+FinanceActionButtons restores the labeled Accounts design from commit ad7d5c6:
+rounded rectangles (9 dp radius), 9 dp horizontal / 6 dp vertical padding,
+5 dp icon/label gap, and the original light green/red surfaces. Targets are
+at least 48 dp; matching borders and dark-theme semantic tints preserve contrast.
+The Delete label uses a darker red on the original light red surface for readability.
+Accounts (both lists), Assets (all shared-card consumers), asset movements,
+categories (both editors), loan payment history, and debt/payment controls
+reuse existing edit/delete handlers. Default categories still have no Delete
+where that action was previously absent. No loan-parent actions are added.
+Transactions/transfers retain the ellipsis menu and its current-state ownership
+checks; its Edit/Delete choices use the same labeled buttons. Protected rows
+still expose only safe linked-record navigation. Confirmations, ledger and
+payment operations, calculations, and persistence are unchanged.
+
+Regression tests cover visible labels, icons, colors in both themes, targets,
+optional Delete, account callbacks, asset movement navigation, independent
+edit/delete actions and confirmation. Native Android checks remain required
+for wrapping on narrow screens/large fonts, button layout, and TalkBack focus.
