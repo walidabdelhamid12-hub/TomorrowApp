@@ -172,11 +172,11 @@ test('terminal loans have zero principal; partial records do not each consume a 
   assert.equal(getLoanNextDueDate(partial), '2026-11-01');
   assert.equal(getLoanRemainingInstallments(loanFixture({ payments: [{ amount: 12000 }] })), 11);
 });
-function summaryFor(loans) {
+function summaryFor(loans, assets = []) {
   const previous = Module._load;
   const file = require.resolve('../src/features/finance/hooks/useFinanceSummary.ts'); delete require.cache[file];
   const currency = { baseCurrency: 'EGP', rates: { EGP: 1, USD: 55.4154 }, verifiedCurrencies: ['EGP', 'USD'], metals: { gold24PerGram: null, silverPerGram: null } };
-  const finance = { assets: [], loans, debts: [], cheques: [] };
+  const finance = { assets, loans, debts: [], cheques: [] };
   const ledger = { accounts: [], transactions: [], transfers: [] };
   Module._load = function(id, parent, main) {
     if (id === 'react') return { useMemo: fn => fn() };
@@ -202,4 +202,16 @@ test('monetary rounding never calls native Intl or toLocaleString at decimal tie
   try {
     for (const [v, c, expected] of [[12254.515, 'EGP', '12,254.52'], [-1.005, 'EGP', '-1.01'], [1.2345, 'OMR', '1.235'], [-1.2345, 'KWD', '-1.235'], [1e21, 'EGP', '1,000,000,000,000,000,000,000.00'], [1e-8, 'EGP', '0.00']]) assert.equal(formatAmount(v, c), expected);
   } finally { Number.prototype.toLocaleString = previous; }
+});
+
+test('a one-cent difference from summing rounded asset rows is expected; subtotal and Net Worth keep underlying precision', () => {
+  const assets = [asset('foreign_currency', 0.01, { currencyCode: 'USD' }), asset('foreign_currency', 0.01, { currencyCode: 'USD' })];
+  const summary = summaryFor([], assets);
+  const each = getAssetValueInBase(assets[0], 'EGP', { EGP: 1, USD: 55.4154 }, null, null, ['EGP', 'USD']);
+  assert.equal(formatAmount(each, 'EGP'), '0.55');
+  assert.equal(formatAmount(each * 2, 'EGP'), '1.11');
+  assert.equal(formatAmount(Number(formatAmount(each, 'EGP')) * 2, 'EGP'), '1.10');
+  assert.equal(summary.assetsTotal, 1.108308);
+  assert.equal(summary.netWorth, summary.assetsTotal);
+  assert.equal(formatAmount(summary.netWorth, 'EGP'), '1.11');
 });

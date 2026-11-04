@@ -1,3 +1,5 @@
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
+import { useFinancePreferences } from '@/features/finance/store/useFinancePreferences';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -7,7 +9,6 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -77,7 +78,7 @@ const NETWORK_ITEMS: {
   { key: 'income', title: 'Income' },
   { key: 'expenses', title: 'Expenses' },
   { key: 'loans', title: 'Loans' },
-  { key: 'cheques', title: 'Cheques' },
+  { key: 'cheques', title: 'Installments' },
   { key: 'categories', title: 'Categories' },
   { key: 'transfers', title: 'Transfers' },
 ];
@@ -85,9 +86,11 @@ const NETWORK_ITEMS: {
 export default function FinanceHomeScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
   const accent = moduleColors.finance;
 
-  const [amountsVisible, setAmountsVisible] = useState(false);
+  const amountsVisible = useFinancePreferences(state => state.amountsVisible);
+  const toggleAmounts = useFinancePreferences(state => state.toggleAmounts);
 
   const ledgerReady = useLedgerHydrated();
   const currencyReady = useCurrencyHydrated();
@@ -273,7 +276,7 @@ export default function FinanceHomeScreen() {
 
         Alert.alert(
           'Coming soon',
-          `${item?.title ?? 'This'} page is being prepared.`,
+          key === 'cheques' ? 'Installments is not implemented yet. Property contracts and postdated checks will be added in a separate phase; this shortcut does not record payments or balances.' : `${item?.title ?? 'This'} page is being prepared.`,
         );
       }
     }
@@ -302,23 +305,7 @@ export default function FinanceHomeScreen() {
     const message =
       'This will permanently delete the asset and all of its recorded movements.';
 
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(
-        `Delete "${asset.name}" and all its movements?\\n\\n${message}`,
-      );
-
-      if (confirmed) deleteAsset(asset.id);
-      return;
-    }
-
-    Alert.alert(`Delete "${asset.name}"?`, message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => deleteAsset(asset.id),
-      },
-    ]);
+    confirm(`Delete "${asset.name}"?`, message, () => deleteAsset(asset.id), 'Delete');
   };
 
   const confirmDeleteAccount = (account: Account) => {
@@ -328,23 +315,7 @@ export default function FinanceHomeScreen() {
       if (!deleteAccount(account.id)) Alert.alert('Cannot delete account', 'This account has transfers or loan/debt dependencies. Keep it to preserve its accounting history.');
     };
 
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(
-        `Delete "${account.name}"?\n\n${message}`,
-      );
-
-      if (confirmed) performDelete();
-      return;
-    }
-
-    Alert.alert(`Delete "${account.name}"?`, message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: performDelete,
-      },
-    ]);
+    confirm(`Delete "${account.name}"?`, message, performDelete, 'Delete');
   };
 
   const confirmDeleteTransaction = (transaction: Transaction) => {
@@ -355,23 +326,7 @@ export default function FinanceHomeScreen() {
       }
     };
 
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(
-        `Delete this transaction?\n\n${message}`,
-      );
-
-      if (confirmed) performDelete();
-      return;
-    }
-
-    Alert.alert('Delete transaction?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: performDelete,
-      },
-    ]);
+    confirm('Delete transaction?', message, performDelete, 'Delete');
   };
 
   const openLinkedTransaction = (transaction: Transaction) => {
@@ -394,21 +349,7 @@ export default function FinanceHomeScreen() {
     const message =
       'This transfer and its linked balance changes will be permanently deleted.';
 
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(`${title}\n\n${message}`);
-
-      if (confirmed) removeTransfer(transfer.id);
-      return;
-    }
-
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => removeTransfer(transfer.id),
-      },
-    ]);
+    confirm(title, message, () => removeTransfer(transfer.id), 'Delete');
   };
 
   const handleSaveAsset = (data: AddAssetFormData) => {
@@ -552,7 +493,15 @@ export default function FinanceHomeScreen() {
 
   return (
     <Screen scroll>
-      <AppText variant="h1">Finance</AppText>
+      {confirmation}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <AppText variant="h1">Finance</AppText>
+        <Pressable accessibilityRole="button" accessibilityLabel={amountsVisible ? 'Hide Finance amounts' : 'Show Finance amounts'}
+          accessibilityState={{ selected: amountsVisible }} onPress={toggleAmounts}
+          style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name={amountsVisible ? 'eye-outline' : 'eye-off-outline'} size={22} color={colors.text} />
+        </Pressable>
+      </View>
 
       <AppText color="textSecondary" style={{ marginTop: spacing.xs }}>
         {monthLabel}
@@ -572,9 +521,6 @@ export default function FinanceHomeScreen() {
         income={summary.income}
         expense={summary.expense}
         amountsVisible={amountsVisible}
-        onToggleAmounts={() =>
-          setAmountsVisible((current) => !current)
-        }
         onNetworkPress={handleNetworkPress}
       />
 
@@ -643,28 +589,11 @@ export default function FinanceHomeScreen() {
           />
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open exchange rates"
-          onPress={() => setRatesOpen(true)}
-          style={({ pressed }) => [
-            styles.ratesButton,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              opacity: pressed ? 0.75 : 1,
-            },
-          ]}
-        >
-          <Ionicons
-            name="trending-up-outline"
-            size={20}
-            color={accent}
-          />
-          <AppText style={[styles.ratesButtonText, { color: accent }]}>
-            Rates
-          </AppText>
-        </Pressable>
+        <View style={styles.transactionButton}>
+          <AppButton title="Rates" accessibilityLabel="Open exchange rates" variant="outline" accentColor={accent}
+            leftIcon={<Ionicons name="trending-up-outline" size={20} color={accent} />}
+            onPress={() => setRatesOpen(true)} />
+        </View>
       </View>
 
       <TransactionsSection
@@ -854,7 +783,7 @@ export default function FinanceHomeScreen() {
 
                   return (
                     <AssetCard key={asset.id} asset={asset} categoryLabel={categoryLabel}
-                      balanceText={originalBalance} valuationText={convertedValue} baseCurrency={baseCurrency}
+                      balanceText={amountsVisible ? originalBalance : '••••••'} valuationText={amountsVisible ? convertedValue : '••••••'} baseCurrency={baseCurrency}
                       onViewEntries={() => openAssetEntries(asset)} onEdit={() => openAssetForEditing(asset)}
                       onDelete={() => confirmDeleteAsset(asset)} />
                   );
@@ -1016,7 +945,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   transactionButton: {
-    flex: 3,
+    flex: 1,
     minWidth: 0,
   },
   ratesButton: {

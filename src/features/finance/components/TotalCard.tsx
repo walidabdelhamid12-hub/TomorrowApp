@@ -44,7 +44,6 @@ interface TotalCardProps {
   income: number;
   expense: number;
   amountsVisible: boolean;
-  onToggleAmounts: () => void;
   onNetworkPress: (key: FinanceNetworkKey) => void;
   chequesTotal?: number;
   transfersTotal?: number;
@@ -113,7 +112,7 @@ const NETWORK_ITEMS: NetworkItem[] = [
   },
   {
     key: 'cheques',
-    label: 'Cheques',
+    label: 'Installments',
     description: 'Manage your cheques',
     icon: 'document-text-outline',
     color: '#159BB5',
@@ -137,22 +136,6 @@ const NETWORK_ITEMS: NetworkItem[] = [
   },
 ];
 
-type VisibilityState = Record<FinanceNetworkKey, boolean>;
-
-const INITIAL_VISIBILITY: VisibilityState = {
-  debts: true,
-  accounts: true,
-  assets: true,
-  receivable: true,
-  payable: true,
-  income: true,
-  expenses: true,
-  loans: true,
-  cheques: true,
-  categories: true,
-  transfers: true,
-};
-
 function countOf(value: unknown): number {
   if (Array.isArray(value)) return value.length;
   if (typeof value === 'number') return value;
@@ -163,15 +146,14 @@ function NetworkCard({
   item,
   currency,
   visible,
-  onToggleVisibility,
   onPress,
 }: {
   item: NetworkItem;
   currency: string;
   visible: boolean;
-  onToggleVisibility: () => void;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
   const hasAmount = typeof item.amount === 'number';
 
   const formattedAmount = hasAmount
@@ -182,9 +164,10 @@ function NetworkCard({
     <View
       style={[
         styles.networkCard,
+        item.key === 'categories' && { width: '100%' },
         {
-          backgroundColor: item.background,
-          borderColor: `${item.color}35`,
+          backgroundColor: colors.surfaceAlt,
+          borderColor: colors.border,
         },
       ]}
     >
@@ -203,12 +186,12 @@ function NetworkCard({
           <View style={styles.networkInfo}>
             <View style={styles.networkTitleRow}>
               <View style={[styles.networkIcon, { backgroundColor: `${item.color}18` }]}>
-                <Ionicons name={item.icon} size={21} color={item.color} />
+                <Ionicons name={item.icon} size={18} color={colors.primary} />
               </View>
-              <AppText style={styles.networkLabel} numberOfLines={1}>{item.label}</AppText>
+              <AppText style={[styles.networkLabel, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{item.label}</AppText>
             </View>
-            <AppText style={[styles.networkAmount, { color: item.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
-              {visible ? (formattedAmount ?? 'Open to view') : '••••••'}
+            <AppText style={[styles.networkAmount, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
+              {item.key === 'cheques' ? 'Coming soon' : visible ? (formattedAmount ?? (item.key === 'categories' ? 'Manage categories' : 'Open to view')) : '••••••'}
             </AppText>
           </View>
         </View>
@@ -216,33 +199,10 @@ function NetworkCard({
         <Ionicons
           name="chevron-forward"
           size={17}
-          color="#667085"
+          color={colors.textSecondary}
         />
       </Pressable>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={
-          visible
-            ? `Hide ${item.label} amount`
-            : `Show ${item.label} amount`
-        }
-        accessibilityState={{ expanded: visible }}
-        onPress={onToggleVisibility}
-        hitSlop={8}
-        style={({ pressed }) => [
-          styles.networkEye,
-          {
-            opacity: pressed ? 0.55 : 1,
-          },
-        ]}
-      >
-        <Ionicons
-          name={visible ? 'eye-outline' : 'eye-off-outline'}
-          size={21}
-          color="#25304A"
-        />
-      </Pressable>
     </View>
   );
 }
@@ -260,9 +220,7 @@ export function TotalCard({
   income,
   expense,
   amountsVisible,
-  onToggleAmounts,
   onNetworkPress,
-  chequesTotal,
   transfersTotal,
 }: TotalCardProps) {
   const { spacing, colors } = useTheme();
@@ -273,8 +231,7 @@ export function TotalCard({
 
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
 
-  const [networkVisibility, setNetworkVisibility] =
-    useState<VisibilityState>(INITIAL_VISIBILITY);
+  const [explanationOpen, setExplanationOpen] = useState(false);
 
   const missingCount = countOf(missing);
 
@@ -285,7 +242,8 @@ export function TotalCard({
   const currencyFlag = selectedCurrency?.flag ?? '🌐';
   const hiddenValue = '••••••';
 
-  const networkItems = NETWORK_ITEMS.map((item) => {
+  const order: FinanceNetworkKey[] = ['expenses', 'income', 'accounts', 'assets', 'cheques', 'loans', 'debts', 'transfers', 'categories'];
+  const networkItems = [...NETWORK_ITEMS].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key)).map((item) => {
     switch (item.key) {
       case 'accounts':
         return { ...item, amount: accountsTotal };
@@ -308,8 +266,11 @@ export function TotalCard({
       case 'loans':
         return { ...item, amount: loansRemainingTotal };
 
+      case 'debts':
+        return { ...item, amount: receivablesTotal - payablesTotal };
+
       case 'cheques':
-        return { ...item, amount: chequesTotal };
+        return item;
 
       case 'transfers':
         return { ...item, amount: transfersTotal };
@@ -319,19 +280,12 @@ export function TotalCard({
     }
   });
 
-  const toggleNetworkVisibility = (key: FinanceNetworkKey) => {
-    setNetworkVisibility((current) => ({
-      ...current,
-      [key]: !current[key],
-    }));
-  };
-
   return (
     <View style={{ marginTop: spacing.lg }}>
       <Card>
         <View style={styles.headingRow}>
           <View style={styles.netWorthHeading}>
-            <View style={styles.netWorthIcon}>
+            <View style={[styles.netWorthIcon, { backgroundColor: colors.surfaceAlt }]}>
               <Ionicons
                 name="wallet"
                 size={19}
@@ -344,22 +298,6 @@ export function TotalCard({
             </AppText>
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              amountsVisible ? 'Hide total balance' : 'Show total balance'
-            }
-            accessibilityState={{ expanded: amountsVisible }}
-            onPress={onToggleAmounts}
-            hitSlop={10}
-            style={styles.visibilityButton}
-          >
-            <Ionicons
-              name={amountsVisible ? 'eye-outline' : 'eye-off-outline'}
-              size={22}
-              color={colors.text}
-            />
-          </Pressable>
         </View>
 
         <View style={[styles.balanceRow, { marginTop: spacing.sm }]}>
@@ -368,7 +306,7 @@ export function TotalCard({
               variant="h1"
               numberOfLines={1}
               adjustsFontSizeToFit
-              minimumFontScale={0.75}
+              minimumFontScale={0.35}
               style={styles.netWorthAmount}
             >
               {amountsVisible ? formatAmount(accountsTotal + assetsTotal, baseCurrency) : hiddenValue}
@@ -401,20 +339,31 @@ export function TotalCard({
           </Pressable>
         </View>
 
-        <AppText variant="bodyStrong" style={{ marginTop: spacing.sm }}>
-          {'NET WORTH: ' + (amountsVisible ? formatAmount(netWorth ?? accountsTotal + assetsTotal + receivablesTotal - payablesTotal - loansRemainingTotal, baseCurrency) + ' ' + baseCurrency : hiddenValue)}
-        </AppText>
+        <View style={[styles.worthRow, { borderColor: colors.border }]}>
+          <Ionicons name="analytics-outline" size={16} color={colors.textSecondary} />
+          <AppText variant="caption">Net Worth</AppText>
+          <Pressable accessibilityRole="button" accessibilityLabel="Explain Net Worth" accessibilityState={{ expanded: explanationOpen }}
+            onPress={() => setExplanationOpen(value => !value)} style={styles.visibilityButton}>
+            <Ionicons name="information-circle-outline" size={19} color={colors.textSecondary} />
+          </Pressable>
+          <AppText variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={{ flex: 1, textAlign: 'right' }}>
+            {amountsVisible ? formatAmount(netWorth ?? accountsTotal + assetsTotal + receivablesTotal - payablesTotal - loansRemainingTotal, baseCurrency) + ' ' + baseCurrency : hiddenValue}
+          </AppText>
+        </View>
+        {explanationOpen && <AppText variant="caption" color="textSecondary">
+          Account balances + assets + receivables − payables − remaining received loan principal. Credit-card balances are already included in accounts. Future contractual installments include financing costs and are not subtracted again. Totals use underlying precision; adding rounded displays can differ by 0.01.
+        </AppText>}
         {loansInstallmentsRemainingTotal !== undefined && <AppText variant="caption" color="textSecondary">
           {'Loan future contractual payments: ' + (amountsVisible ? formatAmount(loansInstallmentsRemainingTotal, baseCurrency) + ' ' + baseCurrency : hiddenValue)}
         </AppText>}
-        <View style={styles.networkDivider} />
+        <View style={[styles.networkDivider, { backgroundColor: colors.border }]} />
 
         <View style={styles.shortcutsHeading}>
           <AppText style={styles.sectionTitle}>
             Finance Shortcuts
           </AppText>
 
-          <AppText style={styles.shortcutsCount}>
+          <AppText style={[styles.shortcutsCount, { color: colors.textSecondary }]}>
             {networkItems.length} sections
           </AppText>
         </View>
@@ -425,10 +374,7 @@ export function TotalCard({
               key={item.key}
               item={item}
               currency={baseCurrency}
-              visible={networkVisibility[item.key]}
-              onToggleVisibility={() =>
-                toggleNetworkVisibility(item.key)
-              }
+              visible={amountsVisible}
               onPress={() => onNetworkPress(item.key)}
             />
           ))}
@@ -451,8 +397,8 @@ export function TotalCard({
         animationType="fade"
         onRequestClose={() => setCurrencyPickerOpen(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.currencyModal}>
+        <View style={[styles.modalBackdrop, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.currencyModal, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
               <AppText variant="h3">
                 Choose base currency
@@ -467,7 +413,7 @@ export function TotalCard({
                 <Ionicons
                   name="close"
                   size={24}
-                  color="#333333"
+                  color={colors.text}
                 />
               </Pressable>
             </View>
@@ -490,7 +436,8 @@ export function TotalCard({
                     accessibilityState={{ selected }}
                     style={[
                       styles.currencyOption,
-                      selected && styles.selectedCurrencyOption,
+                      { borderBottomColor: colors.border },
+                      selected && { backgroundColor: colors.surfaceAlt, borderRadius: 8 },
                     ]}
                     onPress={() => {
                       setBaseCurrency(currency.code);
@@ -526,6 +473,7 @@ export function TotalCard({
 }
 
 const styles = StyleSheet.create({
+  worthRow: { flexDirection: 'row', alignItems: 'center', gap: 4, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 12 },
   headingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -553,7 +501,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   visibilityButton: {
-    padding: 6,
+    minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center',
   },
   balanceRow: {
     flexDirection: 'row',
@@ -572,6 +520,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 10,
     paddingHorizontal: 10,
+    minHeight: 48,
     paddingVertical: 6,
   },
   currencyFlag: {
@@ -609,7 +558,7 @@ const styles = StyleSheet.create({
   },
   networkCard: {
     width: '48.5%',
-    minHeight: 70,
+    minHeight: 88,
     borderWidth: 1,
     borderRadius: 15,
     flexDirection: 'row',
@@ -640,8 +589,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   networkIcon: {
-    width: 38,
-    height: 38,
+    width: 26,
+    height: 26,
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',

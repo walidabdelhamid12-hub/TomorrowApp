@@ -1,3 +1,4 @@
+import { canEditLoanPayment, canReverseLoanPayment } from '@/features/finance/utils/loanPaymentPolicy';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
@@ -724,7 +725,7 @@ export const useFinanceStore = create<FinanceStore>()(
       updateLoanPayment: (loanId, paymentId, patch) => {
         const loan = get().loans.find((item) => item.id === loanId);
         const currentPayment = loan?.payments.find((item) => item.id === paymentId);
-        if (!loan || !currentPayment) return false;
+        if (!loan || !currentPayment || !canEditLoanPayment(loan)) return false;
         if (currentPayment.ledgerTransactionId && 'ledgerTransactionId' in patch
           && patch.ledgerTransactionId !== currentPayment.ledgerTransactionId) return false;
 
@@ -800,7 +801,8 @@ export const useFinanceStore = create<FinanceStore>()(
       },
 
       deleteLoanPayment: (loanId, paymentId) => {
-        if (!get().loans.find(l => l.id === loanId)?.payments.some(p => p.id === paymentId)) return false;
+        const loan = get().loans.find(l => l.id === loanId);
+        if (!loan?.payments.some(p => p.id === paymentId) || !canReverseLoanPayment(loan, paymentId)) return false;
         set((state) => ({
           loans: patchParent(state.loans, loanId, (loan) => ({
             ...loan,

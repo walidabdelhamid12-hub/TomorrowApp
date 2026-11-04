@@ -1,7 +1,8 @@
+import { FinanceDetailsModal } from '@/features/finance/components/FinanceDetailsModal';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Card } from '@/components/ui';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
@@ -25,20 +26,6 @@ interface TransactionsSectionProps {
   amountsVisible: boolean;
 }
 
-function RowAction({ label, icon, onPress, danger = false }: {
-  label: string; icon: IconName; onPress: () => void; danger?: boolean;
-}) {
-  const { colors } = useTheme();
-  const tint = danger ? colors.danger : colors.primary;
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
-      style={({ pressed }) => [styles.actionButton, { opacity: pressed ? 0.65 : 1 }]}>
-      <Ionicons name={icon} size={20} color={tint} accessible={false} />
-      <AppText variant="caption" color={tint} style={styles.actionLabel}>{label}</AppText>
-    </Pressable>
-  );
-}
-
 export function TransactionsSection({
   onEdit, onEditTransfer, onDelete, onDeleteTransfer, onManage, amountsVisible,
 }: TransactionsSectionProps) {
@@ -50,7 +37,7 @@ export function TransactionsSection({
   const loans = useFinanceStore(s => s.loans);
   const debts = useFinanceStore(s => s.debts);
   const [showAll, setShowAll] = useState(false);
-  const [actionItem, setActionItem] = useState<{ kind: 'transaction' | 'transfer'; id: string } | null>(null);
+  const [detailItem, setDetailItem] = useState<{ kind: 'transaction' | 'transfer'; id: string } | null>(null);
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
   const accountById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts]);
   const sorted = useMemo(() => [
@@ -64,35 +51,37 @@ export function TransactionsSection({
   const visible = expanded ? sorted : sorted.slice(0, PREVIEW_COUNT);
   const toggleAll = () => setShowAll(value => !value);
 
-  const selectedTransaction = actionItem?.kind === 'transaction'
-    ? transactions.find(tx => tx.id === actionItem.id) : undefined;
-  const selectedProtected = selectedTransaction && isProtectedTransaction(selectedTransaction, { loans, debts });
-  const performAction = (operation: 'edit' | 'delete') => {
-    const selected = actionItem;
-    setActionItem(null);
-    if (!selected) return;
+  const detailMatches = detailItem?.kind === 'transfer' ? transfers.filter(t => t.id === detailItem.id)
+    : transactions.filter(t => t.id === detailItem?.id);
+  const detailRecord = detailMatches.length === 1 ? detailMatches[0] : undefined;
+  const money = (amount: number, currency: string) => amountsVisible ? formatAmount(amount, currency) + ' ' + currency : '••••••';
+  const detailLines = !detailRecord ? ['No unique record is available.'] : 'fromAccountId' in detailRecord ? [
+    'From: ' + (accountById.get(detailRecord.fromAccountId)?.name ?? 'Unavailable account'),
+    'To: ' + (accountById.get(detailRecord.toAccountId)?.name ?? 'Unavailable account'),
+    'Sent: ' + money(detailRecord.fromAmount ?? detailRecord.amount, detailRecord.fromCurrencyCode ?? detailRecord.currencyCode),
+    'Received: ' + money(detailRecord.toAmount ?? detailRecord.amount, detailRecord.toCurrencyCode ?? detailRecord.currencyCode),
+    'Date: ' + detailRecord.date, detailRecord.note ?? '',
+  ] : [getTransactionDescription(detailRecord, categoryById.get(detailRecord.categoryId)?.name, null),
+    money(detailRecord.amount, detailRecord.currencyCode), detailRecord.date,
+    accountById.get(detailRecord.accountId)?.name ?? 'Unavailable account', detailRecord.note ?? ''];
+  const performAction = (kind: 'transaction' | 'transfer', id: string, operation: 'edit' | 'delete') => {
     const latest = useLedgerStore.getState();
-    if (selected.kind === 'transfer') {
-      const matches = latest.transfers.filter(item => item.id === selected.id);
+    if (kind === 'transfer') {
+      const matches = latest.transfers.filter(item => item.id === id);
       if (matches.length === 1) (operation === 'edit' ? onEditTransfer : onDeleteTransfer)(matches[0]);
     } else {
-      const matches = latest.transactions.filter(item => item.id === selected.id);
+      const matches = latest.transactions.filter(item => item.id === id);
       if (matches.length !== 1) return;
-      const tx = matches[0];
-      if (isProtectedTransaction(tx, useFinanceStore.getState())) { onManage(tx); return; }
-      (operation === 'edit' ? onEdit : onDelete)(tx);
+      if (isProtectedTransaction(matches[0], useFinanceStore.getState())) { onManage(matches[0]); return; }
+      (operation === 'edit' ? onEdit : onDelete)(matches[0]);
     }
   };
-  const moreButton = (kind: 'transaction' | 'transfer', id: string) => (
-    <Pressable accessibilityRole="button" accessibilityLabel={kind === 'transfer' ? 'Transfer actions' : 'Transaction actions'}
-      accessibilityHint="Open edit and delete actions" onPress={() => setActionItem({ kind, id })}
-      style={({ pressed }) => [styles.moreButton, { opacity: pressed ? 0.65 : 1 }]}>
-      <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} accessible={false} />
-    </Pressable>
-  );
+  const rowActions = (kind: 'transaction' | 'transfer', id: string) => <FinanceActionButtons label={kind}
+    onEdit={() => performAction(kind, id, 'edit')} onDelete={() => performAction(kind, id, 'delete')} />;
 
   return (
     <View style={{ marginTop: spacing.xl }}>
+      <FinanceDetailsModal title={detailItem ? detailItem.kind === 'transfer' ? 'Transfer details' : 'Transaction details' : undefined} lines={detailLines} onClose={() => setDetailItem(null)} />
       <View style={styles.toolbar}>
         <View style={styles.sectionHeader}>
           <Ionicons name="swap-horizontal-outline" size={20} color={colors.textSecondary} accessible={false} />
@@ -131,6 +120,7 @@ export function TransactionsSection({
               const cardPayment = transfer.type === 'credit_card_payment';
               return (
                 <View key={'transfer-' + item.id} style={rowStyle}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Transfer details" onPress={() => setDetailItem({ kind: 'transfer', id: transfer.id })} style={styles.rowBody}>
                   <View style={[styles.iconCircle, { backgroundColor: colors.info + '18' }]}>
                     <Ionicons name={cardPayment ? 'card-outline' : 'swap-horizontal-outline'} size={20}
                       color={colors.info} accessible={false} />
@@ -152,7 +142,8 @@ export function TransactionsSection({
                         + ' → ' + (accountById.get(transfer.toAccountId)?.name ?? 'Unavailable account')}
                     </AppText>
                   </View>
-                  {moreButton('transfer', transfer.id)}
+                  </Pressable>
+                  {rowActions('transfer', transfer.id)}
                 </View>
               );
             }
@@ -190,36 +181,19 @@ export function TransactionsSection({
                 accessibilityLabel={(destination?.label ?? 'Linked record unavailable') + ': ' + description + ', ' + amount + ', ' + metadata}
                 accessibilityHint={destination ? 'Opens the linked record' : 'Explains why the linked record cannot be opened safely'}
                 onPress={() => onManage(tx)}
-                style={({ pressed }) => [rowStyle, { opacity: pressed ? 0.65 : 1 }]}>
+                style={({ pressed }) => [rowStyle, styles.rowBody, { opacity: pressed ? 0.65 : 1 }]}>
                 {content}
               </Pressable>
             ) : (
               <View key={'transaction-' + item.id} style={rowStyle}>
-                {content}
-                {moreButton('transaction', tx.id)}
+                <Pressable accessibilityRole="button" accessibilityLabel="Transaction details" onPress={() => setDetailItem({ kind: 'transaction', id: tx.id })} style={styles.rowBody}>{content}</Pressable>
+                {rowActions('transaction', tx.id)}
               </View>
             );
           })}
         </Card>
       )}
-      {actionItem && (
-        <Modal transparent animationType="fade" visible onRequestClose={() => setActionItem(null)}>
-          <View style={[styles.modalBackdrop, { backgroundColor: colors.overlay }]}>
-            <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Close transaction actions"
-              onPress={() => setActionItem(null)} />
-            <View accessibilityViewIsModal style={[styles.actionSheet, { backgroundColor: colors.surface }]}>
-              <AppText variant="h3">{actionItem.kind === 'transfer' ? 'Transfer actions' : 'Transaction actions'}</AppText>
-              {selectedProtected ? (
-                <RowAction label="Open linked record" icon="open-outline" onPress={() => performAction('edit')} />
-              ) : (
-                <FinanceActionButtons label={actionItem.kind === 'transfer' ? 'transfer' : 'transaction'}
-                  onEdit={() => performAction('edit')} onDelete={() => performAction('delete')} />
-              )}
-              <RowAction label="Cancel" icon="close-outline" onPress={() => setActionItem(null)} />
-            </View>
-          </View>
-        </Modal>
-      )}
+
     </View>
   );
 }
@@ -230,7 +204,8 @@ const styles = StyleSheet.create({
   headingText: { flexShrink: 1, minWidth: 0 },
   listToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 48, minWidth: 48,
     paddingHorizontal: 4, paddingVertical: 8, maxWidth: '50%' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 8, minHeight: 60 },
+  rowBody: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, minWidth: 0 },
+  row: { flexDirection: 'column', alignItems: 'stretch', gap: 8, paddingHorizontal: 8, paddingVertical: 8, minHeight: 60 },
   primary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 8 },
   details: { flex: 1, minWidth: 0, gap: 2 },
   iconCircle: { width: 24, height: 24, flexShrink: 0, alignSelf: 'flex-start', marginTop: 2, borderRadius: 12, alignItems: 'center',

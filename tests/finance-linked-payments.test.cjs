@@ -315,16 +315,15 @@ test('legacy loan account record without explicit link is not treated as custom 
   assertRejected(() => reverseLinkedPayment(loanRef));
 });
 
-test('settlement edit preserves settled status, fee, and settlement metadata', () => {
-  changeLoan(l => ({ ...l, status: 'settled', settlementPaymentId: 'lp', settlementAmount: 100, settlementDate: date }));
-  assert.equal(editLinkedPayment(loanRef, { ...edit, note: 'Settlement updated' }).ok, true);
-  const l = finance.getState().loans[0];
-  assert.equal(l.status, 'settled');
-  assert.equal(l.settlementAmount, 150);
-  assert.equal(l.settlementDate, edit.date);
-  assert.equal(l.settlementNote, 'Settlement updated');
-  assert.equal(getLoanRemainingAmount(l), 0);
-  assert.equal(balance('a'), 1792);
+for (const status of ['settled', 'closed']) test(status + ' loan payments reject edits without changing accounts, metadata or status', () => {
+  changeLoan(l => ({ ...l, status, settlementPaymentId: 'lp', settlementAmount: 100, settlementDate: date }));
+  assertRejected(() => editLinkedPayment(loanRef, { ...edit, note: 'Unsafe change' }));
+  assert.equal(finance.getState().updateLoanPayment('loan', 'lp', { amount: 150 }), false);
+});
+for (const status of ['settled', 'closed']) test(status + ' historical payments cannot be reversed outside explicit settlement reversal', () => {
+  changeLoan(l => ({ ...l, status, settlementPaymentId: 'other-payment' }));
+  assertRejected(() => reverseLinkedPayment(loanRef));
+  assert.equal(finance.getState().deleteLoanPayment('loan', 'lp'), false);
 });
 
 test('posting early settlement and reversing it preserves contractual accounting', () => {
@@ -643,4 +642,28 @@ test('finance and ledger records survive persisted rehydration without rewriting
   await Promise.all([finance.persist.rehydrate(), ledger.persist.rehydrate()]);
   assert.deepEqual({ assets: finance.getState().assets, loans: finance.getState().loans, debts: finance.getState().debts }, financeBefore);
   assert.deepEqual({ accounts: ledger.getState().accounts, transactions: ledger.getState().transactions, transfers: ledger.getState().transfers }, ledgerBefore);
+});
+
+const { useFinancePreferences: preferences } = require('../src/features/finance/store/useFinancePreferences.ts');
+test('global amount visibility persists across hydration without changing financial records', async () => {
+  await preferences.persist.rehydrate();
+  preferences.setState({ amountsVisible: false });
+  const before = snapshot();
+  preferences.getState().toggleAmounts();
+  assert.equal(preferences.getState().amountsVisible, true);
+  await Promise.resolve();
+  const saved = storage.get('tomorrow-finance-preferences');
+  assert.equal(JSON.parse(saved).state.amountsVisible, true);
+  preferences.setState({ amountsVisible: false });
+  storage.set('tomorrow-finance-preferences', saved);
+  await preferences.persist.rehydrate();
+  assert.equal(preferences.getState().amountsVisible, true);
+  assert.deepEqual(snapshot(), before);
+  preferences.getState().toggleAmounts();
+  assert.equal(preferences.getState().amountsVisible, false);
+});
+test('invalid persisted amount visibility stays hidden', async () => {
+  storage.set('tomorrow-finance-preferences', JSON.stringify({ state: { amountsVisible: 'true' }, version: 0 }));
+  await preferences.persist.rehydrate();
+  assert.equal(preferences.getState().amountsVisible, false);
 });

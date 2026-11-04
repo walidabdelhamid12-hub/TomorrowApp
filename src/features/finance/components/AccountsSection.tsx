@@ -77,11 +77,11 @@ export function AccountsSection({
         style={styles.sectionHeader}
       >
         <View style={styles.headerTitle}>
-          <View style={styles.headerIcon}>
+          <View style={[styles.headerIcon, { backgroundColor: colors.surfaceAlt }]}>
             <Ionicons
               name="wallet-outline"
               size={21}
-              color="#60A5FA"
+              color={colors.info}
             />
           </View>
 
@@ -108,8 +108,8 @@ export function AccountsSection({
           </Card>
         ) : (
           <>
-            <Card padded={false}>
-              {visibleAccounts.map((account, index) => {
+            <View style={{ gap: 8 }}>
+              {visibleAccounts.map((account) => {
                 const balance =
                   balances.get(account.id) ?? account.initialBalance;
                 const negative = balance < 0;
@@ -120,14 +120,12 @@ export function AccountsSection({
                     style={[
                       styles.row,
                       { padding: spacing.md },
-                      index > 0 && {
-                        borderTopWidth: StyleSheet.hairlineWidth,
-                        borderTopColor: colors.border,
-                      },
+                      { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: 16 },
                     ]}
                   >
                     <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + account.name} onPress={() => setDetailAccountId(account.id)} style={[styles.flex, { minHeight: 48 }]}>
 
+                      <Ionicons name={account.type === 'bank' ? 'business-outline' : 'wallet-outline'} size={20} color={colors.primary} />
                       <AppText style={styles.name}>
                         {account.name}
                       </AppText>
@@ -150,7 +148,7 @@ export function AccountsSection({
                   </View>
                 );
               })}
-            </Card>
+        </View>
 
             {accounts.length > PREVIEW_COUNT ? (
               <AppButton

@@ -111,10 +111,10 @@ test('full amount, currency, category, date and account use uncapped scalable te
 });
 test('ordinary transaction and transfer edit/delete handlers remain usable', () => {
   press('View all (4)');
-  press('Transaction actions'); press('Edit transaction');
-  press('Transaction actions'); press('Delete transaction');
-  press('Transfer actions'); press('Edit transfer');
-  press('Transfer actions'); press('Delete transfer');
+  press('Edit transaction');
+  press('Delete transaction');
+  press('Edit transfer');
+  press('Delete transfer');
   assert.deepEqual(calls, [['edit', 'first'], ['delete', 'first'], ['editTransfer', 'transfer'], ['deleteTransfer', 'transfer']]);
 });
 test('transfer displays both complete amounts and source/destination account names', () => {
@@ -221,21 +221,25 @@ test('a protected loan payment renders a context label and no generic action con
   assert.deepEqual({ ledger, finance }, previous);
 });
 
-test('action menu rechecks protection before dispatching a captured ordinary Edit handler', () => {
-  press('View all (4)'); press('Transaction actions');
+test('direct action rechecks protection before dispatching a captured ordinary Edit handler', () => {
+  press('View all (4)');
   const edit = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Edit transaction');
   ledger.transactions[0] = { ...ledger.transactions[0], purpose: 'loan_payment', linkedEntityType: 'loan', linkedEntityId: 'loan' };
   edit.props.onPress(); render();
   assert.deepEqual(calls, [['manage', 'first']]);
-  assert.equal(nodes('Modal').length, 0);
+  assert.equal(nodes('Modal').some(n => n.props.visible), false);
 });
 
-test('the action menu supports cancel and Android back without mutating records', () => {
-  press('View all (4)'); press('Transaction actions'); press('Cancel');
-  assert.equal(nodes('Modal').length, 0); assert.deepEqual(calls, []);
-  press('Transfer actions');
-  nodes('Modal')[0].props.onRequestClose(); render();
-  assert.equal(nodes('Modal').length, 0); assert.deepEqual(calls, []);
+test('ordinary and transfer details are read-only and Back never mutates records', () => {
+  press('View all (4)'); press('Transaction details');
+  assert.ok(texts().includes('Transaction details'));
+  press('Back to list');
+  assert.equal(nodes('Modal').some(n => n.props.visible), false);
+  press('Transfer details');
+  assert.ok(texts().includes('Sent: 123,456,789.12 USD'));
+  assert.ok(texts().includes('Received: 99,999,999.123 OMR'));
+  nodes('Modal').find(n => n.props.visible).props.onRequestClose(); render();
+  assert.equal(nodes('Modal').some(n => n.props.visible), false); assert.deepEqual(calls, []);
 });
 
 test('ordinary three-decimal currency precision and dynamic sizing are preserved', () => {

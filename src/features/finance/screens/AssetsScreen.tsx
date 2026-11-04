@@ -1,7 +1,8 @@
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppButton, AppText, Screen } from '@/components/ui';
 import type { AddAssetFormData } from '@/features/finance/components/AddAssetModal';
@@ -19,6 +20,7 @@ import { moduleColors, useTheme } from '@/theme';
 export default function AssetsScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
   const accent = moduleColors.finance;
 
   const financeReady = useFinanceHydrated();
@@ -81,16 +83,7 @@ export default function AssetsScreen() {
   const confirmDeleteAsset = (asset: Asset) => {
     const message = 'This will permanently delete the asset and all of its recorded movements.';
 
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(`Delete "${asset.name}" and all its movements?\\n\\n${message}`);
-      if (confirmed) deleteAsset(asset.id);
-      return;
-    }
-
-    Alert.alert(`Delete "${asset.name}"?`, message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteAsset(asset.id) },
-    ]);
+    confirm(`Delete "${asset.name}"?`, message, () => deleteAsset(asset.id), 'Delete');
   };
 
   const saveAsset = (data: AddAssetFormData) => {
@@ -175,6 +168,7 @@ export default function AssetsScreen() {
 
   return (
     <Screen scroll>
+      {confirmation}
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}

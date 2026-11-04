@@ -1,3 +1,4 @@
+import { canEditLoanPayment, canReverseLoanPayment } from '@/features/finance/utils/loanPaymentPolicy';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Loan, LoanPayment } from '@/features/finance/types/finance';
@@ -104,6 +105,7 @@ export function editLinkedPayment(ref: PaymentRef, edit: PaymentEdit): PaymentRe
       || (payment as LoanPayment).principalAmount !== undefined
       || (payment as LoanPayment).interestAmount !== undefined)) return false;
     const parent = linked?.parent ?? custom!.loan;
+    if (ref.entityType === 'loan' && !canEditLoanPayment(parent as Loan)) return false;
     if (ref.entityType === 'debt') {
       const debt = finance.debts.find(d => d.id === ref.entityId)!;
       const remaining = getDebtRemaining({ ...debt, payments: debt.payments.filter(p => p.id !== ref.paymentId) });
@@ -164,6 +166,7 @@ export function reverseLinkedPayment(ref: PaymentRef): PaymentResult {
     const linked = resolvePayment(ref, finance, useLedgerStore.getState());
     const custom = linked ? null : findCustomLoanPayment(ref);
     if (!linked && !custom) return false;
+    if (ref.entityType === 'loan' && !canReverseLoanPayment((linked?.parent ?? custom!.loan) as Loan, ref.paymentId)) return false;
     if (linked) {
       if (!noRefunds(linked.transaction.id)) return false;
       useLedgerStore.setState(s => ({ transactions: s.transactions.filter(t => t.id !== linked.transaction.id) }));

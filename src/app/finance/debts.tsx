@@ -1,3 +1,4 @@
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { FinanceDetailsModal } from '@/features/finance/components/FinanceDetailsModal';
 import { debtDetailLines } from '@/features/finance/utils/detailLines';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
@@ -10,7 +11,6 @@ import {
     ActivityIndicator,
     Alert,
     Modal,
-    Platform,
     PanResponder,
     Pressable,
     ScrollView,
@@ -123,6 +123,7 @@ export default function DebtsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ direction?: string; debtId?: string }>();
   const { colors } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
 
   const financeReady = useFinanceHydrated();
   const ledgerReady = useLedgerHydrated();
@@ -132,7 +133,6 @@ export default function DebtsScreen() {
   const addDebt = useFinanceStore((state) => state.addDebt);
   const updateDebt = useFinanceStore((state) => state.updateDebt);
   const deleteDebt = useFinanceStore((state) => state.deleteDebt);
-
 
   const accounts = useLedgerStore((state) => state.accounts);
   const categories = useLedgerStore((state) => state.categories);
@@ -268,19 +268,7 @@ export default function DebtsScreen() {
       }
     };
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(message)) performDelete();
-      return;
-    }
-
-    Alert.alert('Delete debt?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: performDelete,
-      },
-    ]);
+    confirm('Delete debt?', message, performDelete, 'Delete');
   };
 
   const openPayment = (debt: Debt) => {
@@ -428,15 +416,7 @@ export default function DebtsScreen() {
       `Delete this ${debt.direction === 'receivable' ? 'collection' : 'payment'} of ` +
       `${formatAmount(payment.amount, debt.currencyCode)} ${debt.currencyCode}? The linked account balance will be reversed.`;
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(message)) performDelete();
-      return;
-    }
-
-    Alert.alert('Delete payment?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: performDelete },
-    ]);
+    confirm('Delete payment?', message, performDelete, 'Delete');
   };
 
   const closeEditPayment = () => {
@@ -527,6 +507,7 @@ export default function DebtsScreen() {
 
   return (
     <Screen scroll>
+      {confirmation}
       <View {...swipe.panHandlers}>
       {params.debtId !== undefined && (
         <Card variant="filled">

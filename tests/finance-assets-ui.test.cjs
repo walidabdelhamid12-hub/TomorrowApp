@@ -18,6 +18,7 @@ const hooks = { ...React, useEffect: (fn, deps) => {
   return [states[key], value => { states[key] = typeof value === 'function' ? value(states[key]) : value; }];
 } };
 function Ionicon(props) { return React.createElement('Ionicon', props); }
+Ionicon.glyphMap = {};
 function MaterialIcon(props) { return React.createElement('MaterialIcon', props); }
 Module._load = function(id, parent, main) {
   if (id === 'react') return hooks;
@@ -27,6 +28,10 @@ Module._load = function(id, parent, main) {
     Alert: { alert: (...args) => alerts.push(args) } };
   if (id === '@expo/vector-icons') return { Ionicons: Ionicon, MaterialCommunityIcons: MaterialIcon };
   if (id === 'expo-router') return { useLocalSearchParams: () => params, useRouter: () => ({ back: () => calls.push('back'), replace: () => calls.push('replace') }) };
+  if (id === '@/features/finance/providers/RatesAutoRefreshProvider') return { useRatesAutoRefresh: () => ({ refresh: async () => null, isRefreshing: false, lastResult: null }) };
+  if (id === '@/features/finance/store/useFinancePreferences') return { useFinancePreferences: select => select(privacy) };
+  if (id === '@/features/finance/components/AddTransactionModal') return { AddTransactionModal: 'AddTransactionModal' };
+  if (id === '@/features/finance/components/TransferModal') return { TransferModal: 'TransferModal' };
   if (id === '@/theme') return { useTheme: () => theme, moduleColors: { finance: '#10B981' } };
   if (id === '@/components/ui') return { Card: 'Card', AppText: 'AppText', AppButton: 'AppButton', Screen: 'Screen', DateField: 'DateField', AppInput: 'AppInput' };
   if (id === '@/features/finance/components/AddAssetModal') return { AddAssetModal: 'AddAssetModal' };
@@ -137,8 +142,8 @@ test('Assets screen actions open the correct movement/edit modals and preserve d
   assert.equal(edit.props.visible, true); assert.equal(edit.props.asset.id, 'gold');
   nodes('Pressable').find(n => n.props.accessibilityLabel === 'Delete GOLD TEST').props.onPress();
   assert.equal(calls.length, 0);
-  const confirmation = alerts[0];
-  confirmation[2].find(button => button.text === 'Delete').onPress();
+  render(AssetsScreen);
+  nodes('AppButton').find(button => button.props.title === 'Delete').props.onPress();
   assert.deepEqual(calls, [['deleteAsset', 'gold']]);
 });
 test('AssetRow privacy masks weight and valuation, including its accessible summary', () => {
@@ -247,7 +252,9 @@ for (const category of ['gold', 'silver', 'foreign_currency']) test(category + '
   assert.deepEqual(nodes('TextInput').map(n => n.props.value), ['10', '2026-11-01', 'Original note']);
   nodes('AppButton').find(n => n.props.title === 'Cancel').props.onPress(); render(RealEntries, props);
   nodes('Pressable').find(n => n.props.accessibilityLabel === 'Delete entry dated 2026-11-01').props.onPress();
-  assert.equal(alerts[0][2][0].text, 'Cancel'); assert.deepEqual(calls, []); assert.equal(asset.entries.length, 1);
+  render(RealEntries, props);
+  nodes('AppButton').find(n => n.props.title === 'Cancel').props.onPress(); render(RealEntries, props);
+  assert.equal(nodes('AppButton').some(n => n.props.title === 'Delete'), false); assert.deepEqual(calls, []); assert.equal(asset.entries.length, 1);
 });
 test('loan body opens exact read-only details; back and settlement Cancel never post money', () => {
   finance.loans = [loanRecord()];
@@ -318,11 +325,11 @@ test('Finance cards offer one Debts shortcut and distinguish Total Balance, Net 
   render(TotalCard, props);
   assert.equal(nodes('Pressable').filter(n => n.props.accessibilityLabel === 'Open Debts').length, 1);
   assert.equal(nodes('Pressable').some(n => ['Open Receivable', 'Open Payable'].includes(n.props.accessibilityLabel)), false);
-  assert.ok(texts().includes('NET WORTH: 10,000.00 EGP'));
+  assert.ok(texts().includes('10,000.00 EGP'));
   assert.ok(texts().includes('Loan future contractual payments: 108,000.00 EGP'));
   nodes('Pressable').find(n => n.props.accessibilityLabel === 'Open Debts').props.onPress(); assert.deepEqual(calls, ['debts']);
   render(TotalCard, { ...props, amountsVisible: false });
-  assert.ok(texts().includes('NET WORTH: ••••••'));
+  assert.ok(texts().includes('••••••'));
   assert.ok(texts().includes('Loan future contractual payments: ••••••'));
   render(FinanceNetworks, { onPress: key => calls.push(key) });
   assert.equal(nodes('Pressable').filter(n => n.props.accessibilityLabel === 'Open Debts').length, 1);
@@ -339,4 +346,78 @@ test('loan card long names/large amounts retain wrapping text and actions stay o
   assert.equal(nodes('Pressable', body).length, 1); assert.equal(nodes('AppButton', body).length, 0);
   for (const text of nodes('AppText', body)) { assert.equal(text.props.numberOfLines, undefined); assert.notEqual(text.props.allowFontScaling, false); }
   assert.equal(style(body.props.style).height, undefined);
+});
+
+for (const status of ['settled', 'closed']) test(status + ' loan has no active payment actions or historical Edit', () => {
+  finance.loans = [{ ...loanRecord(), status }];
+  render(LoansScreen);
+  for (const title of ['Record payment', 'Early settlement', 'Close without payment'])
+    assert.equal(nodes('AppButton').some(n => n.props.title === title), false);
+  assert.equal(nodes('Pressable').find(n => n.props.accessibilityLabel === 'Toggle Payment history').props.accessibilityState.expanded, false);
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Toggle Payment history').props.onPress(); render(LoansScreen);
+  assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel?.startsWith('Edit payment')), false);
+  assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel?.startsWith('Delete payment')), false);
+});
+
+test('loan disclosures default closed, show a payment count, and preserve receipt details on expansion', () => {
+  finance.loans = [loanRecord()];
+  render(LoansScreen);
+  assert.ok(texts().includes('Payment history (1)'));
+  assert.equal(nodes('Pressable').find(n => n.props.accessibilityLabel === 'Toggle Deposit distribution').props.accessibilityState.expanded, false);
+  assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel?.startsWith('Edit payment')), false);
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Toggle Payment history').props.onPress(); render(LoansScreen);
+  assert.ok(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Edit payment dated 2026-11-03'));
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Toggle Deposit distribution').props.onPress(); render(LoansScreen);
+  assert.ok(texts().some(t => t.includes('Received: 100,000.00 EGP on 2026-11-01')));
+});
+
+test('all nine shortcuts follow approved order, Categories spans the final row, and one visibility prop masks every amount', () => {
+  const props = { baseCurrency: 'EGP', accountsTotal: 123456, assetsTotal: 234567, loansRemainingTotal: 345678, netWorth: 456789,
+    loansInstallmentsRemainingTotal: 567890, receivablesTotal: 678901, payablesTotal: 789012, income: 890123, expense: 901234,
+    amountsVisible: false, onNetworkPress() {} };
+  render(TotalCard, props);
+  assert.deepEqual(nodes('Pressable').map(n => n.props.accessibilityLabel).filter(t => t?.startsWith('Open ')),
+    ['Expenses','Income','Accounts','Assets','Installments','Loans','Debts','Transfers','Categories'].map(t => 'Open ' + t));
+  assert.equal(texts().some(t => /123,456|234,567|345,678|456,789|567,890|678,901|789,012|890,123|901,234/.test(t)), false);
+  assert.equal(nodes('Ionicon').some(n => n.props.name === 'eye-outline' || n.props.name === 'eye-off-outline'), false);
+  assert.ok(texts().includes('Coming soon'));
+  assert.ok(nodes('View').some(n => style(n.props.style).width === '100%'));
+  const info = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Explain Net Worth');
+  assert.equal(info.props.accessibilityState.expanded, false);
+  info.props.onPress(); render(TotalCard, props);
+  assert.ok(texts().some(t => t.includes('Future contractual installments')));
+  render(TotalCard, { ...props, amountsVisible: true });
+  assert.ok(texts().includes('456,789.00 EGP'));
+});
+
+test('themed confirmation cancels via Android Back and runs the captured action once only on confirmation', () => {
+  render(AssetsScreen);
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Delete GOLD TEST').props.onPress(); render(AssetsScreen);
+  const modal = nodes('Modal').find(n => n.props.visible);
+  assert.ok(texts().some(t => t.includes('permanently delete')));
+  modal.props.onRequestClose(); render(AssetsScreen);
+  assert.deepEqual(calls, []);
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Delete SILVER TEST').props.onPress(); render(AssetsScreen);
+  const deletion = nodes('AppButton').find(n => n.props.title === 'Delete');
+  deletion.props.onPress(); deletion.props.onPress(); render(AssetsScreen);
+  assert.deepEqual(calls, [['deleteAsset', 'silver']]);
+});
+
+let privacy;
+const { default: FinanceHomeScreen } = require('../src/features/finance/screens/FinanceHomeScreen.tsx');
+test('Finance header has one global eye control and toggles summary and recent values together', () => {
+  finance.assets = [];
+  privacy = { amountsVisible: false, toggleAmounts() { privacy.amountsVisible = !privacy.amountsVisible; } };
+  ledger.accounts = [{ id: 'a', type: 'bank', name: 'Bank', currencyCode: 'EGP', initialBalance: 12345 }];
+  ledger.transactions = [{ id: 't', type: 'expense', accountId: 'a', categoryId: 'food', amount: 321, currencyCode: 'EGP', date: '2026-11-04', createdAt: '2026-11-04' }];
+  currency.rateSources = { EGP: 'manual' };
+  theme.sizes = { inputHeight: 48 };
+  render(FinanceHomeScreen);
+  assert.equal(nodes('Ionicon').filter(n => ['eye-outline', 'eye-off-outline'].includes(n.props.name)).length, 1);
+  assert.equal(texts().some(t => t.includes('12,024') || t.includes('321.00')), false);
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Show Finance amounts').props.onPress(); render(FinanceHomeScreen);
+  assert.ok(texts().includes('12,024.00'));
+  assert.ok(texts().includes('-321.00 EGP'));
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Hide Finance amounts').props.onPress(); render(FinanceHomeScreen);
+  assert.equal(texts().some(t => t.includes('12,024') || t.includes('321.00')), false);
 });

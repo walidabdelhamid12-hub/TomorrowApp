@@ -1,3 +1,4 @@
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { AssetTypeIcon } from '@/features/finance/components/AssetTypeIcon';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
@@ -7,7 +8,6 @@ import { useEffect, useState } from 'react';
 import {
     Alert,
     Modal,
-    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -40,6 +40,7 @@ export function AssetEntriesModal({
   onDelete,
 }: AssetEntriesModalProps) {
   const { colors, spacing } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
   const metals = useCurrencyStore(s => s.metals);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -120,25 +121,10 @@ export function AssetEntriesModal({
 
     const remove = () => onDelete(asset.id, entry.id);
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Delete this entry?\n\n${message}`)) {
-        remove();
-        if (editingId === entry.id) cancelEditing();
-      }
-      return;
-    }
-
-    Alert.alert('Delete entry?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
+    confirm('Delete entry?', message, () => {
           remove();
           if (editingId === entry.id) cancelEditing();
-        },
-      },
-    ]);
+        }, 'Delete');
   };
 
   return (
@@ -148,6 +134,7 @@ export function AssetEntriesModal({
       animationType="slide"
       onRequestClose={onClose}
     >
+      {confirmation}
       <View style={styles.backdrop}>
         <View
           style={[

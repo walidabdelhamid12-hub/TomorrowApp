@@ -1,3 +1,4 @@
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { AccountDetails } from '@/features/finance/components/AccountDetails';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
@@ -7,7 +8,6 @@ import { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Platform,
     Pressable,
     StyleSheet,
     View,
@@ -38,6 +38,7 @@ const TYPE_LABELS: Record<AccountType, string> = {
 export default function AccountsScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
   const [detailAccountId, setDetailAccountId] = useState<string | null>(null);
   const ready = useLedgerHydrated();
 
@@ -116,21 +117,7 @@ export default function AccountsScreen() {
       if (!deleteAccount(account.id)) Alert.alert('Cannot delete account', 'This account has transfers or loan/debt dependencies. Keep it to preserve its accounting history.');
     };
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Delete "${account.name}"?\n\n${message}`)) {
-        performDelete();
-      }
-      return;
-    }
-
-    Alert.alert(`Delete "${account.name}"?`, message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: performDelete,
-      },
-    ]);
+    confirm(`Delete "${account.name}"?`, message, performDelete, 'Delete');
   };
 
   if (!ready) {
@@ -145,6 +132,7 @@ export default function AccountsScreen() {
 
   return (
     <Screen scroll>
+      {confirmation}
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -181,8 +169,8 @@ export default function AccountsScreen() {
           </AppText>
         </Card>
       ) : (
-        <Card padded={false}>
-          {accounts.map((account, index) => {
+        <View style={{ gap: 8 }}>
+          {accounts.map((account) => {
             const balance = getAccountBalance(
               account,
               transactions,
@@ -195,14 +183,11 @@ export default function AccountsScreen() {
                 style={[
                   styles.accountRow,
                   { padding: spacing.md },
-                  index > 0 && {
-                    borderTopWidth: StyleSheet.hairlineWidth,
-                    borderTopColor: colors.border,
-                  },
+                  { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: 16 },
                 ]}
               >
                 <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + account.name} onPress={() => setDetailAccountId(account.id)} style={[styles.accountInfo, { minHeight: 48 }]}>
-                  <View style={styles.accountTitleRow}>
+                  <View style={[styles.accountTitleRow, { gap: 8 }]}><Ionicons name={account.type === 'bank' ? 'business-outline' : account.type === 'credit_card' ? 'card-outline' : 'wallet-outline'} size={20} color={colors.primary} />
                     <AppText style={styles.accountName}>
                       {account.name}
                     </AppText>
@@ -226,7 +211,7 @@ export default function AccountsScreen() {
               </View>
             );
           })}
-        </Card>
+        </View>
       )}
 
       <AccountDetails accountId={detailAccountId} onClose={() => setDetailAccountId(null)} />
@@ -278,6 +263,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   accountName: {
+    flexShrink: 1,
     fontWeight: '600',
   },
   balance: {
