@@ -19,6 +19,7 @@ import { useTheme } from '@/theme';
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
 export type FinanceNetworkKey =
+  | 'debts'
   | 'accounts'
   | 'assets'
   | 'receivable'
@@ -35,6 +36,8 @@ interface TotalCardProps {
   accountsTotal: number;
   assetsTotal: number;
   loansRemainingTotal: number;
+  netWorth?: number;
+  loansInstallmentsRemainingTotal?: number;
   receivablesTotal: number;
   payablesTotal: number;
   missing?: unknown;
@@ -77,26 +80,7 @@ const NETWORK_ITEMS: NetworkItem[] = [
     background: '#F0EBFA',
     amount: 0,
   },
-  {
-    key: 'receivable',
-    label: 'Receivable',
-    description: 'Manage what others owe you',
-    icon: 'arrow-down-circle-outline',
-    color: '#209B70',
-    background: '#E7F5EF',
-    amount: 0,
-    sign: '+',
-  },
-  {
-    key: 'payable',
-    label: 'Payable',
-    description: 'Manage what you owe',
-    icon: 'arrow-up-circle-outline',
-    color: '#D65353',
-    background: '#FBECEC',
-    amount: 0,
-    sign: '-',
-  },
+  { key: 'debts', label: 'Debts', description: 'Receivables and payables', icon: 'people-outline', color: '#2878D0', background: '#EAF3FC' },
   {
     key: 'income',
     label: 'Income',
@@ -156,6 +140,7 @@ const NETWORK_ITEMS: NetworkItem[] = [
 type VisibilityState = Record<FinanceNetworkKey, boolean>;
 
 const INITIAL_VISIBILITY: VisibilityState = {
+  debts: true,
   accounts: true,
   assets: true,
   receivable: true,
@@ -267,6 +252,8 @@ export function TotalCard({
   accountsTotal,
   assetsTotal,
   loansRemainingTotal,
+  netWorth,
+  loansInstallmentsRemainingTotal,
   receivablesTotal,
   payablesTotal,
   missing,
@@ -414,6 +401,12 @@ export function TotalCard({
           </Pressable>
         </View>
 
+        <AppText variant="bodyStrong" style={{ marginTop: spacing.sm }}>
+          {'NET WORTH: ' + (amountsVisible ? formatAmount(netWorth ?? accountsTotal + assetsTotal + receivablesTotal - payablesTotal - loansRemainingTotal, baseCurrency) + ' ' + baseCurrency : hiddenValue)}
+        </AppText>
+        {loansInstallmentsRemainingTotal !== undefined && <AppText variant="caption" color="textSecondary">
+          {'Loan future contractual payments: ' + (amountsVisible ? formatAmount(loansInstallmentsRemainingTotal, baseCurrency) + ' ' + baseCurrency : hiddenValue)}
+        </AppText>}
         <View style={styles.networkDivider} />
 
         <View style={styles.shortcutsHeading}>
@@ -422,7 +415,7 @@ export function TotalCard({
           </AppText>
 
           <AppText style={styles.shortcutsCount}>
-            10 sections
+            {networkItems.length} sections
           </AppText>
         </View>
 
@@ -447,7 +440,7 @@ export function TotalCard({
             color="danger"
             style={{ marginTop: spacing.md }}
           >
-            {`${missingCount} item(s) could not be converted to ${baseCurrency}. Check Rates.`}
+            {`${missingCount} item(s) have unavailable valuation or principal allocation in ${baseCurrency}. Check Rates and loan details.`}
           </AppText>
         ) : null}
       </Card>

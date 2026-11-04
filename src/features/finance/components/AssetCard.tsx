@@ -30,7 +30,7 @@ export function AssetCard({ asset, categoryLabel, balanceText, valuationText, ba
           accessibilityHint="Open recorded asset movements"
           style={({ pressed }) => [styles.body, { opacity: pressed ? 0.7 : 1 }]}>
           <View style={styles.heading}>
-            <AssetTypeIcon category={asset.category} />
+            <AssetTypeIcon category={asset.category} currencyCode={'currencyCode' in asset ? asset.currencyCode : undefined} />
             <View style={styles.name}>
               <AppText variant="bodyStrong">{asset.name}</AppText>
               <AppText variant="label" color="textSecondary">{categoryLabel}</AppText>
@@ -57,8 +57,8 @@ export function AssetCard({ asset, categoryLabel, balanceText, valuationText, ba
 }
 
 const styles = StyleSheet.create({
-  content: { flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap', gap: 4 },
-  body: { minHeight: 48, flexGrow: 1, flexShrink: 1, flexBasis: 176, minWidth: 0 },
+  content: { gap: 0 },
+  body: { minHeight: 48, flexGrow: 1, flexShrink: 1, minWidth: 0 },
   heading: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48 },
   name: { flex: 1, minWidth: 0 },
   values: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },

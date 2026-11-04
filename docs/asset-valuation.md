@@ -1,6 +1,6 @@
 # Asset valuation rounding
 
-Monetary displays use one formatter: `formatMoney` delegates to `formatAmount`.
+Monetary displays use deterministic decimal integer rounding without native Intl: `formatMoney` delegates to `formatAmount`.
 Currency precision comes from the existing currency table (EGP 2; OMR/KWD 3).
 Decimal ties round away from zero, and displayed zero has no minus sign.
 `formatNumber` remains separate for physical quantities such as grams.
@@ -20,10 +20,10 @@ Examples: 2g of 21K at 7002.58 EGP/g is 12254.515, displayed as 12,254.52 EGP.
 Asset entries/balances, metal prices, exchange rates, and storage schemas are not
 rewritten. Existing quantity-balance precision is retained. The shared ledger
 `roundMoney` and `convertAmount` functions are unchanged, including account, loan,
-debt, and transaction calculation behavior. Summary formulas are unchanged; their
-asset inputs naturally use the corrected valuation. The asset subtotal also remains
+debt, and transaction posting precision. The approved principal-only Net Worth
+policy is documented in the consolidated review; asset inputs use corrected valuation. The asset subtotal also remains
 unquantized until display so it cannot reintroduce three-decimal double rounding;
-the existing net-worth quantization and all non-asset subtotal rules are unchanged.
+Net Worth also waits until currency display; non-asset subtotal rules are unchanged.
 Missing/invalid metal prices
 and unverified FX rates still produce unavailable valuations.
 
@@ -32,42 +32,6 @@ is still needed; these tests execute actual pure valuation/formatting code on No
 
 ## Compact asset presentation
 
-AssetsScreen, the reusable AssetRow, and FinanceHomeScreen's asset list share
-AssetCard and AssetTypeIcon. Gold and silver use the installed MaterialCommunityIcons
-`gold` bullion-bar vector glyph, tinted gold or silver for the current theme. No
-new dependency or large gradient/icon background is introduced.
-
-The outlined card uses 8 dp padding, 4 dp internal gaps, compact category/value
-labels, and wrapping balance/valuation columns instead of the previous larger
-padding/vertical gaps. There are no fixed card heights or text line caps. Movements,
-Edit, Delete, and the movement-summary target retain at least 48 dp touch areas;
-labeled action buttons wrap at large font sizes. Labels, surfaces, borders, and action colors
-support the existing light/dark palettes. The body/chevron opens Movements; separate compact green Edit and red Delete
-buttons retain visible labels, 48 dp targets, and the amount privacy toggle.
-
-UI tests exercise actual component elements and handlers with mocked native
-surfaces, including the active Assets screen's modal/deletion bindings. They do
-not measure native layout or font loading. Check Expo Go on Android for bullion
-font loading, light/dark colors, long names/large values, font scaling, and touch
-targets. Existing asset save/delete/persistence flows are not rewritten.
-
-## Shared Finance actions
-
-FinanceActionButtons restores the labeled Accounts design from commit ad7d5c6:
-rounded rectangles (9 dp radius), 9 dp horizontal / 6 dp vertical padding,
-5 dp icon/label gap, and the original light green/red surfaces. Targets are
-at least 48 dp; matching borders and dark-theme semantic tints preserve contrast.
-The Delete label uses a darker red on the original light red surface for readability.
-Accounts (both lists), Assets (all shared-card consumers), asset movements,
-categories (both editors), loan payment history, and debt/payment controls
-reuse existing edit/delete handlers. Default categories still have no Delete
-where that action was previously absent. No loan-parent actions are added.
-Transactions/transfers retain the ellipsis menu and its current-state ownership
-checks; its Edit/Delete choices use the same labeled buttons. Protected rows
-still expose only safe linked-record navigation. Confirmations, ledger and
-payment operations, calculations, and persistence are unchanged.
-
-Regression tests cover visible labels, icons, colors in both themes, targets,
-optional Delete, account callbacks, asset movement navigation, independent
-edit/delete actions and confirmation. Native Android checks remain required
-for wrapping on narrow screens/large fonts, button layout, and TalkBack focus.
+See [the consolidated review](finance-3-1-consolidated-review.md) for the current
+Rates symbol reuse, compact labeled controls, accounting policy, regression coverage
+and physical Android checklist.

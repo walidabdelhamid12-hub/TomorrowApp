@@ -1,3 +1,5 @@
+import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
+import { AssetTypeIcon } from '@/features/finance/components/AssetTypeIcon';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -38,6 +40,7 @@ export function AssetEntriesModal({
   onDelete,
 }: AssetEntriesModalProps) {
   const { colors, spacing } = useTheme();
+  const metals = useCurrencyStore(s => s.metals);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
@@ -157,8 +160,8 @@ export function AssetEntriesModal({
         >
           <View style={styles.header}>
             <View style={styles.flex}>
-              <AppText variant="h3">Asset entries</AppText>
-              <AppText color="textSecondary" numberOfLines={1}>
+              <AssetTypeIcon category={asset.category} currencyCode={'currencyCode' in asset ? asset.currencyCode : undefined} /><AppText variant="h3">Asset movements</AppText>
+              <AppText color="textSecondary">
                 {asset.name}
               </AppText>
             </View>
@@ -168,6 +171,9 @@ export function AssetEntriesModal({
             </Pressable>
           </View>
 
+          {(asset.category === 'gold' || asset.category === 'silver') && <AppText variant="caption" color="textSecondary">
+            {asset.category === 'gold' ? 'Gold reference: 24K · ' + (metals.gold24PerGram ?? 'Not set') : 'Silver reference (purity unspecified): ' + (metals.silverPerGram ?? 'Not set')} EGP per 1 gram. Valuation uses full source precision.
+          </AppText>}
           <ScrollView
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.list}
@@ -341,8 +347,8 @@ const styles = StyleSheet.create({
     gap: 9,
   },
   entryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     gap: 12,
   },
   input: {

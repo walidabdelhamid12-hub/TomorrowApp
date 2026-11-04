@@ -1,3 +1,5 @@
+import { FinanceDetailsModal } from '@/features/finance/components/FinanceDetailsModal';
+import { loanDetailLines } from '@/features/finance/utils/detailLines';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -24,7 +26,7 @@ import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useL
 import type { Loan, NewLoanInput } from '@/features/finance/types/finance';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { parseAmount } from '@/features/finance/utils/money';
-import { getLoanPaidAmount, getLoanRemainingAmount, getLoanTotal, roundMoney } from '@/features/finance/utils/finance';
+import { getLoanPaidAmount, getLoanRemainingAmount, getLoanRemainingPrincipal, getLoanTotal, roundMoney } from '@/features/finance/utils/finance';
 import { resolvePayment } from '@/features/finance/utils/paymentTransactionOwnership';
 import { focusLinkedRecords } from '@/features/finance/utils/transactionNavigation';
 import { moduleColors, useTheme } from '@/theme';
@@ -54,6 +56,8 @@ export default function LoansScreen() {
   const accounts = useLedgerStore(s => s.accounts);
   const categories = useLedgerStore(s => s.categories);
 
+  const [detailLoanId, setDetailLoanId] = useState<string | null>(null);
+  const detailLoan = loans.filter(l => l.id === detailLoanId).length === 1 ? loans.find(l => l.id === detailLoanId) : undefined;
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [loanName, setLoanName] = useState('');
   const [lender, setLender] = useState('');
@@ -274,6 +278,7 @@ export default function LoansScreen() {
 
   return (
     <Screen scroll>
+      <FinanceDetailsModal title={detailLoanId === null ? undefined : detailLoan?.name ?? 'Loan unavailable'} onClose={() => setDetailLoanId(null)} lines={detailLoan ? loanDetailLines(detailLoan) : ['No unique loan is available.']} />
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.back}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
         <View style={{ flex: 1 }}><AppText variant="h1">Loans</AppText><AppText variant="caption" color="textSecondary">{loans.length} loans</AppText></View>
@@ -293,23 +298,26 @@ export default function LoansScreen() {
           const paid = getLoanPaidAmount(loan);
           const due = remaining(loan);
           return <Card key={loan.id} style={styles.loanCard}>
-            <View style={styles.row}><View style={{ flex: 1 }}><AppText variant="h2">{loan.name}</AppText><AppText color="textSecondary" variant="caption">{loan.lenderName} · {loan.currencyCode}</AppText></View>
+            <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + loan.name} onPress={() => setDetailLoanId(loan.id)} style={{ minHeight: 48, gap: 8 }}>
+            <View style={styles.row}><View style={{ flex: 1 }}><AppText variant="bodyStrong">{loan.name}</AppText><AppText color="textSecondary" variant="caption">{loan.lenderName} · {loan.currencyCode}</AppText></View>
               <AppText style={{ color: loan.status === 'active' || !loan.status ? colors.warning : colors.success }}>{loan.status === 'settled' ? 'Settled' : loan.status === 'completed' ? 'Completed' : loan.status === 'closed' ? 'Closed without payment' : 'Active'}</AppText>
             </View>
             <View style={styles.metrics}>
-              <View><AppText variant="caption" color="textSecondary">Original principal</AppText><AppText>{formatAmount(loan.principalAmount ?? 0, loan.currencyCode)} {loan.currencyCode}</AppText></View>
-              <View><AppText variant="caption" color="textSecondary">Contract total</AppText><AppText>{formatAmount(getLoanTotal(loan), loan.currencyCode)} {loan.currencyCode}</AppText></View>
-              <View><AppText variant="caption" color="textSecondary">Remaining</AppText><AppText style={styles.remaining}>{formatAmount(due, loan.currencyCode)} {loan.currencyCode}</AppText></View>
+              <View><AppText variant="caption" color="textSecondary">Original principal</AppText><AppText>{(loan.receivedAmount ?? loan.principalAmount) === undefined ? 'Unknown' : formatAmount((loan.receivedAmount ?? loan.principalAmount)!, loan.currencyCode) + ' ' + loan.currencyCode}</AppText></View>
+              <View><AppText variant="caption" color="textSecondary">Contractual total</AppText><AppText>{formatAmount(getLoanTotal(loan), loan.currencyCode)} {loan.currencyCode}</AppText></View>
+              <View><AppText variant="caption" color="textSecondary">Remaining contractual payments</AppText><AppText style={styles.remaining}>{formatAmount(due, loan.currencyCode)} {loan.currencyCode}</AppText></View>
             </View>
             <AppText variant="caption" color="textSecondary">Paid: {formatAmount(paid, loan.currencyCode)} {loan.currencyCode} · Installment: {formatAmount(loan.monthlyInstallment, loan.currencyCode)} {loan.currencyCode}</AppText>
-            <AppText variant="caption" color="textSecondary">Payments recorded: {loan.payments.length} · Scheduled installments remaining: {loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed' ? 0 : Math.max(0, loan.numberOfInstallments - loan.payments.length)} · First due {loan.firstDueDate}</AppText>
+            <AppText variant="caption" color="textSecondary">Payments recorded: {loan.payments.length} · Remaining installment count (equivalent): {loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed' ? 0 : loan.monthlyInstallment > 0 ? Math.ceil(due / loan.monthlyInstallment) : 'Unknown'} · First due {loan.firstDueDate}</AppText>
+            <AppText variant="caption">Remaining principal: {getLoanRemainingPrincipal(loan) === null ? 'Unknown — allocation required' : formatAmount(getLoanRemainingPrincipal(loan)!, loan.currencyCode) + ' ' + loan.currencyCode}</AppText>
+            </Pressable>
             {loan.receivedAt
               ? <AppText color="success" variant="caption">Received: {formatAmount(loan.receivedAmount ?? loan.principalAmount ?? 0, loan.currencyCode)} {loan.currencyCode} on {loan.receivedAt}{loan.receiptTransactionId ? ' · Posted to account' : ' · Custom method'}</AppText>
               : <View style={styles.actions}><AppButton title="Confirm loan received" fullWidth={false} variant="outline" onPress={() => openReceiveLoan(loan)} /></View>}
             {loan.status !== 'settled' && loan.status !== 'completed' && loan.status !== 'closed' && <View style={styles.actions}>
-              <AppButton title="Record payment" fullWidth={false} onPress={() => openPayment(loan)} />
-              <AppButton title="Early settlement" fullWidth={false} variant="outline" onPress={() => openPayment(loan, true)} />
-              <AppButton title="Close without payment" fullWidth={false} variant="danger" onPress={() => { setClosingLoan(loan); setClosureReason(''); }} />
+              <AppButton leftIcon={<Ionicons name="card-outline" size={18} color={colors.onPrimary} />} title="Record payment" fullWidth={false} onPress={() => openPayment(loan)} />
+              <AppButton leftIcon={<Ionicons name="checkmark-done-outline" size={18} color={colors.info} />} title="Early settlement" fullWidth={false} variant="outline" onPress={() => openPayment(loan, true)} />
+              <AppButton leftIcon={<Ionicons name="alert-circle-outline" size={18} color={colors.onPrimary} />} title="Close without payment" fullWidth={false} variant="danger" onPress={() => { setClosingLoan(loan); setClosureReason(''); }} />
             </View>}
             {loan.status === 'closed' && <AppText color="warning">Closed without payment on {loan.closureDate}: {loan.closureReason}</AppText>}
             {loan.status === 'settled' && (() => {
@@ -504,8 +512,9 @@ export default function LoansScreen() {
             <ScrollView style={styles.paymentScroll} contentContainerStyle={styles.paymentScrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator>
               <Card style={styles.modal}>
                 <AppText variant="h2">{editingPayment ? 'Edit payment' : settlementMode ? 'Early settlement' : 'Record installment'}</AppText>
-                <AppText color="textSecondary">Outstanding: {selectedLoan ? formatAmount(remaining(selectedLoan), selectedLoan.currencyCode) + ' ' + selectedLoan.currencyCode : ''}</AppText>
-                <Field label={`Total payment (${selectedLoan?.currencyCode ?? ''})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" />
+                <AppText color="textSecondary">Remaining contractual payments: {selectedLoan ? formatAmount(remaining(selectedLoan), selectedLoan.currencyCode) + ' ' + selectedLoan.currencyCode : ''}</AppText>
+                {settlementMode && <AppText variant="caption" color="warning">Default: remaining contractual balance, not a lender settlement quote. Enter your agreed amount; fees are separate.</AppText>}
+                <Field label={`Repayment amount, excluding fee (${selectedLoan?.currencyCode ?? ''})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" />
                 <Field label={`Late payment fee (${selectedLoan?.currencyCode ?? ''}) — optional`} value={latePaymentFee} onChangeText={setLatePaymentFee} keyboardType="decimal-pad" />
                 <AppText variant="caption" color="textSecondary">The late fee is added to the amount deducted from your account, but does not reduce the remaining loan balance.</AppText>
                 <DateField label="Payment date" value={paymentDate} onChange={setPaymentDate} />
@@ -536,12 +545,12 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 12 },
   back: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   loanCard: { marginTop: 9, gap: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  metrics: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  metrics: { gap: 6 },
   remaining: { fontWeight: '700' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 7 },
   history: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#9995', paddingTop: 10, gap: 8 },
-  paymentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
+  paymentRow: { flexDirection: 'column', alignItems: 'stretch', paddingVertical: 6, gap: 8 },
   overlay: { flex: 1, backgroundColor: '#0008', justifyContent: 'center', alignItems: 'center', padding: 12 },
   formScroll: { flexShrink: 1, minHeight: 0 },
   formFields: { gap: 8, paddingVertical: 6 },

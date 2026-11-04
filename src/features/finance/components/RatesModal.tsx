@@ -1,3 +1,4 @@
+import { AssetTypeIcon } from '@/features/finance/components/AssetTypeIcon';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
@@ -36,7 +37,7 @@ const showRate = (value: number): string =>
   String(Number(value.toFixed(4)));
 
 const showMetal = (value: number | null): string =>
-  value === null ? '' : String(Number(value.toFixed(2)));
+  value === null ? '' : String(value);
 
 function isValidRate(value: number | undefined): value is number {
   return (
@@ -724,13 +725,13 @@ export function RatesModal({
                 marginBottom: spacing.xs * 0.56,
               }}
             >
-              <AppText style={{ fontSize: 11 }}>🥇</AppText>
+              <AssetTypeIcon category="gold" />
               <AppText
                 variant="label"
                 color="text"
-                style={{ fontWeight: '600' }}
+                style={{ fontWeight: '600', flexShrink: 1 }}
               >
-                Gold 24K
+                Gold 24K · 1 gram
               </AppText>
             </View>
 
@@ -760,13 +761,13 @@ export function RatesModal({
                 marginBottom: spacing.xs * 0.8,
               }}
             >
-              <AppText style={{ fontSize: 16 }}>🥈</AppText>
+              <AssetTypeIcon category="silver" />
               <AppText
                 variant="label"
                 color="text"
                 style={{ fontWeight: '600' }}
               >
-                Silver
+                Silver · 1 gram
               </AppText>
             </View>
 
@@ -789,6 +790,7 @@ export function RatesModal({
 
       </View>
 
+      <AppText variant="caption" color="textSecondary">Metal prices retain full source precision; valuation uses that full price. Silver reference purity is unspecified by the source. Prices are per gram in {baseCurrency}.</AppText>
       {error ? (
         <AppText variant="caption" color="danger">
           {error}

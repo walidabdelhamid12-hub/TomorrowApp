@@ -1,3 +1,4 @@
+import { AccountDetails } from '@/features/finance/components/AccountDetails';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -37,6 +38,7 @@ const TYPE_LABELS: Record<AccountType, string> = {
 export default function AccountsScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
+  const [detailAccountId, setDetailAccountId] = useState<string | null>(null);
   const ready = useLedgerHydrated();
 
   const accounts = useLedgerStore((state) => state.accounts);
@@ -199,7 +201,7 @@ export default function AccountsScreen() {
                   },
                 ]}
               >
-                <View style={styles.accountInfo}>
+                <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + account.name} onPress={() => setDetailAccountId(account.id)} style={[styles.accountInfo, { minHeight: 48 }]}>
                   <View style={styles.accountTitleRow}>
                     <AppText style={styles.accountName}>
                       {account.name}
@@ -218,7 +220,7 @@ export default function AccountsScreen() {
                   >
                     {formatAmount(balance, account.currencyCode)} {account.currencyCode}
                   </AppText>
-                </View>
+                </Pressable>
 
                 <FinanceActionButtons label={account.name} onEdit={() => openEdit(account)} onDelete={() => confirmDelete(account)} />
               </View>
@@ -227,6 +229,7 @@ export default function AccountsScreen() {
         </Card>
       )}
 
+      <AccountDetails accountId={detailAccountId} onClose={() => setDetailAccountId(null)} />
       <AddAccountModal
         visible={modalVisible}
         account={editingAccount}
@@ -261,9 +264,9 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   accountRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 0,
   },
   accountInfo: {
     flex: 1,

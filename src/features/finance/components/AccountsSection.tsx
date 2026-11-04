@@ -1,3 +1,4 @@
+import { AccountDetails } from '@/features/finance/components/AccountDetails';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -37,6 +38,7 @@ export function AccountsSection({
   amountsVisible,
 }: AccountsSectionProps) {
   const { colors, spacing } = useTheme();
+  const [detailAccountId, setDetailAccountId] = useState<string | null>(null);
 
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -63,6 +65,7 @@ export function AccountsSection({
 
   return (
     <View style={{ marginTop: spacing.xl }}>
+      <AccountDetails accountId={detailAccountId} onClose={() => setDetailAccountId(null)} amountsVisible={amountsVisible} />
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
@@ -123,7 +126,8 @@ export function AccountsSection({
                       },
                     ]}
                   >
-                    <View style={styles.flex}>
+                    <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + account.name} onPress={() => setDetailAccountId(account.id)} style={[styles.flex, { minHeight: 48 }]}>
+
                       <AppText style={styles.name}>
                         {account.name}
                       </AppText>
@@ -131,18 +135,17 @@ export function AccountsSection({
                       <AppText variant="caption" color="textSecondary">
                         {`${TYPE_LABELS[account.type]} · ${account.currencyCode}`}
                       </AppText>
-                    </View>
 
                     <AppText
                       {...(negative ? ({ color: 'danger' } as const) : {})}
                       style={styles.balance}
-                      numberOfLines={1}
                     >
                       {amountsVisible
-                        ? `${formatAmount(balance)} ${account.currencyCode}`
+                        ? `${formatAmount(balance, account.currencyCode)} ${account.currencyCode}`
                         : '••••••'}
                     </AppText>
 
+                    </Pressable>
                     <FinanceActionButtons label={account.name} onEdit={() => onEdit(account)} onDelete={() => onDelete(account)} />
                   </View>
                 );
@@ -192,8 +195,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'stretch',
   },
   name: {
     fontWeight: '600',

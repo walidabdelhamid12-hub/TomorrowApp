@@ -73,8 +73,7 @@ const NETWORK_ITEMS: {
 }[] = [
   { key: 'accounts', title: 'Accounts' },
   { key: 'assets', title: 'Assets' },
-  { key: 'receivable', title: 'Receivable' },
-  { key: 'payable', title: 'Payable' },
+  { key: 'debts', title: 'Debts' },
   { key: 'income', title: 'Income' },
   { key: 'expenses', title: 'Expenses' },
   { key: 'loans', title: 'Loans' },
@@ -227,6 +226,10 @@ export default function FinanceHomeScreen() {
 
       case 'accounts':
         router.push('/finance/accounts');
+        break;
+
+      case 'debts':
+        router.push('/finance/debts');
         break;
 
       case 'receivable':
@@ -560,6 +563,8 @@ export default function FinanceHomeScreen() {
         accountsTotal={summary.accountsTotal}
         assetsTotal={summary.assetsTotal}
         loansRemainingTotal={summary.loansRemainingTotal}
+        netWorth={summary.netWorth}
+        loansInstallmentsRemainingTotal={summary.loansInstallmentsRemainingTotal}
         receivablesTotal={summary.receivablesTotal}
         payablesTotal={summary.payablesTotal}
         chequesTotal={summary.chequesTotal}

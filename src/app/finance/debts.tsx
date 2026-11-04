@@ -1,3 +1,5 @@
+import { FinanceDetailsModal } from '@/features/finance/components/FinanceDetailsModal';
+import { debtDetailLines } from '@/features/finance/utils/detailLines';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { editLinkedPayment, postLinkedPayment, reverseLinkedPayment } from '@/features/finance/store/paymentOperations';
 
@@ -9,6 +11,7 @@ import {
     Alert,
     Modal,
     Platform,
+    PanResponder,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -152,6 +155,12 @@ export default function DebtsScreen() {
     payment: DebtPayment;
   } | null>(null);
 
+  const [detailDebtId, setDetailDebtId] = useState<string | null>(null);
+  const detailDebt = debts.filter(d => d.id === detailDebtId).length === 1 ? debts.find(d => d.id === detailDebtId) : undefined;
+  const swipe = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+    onPanResponderRelease: (_, g) => { if (Math.abs(g.dx) > 60 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5) setActiveTab(g.dx < 0 ? 'payable' : 'receivable'); },
+  }), []);
   const [expandedDebtId, setExpandedDebtId] = useState<string | null>(null);
   const linkedDebt = params.debtId === undefined ? undefined : focusLinkedRecords(debts, params.debtId)[0];
   const linkedDebtId = linkedDebt?.id;
@@ -518,6 +527,7 @@ export default function DebtsScreen() {
 
   return (
     <Screen scroll>
+      <View {...swipe.panHandlers}>
       {params.debtId !== undefined && (
         <Card variant="filled">
           <AppText>{visibleDebts.length ? 'Showing the debt linked to your transaction.' : 'The linked debt is unavailable in this tab. No other debt has been selected.'}</AppText>
@@ -544,7 +554,7 @@ export default function DebtsScreen() {
 
       <View style={styles.tabs}>
         <Pressable
-          onPress={() => setActiveTab('receivable')}
+          accessibilityRole="tab" accessibilityState={{ selected: activeTab === 'receivable' }} onPress={() => setActiveTab('receivable')}
           style={[
             styles.tab,
             activeTab === 'receivable' && styles.receivableTabActive,
@@ -566,7 +576,7 @@ export default function DebtsScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => setActiveTab('payable')}
+          accessibilityRole="tab" accessibilityState={{ selected: activeTab === 'payable' }} onPress={() => setActiveTab('payable')}
           style={[
             styles.tab,
             activeTab === 'payable' && styles.payableTabActive,
@@ -704,8 +714,9 @@ export default function DebtsScreen() {
             <Card key={debt.id} style={styles.debtCard}>
               <Pressable
                 onPress={() =>
-                  setExpandedDebtId(expanded ? null : debt.id)
+                  { setExpandedDebtId(expanded ? null : debt.id); setDetailDebtId(debt.id); }
                 }
+                accessibilityRole="button" accessibilityLabel={'Details for ' + debt.personName}
                 style={styles.debtMain}
               >
                 <View style={styles.debtTopRow}>
@@ -902,6 +913,8 @@ export default function DebtsScreen() {
         onClose={closeEditPayment}
         onSave={handleSavePaymentEdit}
       />
+      <FinanceDetailsModal title={detailDebtId === null ? undefined : detailDebt?.personName ?? 'Debt unavailable'} onClose={() => setDetailDebtId(null)} lines={detailDebt ? debtDetailLines(detailDebt) : ['No unique debt is available.']} />
+      </View>
     </Screen>
   );
 }
@@ -1783,9 +1796,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   paymentRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     gap: 8,
     paddingVertical: 7,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1810,6 +1822,8 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     gap: 9,
   },

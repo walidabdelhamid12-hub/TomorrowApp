@@ -22,20 +22,21 @@ export function FinanceActionButtons({ label, onEdit, onDelete }: FinanceActionB
     <View style={styles.actions}>
       {actions.map(action => (
         <Pressable key={action.title} accessibilityRole="button" accessibilityLabel={action.title + ' ' + label}
-          onPress={action.onPress} style={({ pressed }) => [styles.button, {
-            backgroundColor: action.background, borderColor: action.tint + '55', opacity: pressed ? 0.65 : 1,
+          onPress={action.onPress} style={({ pressed }) => [styles.target, { opacity: pressed ? 0.65 : 1 }]}><View style={[styles.button, {
+            backgroundColor: action.background, borderColor: action.tint + '55',
           }]}>
-          <Ionicons name={action.icon} size={17} color={action.tint} accessible={false} />
+          <Ionicons name={action.icon} size={13} color={action.tint} accessible={false} />
           <AppText variant="caption" color={action.tint} style={styles.label}>{action.title}</AppText>
-        </Pressable>
+        </View></Pressable>
       ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, maxWidth: '100%', flexShrink: 1 },
-  button: { minWidth: 48, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 9, borderWidth: 1, maxWidth: '100%' },
-  label: { fontSize: 12, fontWeight: '600', flexShrink: 1 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 0, justifyContent: 'flex-end', alignSelf: 'flex-end', maxWidth: '100%', flexShrink: 1 },
+  target: { minWidth: 48, minHeight: 48, paddingHorizontal: 3, justifyContent: 'center', maxWidth: '100%' },
+  button: { minHeight: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 3, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, borderWidth: 1, maxWidth: '100%' },
+  label: { fontSize: 11, fontWeight: '600', flexShrink: 1 },
 });
