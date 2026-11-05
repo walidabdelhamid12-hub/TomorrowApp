@@ -319,3 +319,100 @@ test('an exclusive job cannot return its optimistic success when its own write a
   }), error => error.operation === 'write' && error.uncertain);
   assert.deepEqual(JSON.parse(native.data.get(F)).state.paymentJournal, marker);
 });
+
+function holdWrites(key) {
+  const gates = [deferred(), deferred(), deferred()], original = native.setItem;
+  let started = 0;
+  native.setItem = async (name, value) => {
+    if (name === key) await gates[started++].promise;
+    await original(name, value);
+  };
+  return { gates, started: () => started, release: () => gates.forEach(gate => gate.resolve()) };
+}
+const trackedSnapshot = (key, generationId) => JSON.stringify({ version: 2,
+  state: { ...state(key), paymentJournal: { schemaVersion: 1, generationId } } });
+const observe = promise => promise.then(value => ({ status: 'fulfilled', value }), error => ({ status: 'rejected', error }));
+
+for (const key of [F, L]) {
+  for (const failSecond of [false, true]) {
+    test(`${key} mixed guarded/direct barrier waits for the captured second ${failSecond ? 'failed' : 'successful'} acknowledgement`, async () => {
+      const s = await actualSession(), held = holdWrites(key);
+      try {
+        const store = key === F ? s.finance : s.ledger;
+        store.setState({ paymentJournal: marker });
+        const second = observe(s.runtime.persistence.storage.setItem(key, trackedSnapshot(key, 'second')));
+        let settled = false;
+        const barrier = observe(s.runtime.persistence.flush(key)).then(result => { settled = true; return result; });
+        await tick(); assert.equal(held.started(), 1); assert.equal(settled, false);
+        held.gates[0].resolve(); await tick();
+        assert.equal(held.started(), 2);
+        assert.equal(JSON.parse(native.data.get(key)).state.paymentJournal.generationId, 'retained');
+        assert.equal(settled, false, 'a captured queued write must not be hidden by the first mutation acknowledgement');
+        if (failSecond) held.gates[1].reject(new Error('Second acknowledgement failed')); else held.gates[1].resolve();
+        const result = await barrier; const direct = await second;
+        assert.equal(result.status, failSecond ? 'rejected' : 'fulfilled');
+        assert.equal(direct.status, result.status);
+        if (failSecond) {
+          assert.equal(result.error.operation, 'write');
+          await assert.rejects(s.runtime.persistence.flush(key));
+        } else assert.equal(JSON.parse(native.data.get(key)).state.paymentJournal.generationId, 'second');
+      } finally { held.release(); }
+    });
+  }
+
+  for (const failLate of [false, true]) {
+    test(`${key} writes queued after flush invocation do not extend its prefix when the later write ${failLate ? 'fails' : 'succeeds'}`, async () => {
+      const s = await actualSession(), held = holdWrites(key);
+      try {
+        (key === F ? s.finance : s.ledger).setState({ paymentJournal: marker });
+        const second = observe(s.runtime.persistence.storage.setItem(key, trackedSnapshot(key, 'second')));
+        let capturedDone = false;
+        const captured = observe(s.runtime.persistence.flush(key)).then(result => { capturedDone = true; return result; });
+        // This write is queued after the captured barrier but before either
+        // earlier acknowledgement; a dynamic re-read of the tail is incorrect.
+        const late = observe(s.runtime.persistence.storage.setItem(key, trackedSnapshot(key, 'late')));
+        let laterDone = false;
+        const includingLate = observe(s.runtime.persistence.flush(key)).then(result => { laterDone = true; return result; });
+        await tick(); held.gates[0].resolve(); await tick();
+        assert.equal(capturedDone, false); assert.equal(laterDone, false);
+        held.gates[1].resolve();
+        const prefixResult = await captured; await second; await tick();
+        assert.equal(prefixResult.status, 'fulfilled');
+        assert.equal(held.started(), 3); assert.equal(laterDone, false);
+        assert.equal(JSON.parse(native.data.get(key)).state.paymentJournal.generationId, 'second');
+        if (failLate) held.gates[2].reject(new Error('Uncaptured later write failed')); else held.gates[2].resolve();
+        const laterResult = await includingLate; await late;
+        assert.equal(laterResult.status, failLate ? 'rejected' : 'fulfilled');
+        assert.equal(prefixResult.status, 'fulfilled');
+        if (failLate) await assert.rejects(s.runtime.persistence.flush(key));
+        else assert.equal(JSON.parse(native.data.get(key)).state.paymentJournal.generationId, 'late');
+      } finally { held.release(); }
+    });
+  }
+
+  for (const failSecond of [false, true]) {
+    test(`${key} exclusive gate includes mixed tracked writes and ${failSecond ? 'rejects failure' : 'acknowledges success'} before releasing the next job`, async () => {
+      const s = await actualSession(), held = holdWrites(key), events = [];
+      try {
+        let second;
+        const first = observe(s.runtime.exclusive(() => {
+          events.push('first');
+          (key === F ? s.finance : s.ledger).setState({ paymentJournal: marker });
+          second = observe(s.runtime.persistence.storage.setItem(key, trackedSnapshot(key, 'second')));
+          return 'acknowledged';
+        }));
+        const next = observe(s.runtime.exclusive(() => { events.push('next'); return 'next'; }));
+        let settled = false; const firstResult = first.then(result => { settled = true; return result; });
+        await tick(); held.gates[0].resolve(); await tick();
+        assert.equal(held.started(), 2); assert.equal(settled, false); assert.deepEqual(events, ['first']);
+        if (failSecond) held.gates[1].reject(new Error('Second acknowledgement failed')); else held.gates[1].resolve();
+        const result = await firstResult; await second; const following = await next;
+        assert.equal(result.status, failSecond ? 'rejected' : 'fulfilled');
+        assert.equal(following.status, failSecond ? 'rejected' : 'fulfilled');
+        assert.deepEqual(events, failSecond ? ['first'] : ['first', 'next']);
+        if (failSecond) assert.equal(result.error.operation, 'write');
+        else assert.equal(result.value, 'acknowledged');
+      } finally { held.release(); }
+    });
+  }
+}

@@ -39,7 +39,15 @@ export class PaymentOperationRuntime {
     this.persistence = {
       ...tracked,
       flush: key => {
-        try { knownKey(key); return this.acknowledgements.get(key) ?? tracked.flush(key); }
+        try {
+          knownKey(key);
+          const mutation = this.acknowledgements.get(key);
+          const queuedPrefix = tracked.flush(key);
+          // Capture both now: the mutation can still be notifying subscribers,
+          // while the adapter may already contain additional same-key writes.
+          // Never re-read the queue after awaiting and include later deliveries.
+          return mutation ? Promise.all([mutation, queuedPrefix]).then(() => {}) : queuedPrefix;
+        }
         catch (error) { return Promise.reject(error); }
       },
       storage: {
