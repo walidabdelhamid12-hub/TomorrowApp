@@ -12,7 +12,8 @@ export function reservedPaymentAvailable(receipt: PaymentOperationReceipt, finan
   return ![...finance.debts, ...finance.loans].some(parent => occupied(parent.id)
     || parent.payments.some(payment => occupied(payment.id) || occupied(payment.ledgerTransactionId)))
     && !finance.loans.some(loan => occupied(loan.receiptTransactionId))
-    && !ledger.transactions.some(tx => occupied(tx.id) || occupied(tx.linkedPaymentId))
+    && !ledger.transactions.some(tx => occupied(tx.id) || occupied(tx.linkedPaymentId)
+      || (receipt.ledgerTransactionId !== undefined && tx.relatedTransactionId === receipt.ledgerTransactionId))
     && ![...ledger.accounts, ...ledger.categories, ...ledger.transfers].some(row => occupied(row.id));
 }
 
@@ -56,5 +57,6 @@ export function reservedPaymentMatches(receipt: PaymentOperationReceipt, finance
     && !allPayments.some(item => item.id === txId || item.ledgerTransactionId === txId)
     && !finance.loans.some(loan => loan.receiptTransactionId === txId)
     && ![...finance.debts, ...finance.loans, ...ledger.accounts, ...ledger.categories, ...ledger.transfers].some(row => row.id === txId)
-    && !ledger.transactions.some(tx => tx.id === txId || tx.linkedPaymentId === txId);
+    && !ledger.transactions.some(tx => tx.id === txId || tx.linkedPaymentId === txId
+      || tx.relatedTransactionId === txId);
 }

@@ -1061,3 +1061,45 @@ test('reserved Ledger insertion rejects a payment ID that acquired competing tra
   ledger.setState(s => ({ transactions: [...s.transactions, { ...s.transactions[0], id: r.paymentId }] }));
   rejectReserved(r, true);
 });
+
+for (const kind of ['debt', 'loan']) {
+  const orphanRefund = relatedTransactionId => ({ ...stamps, id: 'orphan-refund', type: 'expense',
+    entryType: 'refund', amount: 5, accountId: 'a', currencyCode: 'USD', categoryId: 'out', date,
+    relatedTransactionId });
+  test('reserved ' + kind + ' rejects orphan refund reference before Finance insertion without mutation', () => {
+    const r = reservation(kind);
+    ledger.setState(s => ({ transactions: [...s.transactions, orphanRefund(r.ledgerTransactionId)] }));
+    const refund = ledger.getState().transactions.find(t => t.id === 'orphan-refund');
+    const beforeBalance = balance('a');
+    rejectReserved(r);
+    assert.equal(balance('a'), beforeBalance);
+    assert.strictEqual(ledger.getState().transactions.find(t => t.id === 'orphan-refund'), refund);
+    assert.equal(ledger.getState().transactions.some(t => t.id === r.ledgerTransactionId), false);
+  });
+  test('reserved ' + kind + ' rejects orphan refund reference introduced before Ledger insertion without mutation', () => {
+    const r = reservation(kind); assert.equal(insertReserved(r), r.paymentId);
+    ledger.setState(s => ({ transactions: [...s.transactions, orphanRefund(r.ledgerTransactionId)] }));
+    const refund = ledger.getState().transactions.find(t => t.id === 'orphan-refund');
+    const beforeBalance = balance('a');
+    rejectReserved(r, true);
+    assert.equal(balance('a'), beforeBalance);
+    assert.strictEqual(ledger.getState().transactions.find(t => t.id === 'orphan-refund'), refund);
+    const parent = (kind === 'debt' ? finance.getState().debts : finance.getState().loans)[0];
+    assert.equal(parent.payments.filter(p => p.id === r.paymentId).length, 1);
+    assert.equal(parent.payments.find(p => p.id === r.paymentId).ledgerTransactionId, undefined);
+  });
+  test('reserved ' + kind + ' allows unrelated refund references and remains reversible', () => {
+    const r = reservation(kind);
+    ledger.setState(s => ({ transactions: [...s.transactions, orphanRefund('unrelated-missing-transaction')] }));
+    const refund = ledger.getState().transactions.find(t => t.id === 'orphan-refund');
+    const beforeBalance = balance('a');
+    assert.equal(insertReserved(r), r.paymentId);
+    assert.equal(ledger.getState().addReservedPaymentTransaction(r), r.ledgerTransactionId);
+    const state = finance.getState();
+    assert.equal(kind === 'debt' ? state.linkDebtPaymentTransaction(kind, r.paymentId, r.ledgerTransactionId)
+      : state.updateLoanPayment(kind, r.paymentId, { ledgerTransactionId: r.ledgerTransactionId }), true);
+    assert.equal(reverseLinkedPayment({ entityType: kind, entityId: kind, paymentId: r.paymentId }).ok, true);
+    assert.equal(balance('a'), beforeBalance);
+    assert.strictEqual(ledger.getState().transactions.find(t => t.id === 'orphan-refund'), refund);
+  });
+}
