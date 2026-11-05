@@ -8,7 +8,7 @@ const ts = require('typescript');
 const React = require('react');
 const root = path.resolve(__dirname, '..');
 const load = Module._load;
-let states, cursor, finance, currency, alerts, calls, theme, ledger, effects, params;
+let states, cursor, finance, currency, alerts, calls, theme, ledger, effects, params, paymentCalls;
 let appStateListener, appStateRemoved = false;
 let dimensions = { width: 390, height: 844, fontScale: 1 };
 const hooks = { ...React, useEffect: (fn, deps) => {
@@ -38,7 +38,7 @@ Module._load = function(id, parent, main) {
   if (id === '@/components/ui') return { Card: 'Card', AppText: 'AppText', AppButton: 'AppButton', Screen: 'Screen', DateField: 'DateField', AppInput: 'AppInput', ChipSelect: 'ChipSelect' };
   if (id === '@/features/finance/components/AddAssetModal') return { AddAssetModal: 'AddAssetModal' };
   if (id === '@/features/finance/components/FormModal') return { FormModal: 'FormModal' };
-  if (id === '@/features/finance/store/paymentOperations') return Object.fromEntries(['confirmLoanReceipt', 'postLinkedPayment', 'editLinkedPayment', 'reverseLinkedPayment'].map(name => [name, () => { calls.push(name); return { ok: true }; }]));
+  if (id === '@/features/finance/store/paymentOperations') return Object.fromEntries(['confirmLoanReceipt', 'postLinkedPayment', 'editLinkedPayment', 'reverseLinkedPayment'].map(name => [name, (...args) => { calls.push(name); paymentCalls.push([name, ...args]); return { ok: true }; }]));
   if (id === '@/features/finance/components/AssetEntriesModal') return { AssetEntriesModal: 'AssetEntriesModal' };
   if (id === '@/features/finance/store/useLedgerStore') return { useLedgerHydrated: () => true, useLedgerStore: Object.assign(select => select(ledger), { getState: () => ledger }) };
   if (id === '@/features/finance/store/useFinanceStore') return { useFinanceHydrated: () => true,
@@ -80,7 +80,7 @@ function nodes(type, node) {
 const texts = () => nodes('AppText').map(n => n.props.children).filter(t => typeof t === 'string');
 const style = value => Object.assign({}, ...[value].flat(Infinity).filter(Boolean));
 beforeEach(() => {
-  states = []; cursor = 0; alerts = []; calls = []; effects = []; params = {};
+  states = []; cursor = 0; alerts = []; calls = []; effects = []; params = {}; paymentCalls = [];
   dimensions = { width: 390, height: 844, fontScale: 1 };
   ledger = { accounts: [], transactions: [], transfers: [], categories: [] };
   theme = { colors: lightColors, isDark: false, spacing: { xs: 4, sm: 8, md: 12 }, radius: { sm: 8 } };
@@ -289,13 +289,158 @@ test('Debts stays one screen with horizontal tabs; swipe synchronizes tab and bo
   finance.debts = [{ id: 'd', personName: 'Person', direction: 'receivable', amount: 100, currencyCode: 'EGP', date: '2026-11-01', createdAt: '2026-11-01', updatedAt: '2026-11-04', payments: [] }];
   render(DebtsScreen); flushEffects(); render(DebtsScreen);
   nodes('Pressable').find(n => n.props.accessibilityLabel === 'Details for Person').props.onPress(); render(DebtsScreen);
-  assert.ok(texts().includes('Outstanding: 100.00 EGP'));
+  const details = visibleDebtModal('Person');
+  assert.ok(nodes('View', details).some(n => {
+    const labels = nodes('AppText', n).map(t => t.props.children);
+    return labels.includes('Remaining') && labels.includes('100.00 EGP');
+  }));
   nodes('Pressable').find(n => n.props.accessibilityLabel === 'Back to list').props.onPress();
   const swipe = nodes('View').find(n => n.props.onPanResponderRelease);
   assert.equal(swipe.props.onMoveShouldSetPanResponder(null, { dx: 10, dy: 40 }), false);
   swipe.props.onPanResponderRelease(null, { dx: -100, dy: 5 }); render(DebtsScreen);
   const payable = nodes('Pressable').find(n => n.props.accessibilityRole === 'tab' && n.props.accessibilityState.selected);
   assert.ok(payable); assert.ok(nodes('AppText', payable).some(n => n.props.children === 'Payable'));
+  assert.deepEqual(calls, []);
+});
+
+function visibleDebtModal(title) {
+  const modal = nodes('Modal').find(n => n.props.visible && nodes('AppText', n).some(t => t.props.children === title));
+  assert.ok(modal, `Expected visible modal: ${title}`);
+  return modal;
+}
+function debtCard(name) {
+  const card = nodes('Card').find(n => nodes('Pressable', n).some(p => p.props.accessibilityLabel === 'Details for ' + name));
+  assert.ok(card, `Expected debt card: ${name}`);
+  return card;
+}
+function debtControl(label, parent) {
+  const control = (parent ? nodes('Pressable', parent) : nodes('Pressable')).find(n => n.props.accessibilityLabel === label);
+  assert.ok(control, `Expected control: ${label}`);
+  return control;
+}
+function prepareDebtUi(direction) {
+  params = { direction };
+  const payment = { id: 'payment-' + direction, amount: 25, date: '2026-11-03', note: 'Original payment', accountId: 'a', ledgerTransactionId: 'linked' };
+  const debt = { id: 'debt-' + direction, personName: 'Primary', direction, amount: 100, currencyCode: 'EGP',
+    date: '2026-11-01', dueDate: '2026-12-01', notes: 'Debt note', payments: [payment] };
+  finance.debts = [debt, { ...debt, id: 'other-' + direction, personName: 'Other', payments: [] }];
+  render(DebtsScreen); flushEffects(); render(DebtsScreen);
+  return { debt, payment, before: structuredClone(finance.debts) };
+}
+
+for (const direction of ['receivable', 'payable']) {
+  test(`${direction} compact details show exact metrics; Back and Android Back only dismiss details`, () => {
+    const { before } = prepareDebtUi(direction);
+    for (const close of ['button', 'android']) {
+      debtControl('Details for Primary').props.onPress(); render(DebtsScreen);
+      const details = visibleDebtModal('Primary');
+      for (const [label, value] of [['Remaining', '75.00 EGP'], ['Original', '100.00 EGP'],
+        ['Paid / collected', '25.00 EGP'], ['Type', direction === 'receivable' ? 'Receivable' : 'Payable']]) {
+        assert.ok(nodes('View', details).some(n => {
+          const labels = nodes('AppText', n).map(t => t.props.children);
+          return labels.includes(label) && labels.includes(value);
+        }), label);
+      }
+      assert.ok(nodes('AppText', details).some(n => n.props.children === 'Debt recorded on 01/11/2026'));
+      if (close === 'button') debtControl('Back to list', details).props.onPress();
+      else details.props.onRequestClose();
+      render(DebtsScreen);
+      assert.equal(nodes('Modal').some(n => n.props.visible), false);
+      assert.equal(debtControl('Show payment history for Primary').props.accessibilityState.expanded, false);
+      const selected = nodes('Pressable').find(n => n.props.accessibilityRole === 'tab' && n.props.accessibilityState.selected);
+      assert.ok(nodes('AppText', selected).some(n => n.props.children === (direction === 'receivable' ? 'Receivable' : 'Payable')));
+    }
+    assert.deepEqual(finance.debts, before);
+    assert.deepEqual(calls, []);
+  });
+
+  test(`${direction} inline history toggle is independent of details and other records`, () => {
+    const { before } = prepareDebtUi(direction);
+    debtControl('Show payment history for Primary').props.onPress(); render(DebtsScreen);
+    assert.equal(debtControl('Hide payment history for Primary').props.accessibilityState.expanded, true);
+    assert.equal(nodes('Modal').some(n => n.props.visible), false);
+    assert.ok(debtControl('Edit payment dated 03/11/2026', debtCard('Primary')));
+    assert.ok(debtControl('Delete payment dated 03/11/2026', debtCard('Primary')));
+    debtControl('Details for Primary').props.onPress(); render(DebtsScreen);
+    debtControl('Back to list', visibleDebtModal('Primary')).props.onPress(); render(DebtsScreen);
+    assert.equal(debtControl('Hide payment history for Primary').props.accessibilityState.expanded, true);
+    debtControl('Hide payment history for Primary').props.onPress(); render(DebtsScreen);
+    assert.equal(nodes('Pressable', debtCard('Primary')).some(n => n.props.accessibilityLabel?.startsWith('Edit payment')), false);
+    debtControl('Show payment history for Other').props.onPress(); render(DebtsScreen);
+    assert.ok(nodes('AppText', debtCard('Other')).some(n => n.props.children === 'No payments recorded yet.'));
+    assert.equal(debtControl('Show payment history for Primary').props.accessibilityState.expanded, false);
+    assert.deepEqual(finance.debts, before); assert.deepEqual(calls, []);
+  });
+
+  for (const location of ['inline', 'details']) {
+    const openControls = () => {
+      if (location === 'inline') {
+        debtControl('Show payment history for Primary').props.onPress(); render(DebtsScreen);
+        return debtCard('Primary');
+      }
+      debtControl('Details for Primary').props.onPress(); render(DebtsScreen);
+      return visibleDebtModal('Primary');
+    };
+    test(`${direction} ${location} payment Edit prefills the original record and dispatches only on Save`, () => {
+      const { debt, payment, before } = prepareDebtUi(direction);
+      debtControl('Edit payment dated 03/11/2026', openControls()).props.onPress();
+      render(DebtsScreen); render(DebtsScreen);
+      const editor = visibleDebtModal('Edit payment');
+      const inputs = nodes('TextInput', editor).map(n => n.props.value);
+      for (const value of ['25', '2026-11-03', 'Original payment']) assert.ok(inputs.includes(value), value);
+      if (location === 'details') assert.equal(nodes('Modal').some(n => n.props.visible
+        && nodes('Pressable', n).some(p => p.props.accessibilityLabel === 'Back to list')), false);
+      assert.deepEqual(calls, []);
+      const save = nodes('Pressable', editor).find(n => nodes('AppText', n).some(t => t.props.children === 'Save changes'));
+      assert.ok(save); save.props.onPress(); render(DebtsScreen);
+      assert.deepEqual(paymentCalls, [['editLinkedPayment', { entityType: 'debt', entityId: debt.id, paymentId: payment.id },
+        { amount: 25, date: '2026-11-03', note: 'Original payment' }]]);
+      assert.equal(nodes('Modal').some(n => n.props.visible && nodes('AppText', n).some(t => t.props.children === 'Edit payment')), false);
+      assert.deepEqual(finance.debts, before);
+    });
+
+    test(`${direction} ${location} payment Delete requires confirmation and preserves the exact payment reference`, () => {
+      const { debt, payment, before } = prepareDebtUi(direction);
+      const parent = openControls();
+      debtControl('Delete payment dated 03/11/2026', parent).props.onPress(); render(DebtsScreen);
+      let confirmation = visibleDebtModal('Delete payment?');
+      assert.ok(nodes('AppText', confirmation).some(n => typeof n.props.children === 'string' && n.props.children.includes(direction === 'receivable' ? 'collection' : 'payment')));
+      assert.deepEqual(calls, []);
+      nodes('AppButton', confirmation).find(n => n.props.title === 'Cancel').props.onPress(); render(DebtsScreen);
+      assert.deepEqual(calls, []); assert.deepEqual(finance.debts, before);
+      const currentParent = location === 'inline' ? debtCard('Primary') : visibleDebtModal('Primary');
+      debtControl('Delete payment dated 03/11/2026', currentParent).props.onPress(); render(DebtsScreen);
+      confirmation = visibleDebtModal('Delete payment?');
+      nodes('AppButton', confirmation).find(n => n.props.title === 'Delete').props.onPress(); render(DebtsScreen);
+      assert.deepEqual(paymentCalls, [['reverseLinkedPayment', { entityType: 'debt', entityId: debt.id, paymentId: payment.id }]]);
+      assert.deepEqual(finance.debts, before);
+    });
+  }
+}
+
+test('Receivable/Payable tab taps and horizontal swipe stay synchronized without claiming vertical scrolling', () => {
+  prepareDebtUi('receivable');
+  finance.debts.push({ ...finance.debts[0], id: 'payable-record', personName: 'Payable record', direction: 'payable' });
+  const before = structuredClone(finance.debts);
+  render(DebtsScreen);
+  const tab = label => nodes('Pressable').find(n => n.props.accessibilityRole === 'tab' && nodes('AppText', n).some(t => t.props.children === label));
+  const swipe = () => nodes('View').find(n => n.props.onPanResponderRelease);
+  tab('Payable').props.onPress(); render(DebtsScreen);
+  assert.equal(tab('Payable').props.accessibilityState.selected, true);
+  assert.equal(tab('Receivable').props.accessibilityState.selected, false);
+  assert.ok(debtControl('Details for Payable record'));
+  assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Details for Primary'), false);
+  assert.equal(swipe().props.onMoveShouldSetPanResponder(null, { dx: 10, dy: 80 }), false);
+  assert.equal(swipe().props.onMoveShouldSetPanResponder(null, { dx: 100, dy: 5 }), true);
+  swipe().props.onPanResponderRelease(null, { dx: 100, dy: 5 }); render(DebtsScreen);
+  assert.equal(tab('Receivable').props.accessibilityState.selected, true);
+  assert.ok(debtControl('Details for Primary'));
+  assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Details for Payable record'), false);
+  swipe().props.onPanResponderRelease(null, { dx: -100, dy: 5 }); render(DebtsScreen);
+  assert.equal(tab('Payable').props.accessibilityState.selected, true);
+  tab('Receivable').props.onPress(); render(DebtsScreen);
+  assert.equal(tab('Receivable').props.accessibilityState.selected, true);
+  assert.deepEqual(finance.debts, before);
   assert.deepEqual(calls, []);
 });
 
