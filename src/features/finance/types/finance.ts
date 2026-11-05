@@ -269,6 +269,8 @@ export type ChequePatch = Partial<
 /* -------------------------------------------------------------------------- */
 
 export interface FinanceData {
+  /** Retained creation evidence only; never a posting or acknowledgement certificate. */
+  creationProvenance?: import('./creationProvenance').CreationProvenanceMetadataV1;
   paymentAccounting?: import('./paymentRecovery').PaymentAccountingMetadata;
   paymentJournal?: PaymentJournalMarker;
   assets: Asset[];

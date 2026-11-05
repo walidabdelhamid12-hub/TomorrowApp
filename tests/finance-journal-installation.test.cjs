@@ -25,6 +25,15 @@ const marker = generationId => ({ schemaVersion: 1, generationId });
 const emptyFinance = () => ({ assets: [], debts: [], loans: [], cheques: [] });
 const emptyLedger = () => ({ accounts: [], categories: [], transactions: [], transfers: [] });
 const envelope = (state, version = 2) => JSON.stringify({ version, state });
+function creationFinance() {
+  const row = { id: 'new', personName: 'Person', direction: 'payable', amount: 10, currencyCode: 'USD',
+    date: '2026-11-05', payments: [], createdAt: '2026-11-05T00:00:00.000Z', updatedAt: '2026-11-05T00:00:00.000Z' };
+  return { ...emptyFinance(), paymentJournal: marker('retained'), debts: [row], creationProvenance: {
+    schemaVersion: 1, entries: [{ disposition: 'candidate', attestation: { schemaVersion: 1,
+      entity: { entityType: 'debt', entityId: 'new' }, creationId: 'creation', generationId: 'retained',
+      image: { entityType: 'debt', ...row, payments: [] } } }],
+  } };
+}
 const journalBytes = (generationId, phase = 'active', receipts = []) => envelope({ receipts,
   ...(generationId ? { installation: { ...marker(generationId), phase } } : {}) });
 const history = () => ({ ...emptyFinance(), assets: [{ id: 'asset', entries: [{ id: 'entry', amount: 1.234, date: '2026-11-01' }] }],
@@ -246,6 +255,103 @@ for (const [key, store, empty] of [[F, finance, emptyFinance], [L, ledger, empty
       assert.equal(store.persist.hasHydrated(), false); assert.equal(nativeData.get(key), bytes);
       nativeData.set(key, envelope(empty())); await store.persist.rehydrate();
       assert.equal(store.persist.hasHydrated(), true); assert.equal(store.getState().paymentJournal, undefined);
+    });
+  }
+}
+
+test('installation reader accepts valid Finance provenance read-only without certifying it', async () => {
+  const f = creationFinance(), data = new Map([[F, envelope(f)],
+    [L, envelope({ ...emptyLedger(), paymentJournal: marker('retained') })], [J, journalBytes('retained')]]);
+  const before = new Map(data), s = await scenario(data);
+  assert.equal((await s.recovery.check()).status, 'metadata-ready');
+  assert.equal(s.recovery.getStatus().postingAllowed, false);
+  assert.deepEqual(data, before); assert.deepEqual(s.events, []);
+});
+for (const mode of ['malformed', 'duplicate', 'owner', 'missing-generation', 'generation', 'missing-journal', 'ledger']) {
+  test(`installation reader blocks ${mode} provenance and never bootstraps it`, async () => {
+    const f = creationFinance(), l = { ...emptyLedger(), paymentJournal: marker('retained') };
+    if (mode === 'malformed') f.creationProvenance.entries[0].attestation.extra = true;
+    if (mode === 'duplicate') f.creationProvenance.entries.push(f.creationProvenance.entries[0]);
+    if (mode === 'owner') f.debts = [];
+    if (mode === 'missing-generation') delete f.paymentJournal;
+    if (mode === 'generation') f.creationProvenance.entries[0].attestation.generationId = 'other';
+    if (mode === 'ledger') { l.creationProvenance = f.creationProvenance; delete f.creationProvenance; }
+    const data = new Map([[F, envelope(f)], [L, envelope(l)]]);
+    if (mode !== 'missing-journal') data.set(J, journalBytes('retained'));
+    const before = new Map(data), s = await scenario(data);
+    await assert.rejects(s.recovery.check()); await assert.rejects(s.recovery.bootstrap());
+    assert.equal(s.recovery.getStatus().postingAllowed, false);
+    assert.deepEqual(data, before); assert.deepEqual(s.events, []);
+  });
+}
+test('real Finance merge and partialize retain provenance; legacy rehydration never inherits it', async () => {
+  const f = creationFinance(); nativeData.set(F, envelope(f)); await finance.persist.rehydrate();
+  assert.equal(finance.persist.hasHydrated(), true);
+  assert.deepEqual(finance.getState().creationProvenance, f.creationProvenance);
+  finance.getState().clearAssets(); await Promise.resolve();
+  assert.deepEqual(JSON.parse(nativeData.get(F)).state, f);
+  nativeData.set(F, envelope(emptyFinance())); await finance.persist.rehydrate();
+  assert.equal(Object.hasOwn(finance.getState(), 'creationProvenance'), false);
+  const debt = finance.getState().addDebt({ personName: 'Legacy', amount: 5, direction: 'payable', currencyCode: 'USD', date: '2026-11-05' });
+  assert.equal(typeof debt, 'string'); assert.equal(Object.hasOwn(finance.getState(), 'creationProvenance'), false);
+  const loan = finance.getState().addLoan({ name: 'Legacy loan', lenderName: 'Lender', monthlyInstallment: 1,
+    numberOfInstallments: 3, firstDueDate: '2026-11-05', currencyCode: 'USD' });
+  assert.equal(typeof loan, 'string'); assert.equal(Object.hasOwn(finance.getState(), 'creationProvenance'), false);
+  nativeData.set(F, envelope(emptyFinance())); await finance.persist.rehydrate();
+});
+
+for (const kind of ['debt', 'loan']) for (const mode of ['missing', 'null', 'string', 'object', 'malformed', 'duplicate', 'empty', 'history']) {
+  test(`installation reader ${kind} provenance history ${mode} agrees with strict history validation`, async () => {
+    const f = creationFinance();
+    if (kind === 'loan') {
+      const debt = f.debts.pop();
+      const loan = { id: 'new-loan', name: 'Loan', lenderName: 'Lender', currencyCode: 'USD', monthlyInstallment: 1,
+        numberOfInstallments: 10, firstDueDate: '2026-11-05', status: 'active', payments: [],
+        createdAt: debt.createdAt, updatedAt: debt.updatedAt };
+      f.loans.push(loan); const a = f.creationProvenance.entries[0].attestation;
+      a.entity = { entityType: 'loan', entityId: loan.id }; a.image = { entityType: 'loan', ...loan, payments: [] };
+    }
+    const owner = f[kind === 'debt' ? 'debts' : 'loans'][0];
+    if (mode === 'missing') delete owner.payments;
+    if (mode === 'null') owner.payments = null;
+    if (mode === 'string') owner.payments = 'corrupt';
+    if (mode === 'object') owner.payments = {};
+    if (mode === 'malformed') owner.payments = [{ id: 'history', amount: -1, date: '2026-11-05' }];
+    if (mode === 'history' || mode === 'duplicate') owner.payments = [{ id: 'history', amount: 1, date: '2026-11-05' }];
+    if (mode === 'duplicate') owner.payments.push({ ...owner.payments[0] });
+    const data = new Map([[F, envelope(f)], [L, envelope({ ...emptyLedger(), paymentJournal: marker('retained') })],
+      [J, journalBytes('retained')]]), before = new Map(data), s = await scenario(data);
+    if (mode === 'empty' || mode === 'history') assert.equal((await s.recovery.check()).status, 'metadata-ready');
+    else { await assert.rejects(s.recovery.check()); await assert.rejects(s.recovery.bootstrap()); }
+    assert.equal(s.recovery.getStatus().postingAllowed, false);
+    assert.deepEqual(data, before); assert.deepEqual(s.events, []);
+  });
+}
+
+for (const [first, second] of [['debt', 'debt'], ['loan', 'loan'], ['debt', 'loan']]) {
+  for (const managed of [false, true]) for (const duplicate of [false, true]) {
+    test(`installation global ownership ${first}/${second}, second ${managed ? 'managed' : 'unmanaged'}, ${duplicate ? 'duplicate' : 'distinct'}`, async () => {
+      const f = creationFinance(), original = f.debts.pop();
+      const make = (kind, id) => kind === 'debt' ? { ...original, id, payments: [] }
+        : { id, name: 'Loan', lenderName: 'Lender', currencyCode: 'USD', monthlyInstallment: 1,
+          numberOfInstallments: 10, firstDueDate: '2026-11-05', status: 'active', payments: [],
+          createdAt: original.createdAt, updatedAt: original.updatedAt };
+      const a = make(first, 'first'), b = make(second, 'second');
+      const evidence = (row, kind, creationId) => ({ disposition: 'candidate', attestation: { schemaVersion: 1,
+        entity: { entityType: kind, entityId: row.id }, creationId, generationId: 'retained',
+        image: { entityType: kind, ...row, payments: [] } } });
+      f.creationProvenance.entries = [evidence(a, first, 'first-creation')];
+      if (managed) f.creationProvenance.entries.push(evidence(b, second, 'second-creation'));
+      a.payments = [{ id: 'payment', amount: 1, date: '2026-11-05' }];
+      b.payments = [{ id: duplicate ? 'payment' : 'distinct-payment', amount: 1, date: '2026-11-05' }];
+      f[first === 'debt' ? 'debts' : 'loans'].push(a); f[second === 'debt' ? 'debts' : 'loans'].push(b);
+      const data = new Map([[F, envelope(f)], [L, envelope({ ...emptyLedger(), paymentJournal: marker('retained') })],
+        [J, journalBytes('retained')]]), before = new Map(data), s = await scenario(data);
+      if (duplicate) {
+        await assert.rejects(s.recovery.check(), /Duplicate payment ownership/); await assert.rejects(s.recovery.bootstrap());
+      } else assert.equal((await s.recovery.check()).status, 'metadata-ready');
+      assert.equal(s.recovery.getStatus().postingAllowed, false);
+      assert.deepEqual(data, before); assert.deepEqual(s.events, []);
     });
   }
 }

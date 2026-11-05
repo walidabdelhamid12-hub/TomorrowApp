@@ -2,7 +2,7 @@ import type { PaymentOperationJournalData } from '@/features/finance/types/payme
 import { readPaymentJournalMarker, assertAccountingStorageVersion, type PaymentJournalMarker } from '@/features/finance/types/paymentJournalInstallation';
 import type { createPaymentOperationStore } from './usePaymentOperationStore';
 import type { PaymentOperationRuntime } from './paymentOperationRuntime';
-import { verifyPaymentAccountingRecovery, type AccountingRecoveryResult } from './paymentAccountingVerification';
+import { readFinanceCreationProvenance, verifyPaymentAccountingRecovery, type AccountingRecoveryResult } from './paymentAccountingVerification';
 import { readPaymentAccountingMetadata } from '../types/paymentRecovery';
 
 /** No production binding is provided until shared tracked persistence is wired. */
@@ -25,7 +25,8 @@ function readAccountingSnapshot(raw: string | null, kind: 'finance' | 'ledger'):
   const state = envelope.state;
   if ('paymentAccounting' in state) readPaymentAccountingMetadata(state.paymentAccounting);
   const arrays = kind === 'finance' ? ['assets', 'debts', 'loans', 'cheques'] : ['accounts', 'categories', 'transactions', 'transfers'];
-  if (Object.keys(state).some(key => !['paymentJournal', 'paymentAccounting', ...arrays].includes(key))) throw new Error(`Unsupported ${kind} storage fields.`);
+  if (Object.keys(state).some(key => !['paymentJournal', 'paymentAccounting', ...arrays, ...(kind === 'finance' ? ['creationProvenance'] : [])].includes(key))) throw new Error(`Unsupported ${kind} storage fields.`);
+  if (kind === 'finance') readFinanceCreationProvenance(state);
   for (const key of arrays) {
     if (envelope.version === 2 && !(key in state)) throw new Error(`Missing ${kind} ${key}.`);
     if (key in state && (!Array.isArray(state[key]) || !(state[key] as unknown[]).every(row =>
@@ -37,7 +38,7 @@ function readAccountingSnapshot(raw: string | null, kind: 'finance' | 'ledger'):
     && (!Array.isArray(row.payments) || !row.payments.every(payment => object(payment) && typeof payment.id === 'string' && payment.id.length > 0)))) {
     throw new Error('Invalid historical payment records require review.');
   }
-  const managedEvidence = 'paymentAccounting' in state || (rows as unknown[]).some(row => evidence(row)
+  const managedEvidence = 'creationProvenance' in state || 'paymentAccounting' in state || (rows as unknown[]).some(row => evidence(row)
     || (object(row) && Array.isArray(row.payments) && row.payments.some(evidence)));
   return { present: true, managedEvidence,
     ...('paymentJournal' in state ? { marker: readPaymentJournalMarker(state.paymentJournal) } : {}) };

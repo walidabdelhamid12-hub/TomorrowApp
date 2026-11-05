@@ -401,3 +401,187 @@ test('pure schema parser rejects unknown and duplicate metadata without filterin
   const x = fixture(); x.finance.paymentAccounting.entityHeads.push(clone(x.finance.paymentAccounting.entityHeads[0]));
   assert.equal(verify(x).installation, 'blocked');
 });
+
+function withCreationEvidence() {
+  const x = fixture();
+  const row = { id: 'new-debt', direction: 'payable', personName: 'New person', amount: 100,
+    currencyCode: 'USD', date: day, payments: [], createdAt: `${day}T00:00:00.000Z`, updatedAt: `${day}T00:00:00.000Z` };
+  x.finance.debts.push(row);
+  x.finance.creationProvenance = { schemaVersion: 1, entries: [{ disposition: 'candidate', attestation: {
+    schemaVersion: 1, entity: { entityType: 'debt', entityId: row.id }, creationId: 'creation-new', generationId: 'g',
+    image: { entityType: 'debt', ...clone(row) },
+  } }] };
+  return x;
+}
+
+function ownedHistoryFixture(kind) {
+  const x = withCreationEvidence();
+  if (kind === 'loan') {
+    const debt = x.finance.debts.pop();
+    const loan = { id: 'new-loan', name: 'Loan', lenderName: 'Lender', monthlyInstallment: 10,
+      numberOfInstallments: 10, firstDueDate: day, currencyCode: 'USD', status: 'active', payments: [],
+      createdAt: debt.createdAt, updatedAt: debt.updatedAt };
+    x.finance.loans.push(loan);
+    const attestation = x.finance.creationProvenance.entries[0].attestation;
+    attestation.entity = { entityType: 'loan', entityId: loan.id };
+    attestation.image = { entityType: 'loan', ...clone(loan) };
+  }
+  return { x, owner: x.finance[kind === 'debt' ? 'debts' : 'loans'].at(-1) };
+}
+for (const [first, second] of [['debt', 'debt'], ['loan', 'loan'], ['debt', 'loan']]) {
+  for (const managed of [false, true]) for (const duplicate of [false, true]) {
+    test(`global history ownership ${first}/${second}, second ${managed ? 'managed' : 'unmanaged'}, ${duplicate ? 'duplicate' : 'distinct'} IDs`, async () => {
+      const { x, owner } = ownedHistoryFixture(first);
+      const other = clone(ownedHistoryFixture(second).owner); other.id = 'other-parent';
+      if (managed) {
+        const a = clone(ownedHistoryFixture(second).x.finance.creationProvenance.entries[0]);
+        a.attestation.creationId = 'creation-other'; a.attestation.entity.entityId = other.id; a.attestation.image.id = other.id;
+        x.finance.creationProvenance.entries.push(a);
+      }
+      owner.payments = [{ id: 'first-payment', amount: 1, date: day }];
+      other.payments = [{ id: duplicate ? 'first-payment' : 'other-payment', amount: 1, date: day }];
+      x.finance[second === 'debt' ? 'debts' : 'loans'].push(other);
+      const bytes = raw(x), result = verify(x); assertClosed(result);
+      assert.equal(result.installation, duplicate ? 'blocked' : 'consistent');
+      if (duplicate) assert.match(result.globalIssues.join(' '), /Duplicate payment ownership/);
+      const s = await actual(x);
+      assert.equal(s.finance.persist.hasHydrated(), !duplicate);
+      assert.deepEqual(Object.fromEntries(s.native.data), bytes);
+      assert.equal(s.native.events.filter(e => e[0] === 'set').length, 0);
+      if (duplicate) await assert.rejects(s.runtime.persistence.flush(F));
+      else {
+        s.finance.getState().clearAssets(); await s.runtime.persistence.flush(F);
+        assert.deepEqual(JSON.parse(s.native.data.get(F)).state, x.finance);
+      }
+    });
+  }
+}
+test('global uniqueness includes two unmanaged parents when provenance exists elsewhere', () => {
+  const { x } = ownedHistoryFixture('debt');
+  const a = clone(x.finance.debts[0]), b = clone(a); a.id = 'unmanaged-a'; b.id = 'unmanaged-b';
+  a.payments = b.payments = [{ id: 'shared-unmanaged', amount: 1, date: day }];
+  x.finance.debts.push(a, b);
+  assert.throws(() => V().readFinanceCreationProvenance(x.finance), /Duplicate payment ownership/);
+});
+test('legacy hydration without provenance retains duplicate history without repairing or certifying it', async () => {
+  const { x, owner } = ownedHistoryFixture('debt'); delete x.finance.creationProvenance;
+  owner.payments = [{ id: 'legacy-shared', amount: 1, date: day }];
+  const other = clone(owner); other.id = 'legacy-other'; x.finance.debts.push(other);
+  const bytes = raw(x), s = await actual(x);
+  assert.equal(s.finance.persist.hasHydrated(), true);
+  assert.deepEqual(s.finance.getState().debts, x.finance.debts);
+  assert.deepEqual(Object.fromEntries(s.native.data), bytes);
+  assert.equal(Object.hasOwn(s.finance.getState(), 'creationProvenance'), false);
+  assert.equal(verify(x).installation, 'blocked');
+});
+for (const kind of ['debt', 'loan']) {
+  for (const [mode, payments] of [
+    ['missing', undefined], ['null', null], ['string', 'corrupt'], ['object', {}],
+    ['missing entry fields', [{}]], ['null entry', [null]],
+    ['invalid amount', [{ id: 'history', amount: -1, date: day }]],
+    ['unknown entry field', [{ id: 'history', amount: 1, date: day, acknowledged: true }]],
+    ['duplicate payment', [{ id: 'history', amount: 1, date: day }, { id: 'history', amount: 1, date: day }]],
+  ]) test(`provenance-owned ${kind} rejects ${mode} history before hydration normalization`, async () => {
+    const { x, owner } = ownedHistoryFixture(kind);
+    if (mode === 'missing') delete owner.payments; else owner.payments = clone(payments);
+    const bytes = raw(x), result = verify(x);
+    assert.equal(result.installation, 'blocked'); assertClosed(result);
+    const s = await actual(x);
+    assert.equal(s.finance.persist.hasHydrated(), false);
+    assert.equal(Object.hasOwn(s.finance.getState(), 'creationProvenance'), false);
+    assert.equal(s.native.events.filter(e => e[0] === 'set').length, 0);
+    assert.deepEqual(Object.fromEntries(s.native.data), bytes);
+    await assert.rejects(s.runtime.persistence.flush(F));
+  });
+  for (const historical of [false, true]) test(`provenance-owned ${kind} preserves valid ${historical ? 'historical' : 'empty'} payments without certification`, async () => {
+    const { x, owner } = ownedHistoryFixture(kind);
+    if (historical) owner.payments = [{ id: 'history', amount: 1, date: day,
+      ...(kind === 'loan' ? { paymentMode: 'simple', paymentMethodLabel: 'Cash' } : {}) }];
+    const result = verify(x); assert.equal(result.installation, 'consistent'); assertClosed(result);
+    assert.equal(result.findings.find(f => f.entity?.entityId === owner.id).classification, 'needs-review');
+    const s = await actual(x); assert.equal(s.finance.persist.hasHydrated(), true);
+    assert.deepEqual(s.finance.getState()[kind === 'debt' ? 'debts' : 'loans'].at(-1).payments, owner.payments);
+    s.finance.getState().clearAssets(); await s.runtime.persistence.flush(F);
+    assert.deepEqual(JSON.parse(s.native.data.get(F)).state, x.finance);
+  });
+}
+for (const payments of [undefined, null, 'corrupt', {}]) test(`unowned legacy loan keeps existing normalization for ${String(payments)}`, async () => {
+  const { x, owner } = ownedHistoryFixture('loan'); delete x.finance.creationProvenance;
+  if (payments === undefined) delete owner.payments; else owner.payments = payments;
+  const s = await actual(x); assert.equal(s.finance.persist.hasHydrated(), true);
+  assert.deepEqual(s.finance.getState().loans.at(-1).payments, []);
+  assert.equal(Object.hasOwn(s.finance.getState(), 'creationProvenance'), false);
+});
+test('valid Finance provenance preserves accounting findings and remains uncertified', () => {
+  const x = withCreationEvidence(), without = clone(x); delete without.finance.creationProvenance;
+  const before = raw(x), result = verify(x);
+  assert.deepEqual(result, verify(without)); assertClosed(result); assert.deepEqual(raw(x), before);
+  assert.equal(result.findings.find(f => f.entity?.entityId === 'new-debt').classification, 'needs-review');
+});
+for (const mode of ['malformed', 'duplicate-creation', 'duplicate-entity', 'missing-owner', 'duplicate-owner',
+  'deleted-owner', 'generation', 'missing-marker', 'missing-journal', 'journal-generation', 'ledger']) {
+  test(`strict accounting reader rejects provenance ${mode} without writing`, () => {
+    const x = withCreationEvidence(), metadata = x.finance.creationProvenance;
+    if (mode === 'malformed') metadata.entries[0].attestation.acknowledged = true;
+    if (mode === 'duplicate-creation') metadata.entries.push(clone(metadata.entries[0]));
+    if (mode === 'duplicate-entity') { const copy = clone(metadata.entries[0]); copy.attestation.creationId = 'other'; metadata.entries.push(copy); }
+    if (mode === 'missing-owner') x.finance.debts.pop();
+    if (mode === 'duplicate-owner') x.finance.debts.push(clone(x.finance.debts.at(-1)));
+    if (mode === 'deleted-owner') metadata.entries[0].disposition = 'deleted';
+    if (mode === 'generation') metadata.entries[0].attestation.generationId = 'other';
+    if (mode === 'missing-marker') delete x.finance.paymentJournal;
+    if (mode === 'missing-journal') delete x.journal.installation;
+    if (mode === 'journal-generation') x.journal.installation.generationId = 'other';
+    if (mode === 'ledger') x.ledger.creationProvenance = metadata;
+    const before = raw(x), result = verify(x);
+    assert.equal(result.installation, 'blocked'); assertClosed(result); assert.deepEqual(raw(x), before);
+  });
+}
+test('deleted provenance retains negative evidence without an entity', () => {
+  const x = withCreationEvidence(); x.finance.creationProvenance.entries[0].disposition = 'deleted'; x.finance.debts.pop();
+  assert.equal(verify(x).installation, 'consistent'); assertClosed(verify(x));
+});
+test('loan provenance round-trips through actual Finance persistence without certifying repayments', async () => {
+  const x = withCreationEvidence(), provenance = x.finance.creationProvenance.entries[0];
+  x.finance.debts.pop();
+  const loan = { id: 'new-loan', name: 'New loan', lenderName: 'Lender', currencyCode: 'USD',
+    monthlyInstallment: 0.1, numberOfInstallments: 3, firstDueDate: day, status: 'active', payments: [],
+    createdAt: `${day}T00:00:00.000Z`, updatedAt: `${day}T00:00:00.000Z` };
+  x.finance.loans.push(loan); provenance.attestation.entity = { entityType: 'loan', entityId: loan.id };
+  provenance.attestation.image = { entityType: 'loan', ...clone(loan) };
+  const without = clone(x); delete without.finance.creationProvenance;
+  assert.deepEqual(verify(x), verify(without));
+  const s = await actual(x);
+  assert.equal(s.finance.persist.hasHydrated(), true);
+  s.finance.getState().clearAssets(); await s.runtime.persistence.flush(F);
+  assert.deepEqual(JSON.parse(s.native.data.get(F)).state, x.finance);
+  assertClosed(await V().verifyPaymentAccountingRecovery(s.runtime));
+});
+test('actual Finance hydration and persisted action round-trip provenance without changing history', async () => {
+  const x = withCreationEvidence(), s = await actual(x), original = clone(x.finance);
+  assert.equal(s.finance.persist.hasHydrated(), true);
+  assert.deepEqual(s.finance.getState().creationProvenance, original.creationProvenance);
+  s.finance.getState().clearAssets(); await s.runtime.persistence.flush(F);
+  assert.deepEqual(JSON.parse(s.native.data.get(F)).state, original);
+  assert.equal(JSON.parse(s.native.data.get(F)).version, 2);
+  await s.finance.persist.rehydrate();
+  assert.deepEqual(s.finance.getState().creationProvenance, original.creationProvenance);
+  const legacy = clone(original); delete legacy.creationProvenance;
+  s.native.data.set(F, envelope(legacy)); await s.finance.persist.rehydrate();
+  assert.equal(Object.hasOwn(s.finance.getState(), 'creationProvenance'), false);
+  assert.equal(JSON.parse(s.native.data.get(F)).state.creationProvenance, undefined);
+});
+for (const mode of ['malformed', 'duplicate', 'generation', 'owner']) {
+  test(`actual Finance hydration rejects ${mode} provenance without overwriting bytes`, async () => {
+    const x = withCreationEvidence();
+    if (mode === 'malformed') x.finance.creationProvenance = null;
+    if (mode === 'duplicate') x.finance.creationProvenance.entries.push(clone(x.finance.creationProvenance.entries[0]));
+    if (mode === 'generation') x.finance.creationProvenance.entries[0].attestation.generationId = 'other';
+    if (mode === 'owner') x.finance.debts.pop();
+    const s = await actual(x);
+    assert.equal(s.finance.persist.hasHydrated(), false);
+    assert.equal(s.native.data.get(F), envelope(x.finance));
+    assert.equal(s.native.events.filter(e => e[0] === 'set').length, 0);
+    await assert.rejects(s.runtime.persistence.flush(F));
+  });
+}

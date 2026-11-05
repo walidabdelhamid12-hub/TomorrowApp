@@ -10,6 +10,43 @@ import { readPaymentOperationJournal, type PaymentOperationReceipt } from '../ty
 import { assertAccountingStorageVersion, readPaymentJournalMarker } from '../types/paymentJournalInstallation';
 import { roundMoney } from '../utils/finance';
 import type { PaymentOperationRuntime, PaymentPersistenceKey } from './paymentOperationRuntime';
+import { readCreationProvenanceMetadataV1, type CreationProvenanceMetadataV1 } from '../types/creationProvenance';
+
+/** Shared strict Finance evidence reader. No issuance, normalization, or eligibility. */
+export function readFinanceCreationProvenance(state: Record<string, unknown>): { creationProvenance?: CreationProvenanceMetadataV1 } {
+  if (!Object.hasOwn(state, 'creationProvenance')) return {};
+  const metadata = readCreationProvenanceMetadataV1(state.creationProvenance);
+  const marker = readPaymentJournalMarker(state.paymentJournal);
+  check(Array.isArray(state.debts) && Array.isArray(state.loans), 'Missing provenance ownership containers.');
+  for (const { attestation, disposition } of metadata.entries) {
+    check(attestation.generationId === marker.generationId, 'Creation provenance generation conflict.');
+    const rows = state[attestation.entity.entityType === 'debt' ? 'debts' : 'loans'] as unknown[];
+    const owners = rows.filter(row => object(row) && row.id === attestation.entity.entityId);
+    check(owners.length === (disposition === 'deleted' ? 0 : 1), 'Creation provenance ownership conflict.');
+    // Validate the persisted owner before legacy Finance normalization can replace
+    // a missing/corrupt loan payment container with an empty array.
+    for (const owner of owners) {
+      check(object(owner) && Object.hasOwn(owner, 'payments') && Array.isArray(owner.payments),
+        'Missing or invalid provenance-owned payment history.');
+      for (const payment of owner.payments) {
+        validatePayment(payment, attestation.entity.entityType);
+      }
+    }
+  }
+  // Payment identities belong to the entire Finance document, including unmanaged
+  // parents. Unreadable history cannot establish global ownership uniqueness.
+  const paymentIds = new Set<string>();
+  for (const parent of [...state.debts, ...state.loans]) {
+    check(object(parent) && Object.hasOwn(parent, 'payments') && Array.isArray(parent.payments),
+      'Missing or invalid payment ownership history.');
+    for (const payment of parent.payments) {
+      check(object(payment) && text(payment.id), 'Invalid payment ownership identity.');
+      check(!paymentIds.has(payment.id), 'Duplicate payment ownership.');
+      paymentIds.add(payment.id);
+    }
+  }
+  return { creationProvenance: metadata };
+}
 
 export type RecoveryClassification = 'verified-current' | 'verified-superseded' | 'verified-reversed'
   | 'prepared-unapplied' | 'prepared-partial' | 'prepared-accounting-matches' | 'needs-review' | 'blocked';
@@ -56,7 +93,7 @@ function parseAccounting(raw: string | null, kind: 'finance' | 'ledger'): Record
   assertAccountingStorageVersion(envelope.version);
   const state = envelope.state;
   const arrays = kind === 'finance' ? ['assets', 'debts', 'loans', 'cheques'] : ['accounts', 'categories', 'transactions', 'transfers'];
-  check(Object.keys(state).every(k => [...arrays, 'paymentJournal', 'paymentAccounting'].includes(k)), 'Unsupported accounting fields.');
+  check(Object.keys(state).every(k => [...arrays, 'paymentJournal', 'paymentAccounting', ...(kind === 'finance' ? ['creationProvenance'] : [])].includes(k)), 'Unsupported accounting fields.');
   for (const key of arrays) {
     check(Array.isArray(state[key]), `Missing ${key} container.`);
     const ids = new Set<string>();
@@ -67,6 +104,7 @@ function parseAccounting(raw: string | null, kind: 'finance' | 'ledger'): Record
   if ('paymentJournal' in state) readPaymentJournalMarker(state.paymentJournal);
   if ('paymentAccounting' in state) readPaymentAccountingMetadata(state.paymentAccounting);
   if (kind === 'finance') {
+    readFinanceCreationProvenance(state);
     for (const key of ['debts', 'loans']) for (const row of state[key] as Record<string, unknown>[]) projectParent(row, key === 'debts' ? 'debt' : 'loan');
   } else {
     for (const tx of state.transactions as Record<string, unknown>[]) {
@@ -217,7 +255,8 @@ export function verifyPersistedPaymentAccounting(raw: Readonly<Record<PaymentPer
     const journal = readRecoveryJournalDocument(raw['tomorrow:payment-operations']);
     const generation = journal.installation?.generationId;
     if (!generation) {
-      check(!f?.paymentJournal && !l?.paymentJournal && !f?.paymentAccounting && !l?.paymentAccounting && journal.receipts.length === 0 && journal.baselines.length === 0, 'Missing journal installation with managed evidence.');
+      check(!f?.paymentJournal && !l?.paymentJournal && !f?.paymentAccounting && !l?.paymentAccounting
+        && !f?.creationProvenance && journal.receipts.length === 0 && journal.baselines.length === 0, 'Missing journal installation with managed evidence.');
       for (const kind of ['debt', 'loan'] as const) for (const row of (f?.[kind === 'debt' ? 'debts' : 'loans'] ?? []) as Record<string, unknown>[]) {
         findings.push(finding('needs-review', 'Unmanaged legacy entity; no operation provenance assigned.', { entityType: kind, entityId: row.id as string }));
       }

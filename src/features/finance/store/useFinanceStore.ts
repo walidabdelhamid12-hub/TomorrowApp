@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage } from 'zustand/middleware';
 import { paymentRuntimePersist as persist } from './paymentOperationRuntime';
+import { readFinanceCreationProvenance } from './paymentAccountingVerification';
 import { readLedgerProtection } from '@/features/finance/store/ledgerProtectionReader';
 import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
 
@@ -177,6 +178,7 @@ function migrateFinanceData(
   const saved = isRecord(persistedState) ? persistedState : {};
 
   return {
+    ...readFinanceCreationProvenance(saved),
     paymentJournal: paymentJournalMetadata(saved).paymentJournal,
     ...('paymentAccounting' in saved ? { paymentAccounting: paymentJournalMetadata(saved).paymentAccounting } : {}),
     assets: normalizeRecords<Asset>(saved.assets),
@@ -927,6 +929,7 @@ export const useFinanceStore = create<FinanceStore>()(
       storage: createJSONStorage(() => AsyncStorage),
 
       partialize: (state): FinanceData => ({
+        ...readFinanceCreationProvenance(state as unknown as Record<string, unknown>),
         ...paymentJournalMetadata(state),
         assets: state.assets,
         debts: state.debts,
@@ -939,10 +942,13 @@ export const useFinanceStore = create<FinanceStore>()(
         return migrateFinanceData(persistedState);
       },
 
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...migrateFinanceData(persistedState),
-      }),
+      merge: (persistedState, currentState) => {
+        const restored = migrateFinanceData(persistedState);
+        const merged = { ...currentState, ...restored };
+        // An absent persisted field must not inherit evidence from the old session.
+        if (!Object.hasOwn(restored, 'creationProvenance')) delete merged.creationProvenance;
+        return merged;
+      },
 
       onRehydrateStorage: () => (_state, error) => {
         if (error) {
