@@ -1,4 +1,5 @@
 
+import type { PaymentJournalMarker } from './paymentJournalInstallation';
 import type {
   CurrencyCode,
   EntityId,
@@ -175,6 +176,7 @@ export type TransferPatch = Partial<NewTransferInput>;
 /* ------------------------------ Persisted data --------------------------- */
 
 export interface LedgerData {
+  paymentJournal?: PaymentJournalMarker;
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];

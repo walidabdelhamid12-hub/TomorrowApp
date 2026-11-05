@@ -193,7 +193,7 @@ for (const invalid of [
   envelope([receipt(), receipt()]),
   envelope([receipt(), { ...receipt('two'), paymentId: 'payment-one' }]),
   envelope([receipt(), { ...receipt('two'), ledgerTransactionId: 'transaction-one' }]),
-  JSON.stringify({ version: 2, state: { receipts: [] } }),
+  JSON.stringify({ version: 3, state: { receipts: [] } }),
   JSON.stringify({ state: { receipts: [] } }),
   JSON.stringify({ version: 1, state: { receipts: [] }, extra: true }),
   JSON.stringify({ version: 1, state: { receipts: [], extra: true } }),
@@ -498,7 +498,7 @@ test('journal serialization failure and reentrant duplicate both reject without 
   const stringify = JSON.stringify; let duplicate;
   const unsubscribe = journal.subscribe(() => { duplicate = journal.prepare(prepared()); });
   JSON.stringify = (value, ...args) => {
-    if (value?.version === 1 && value?.state?.receipts) throw new Error('Journal serialization failed');
+    if (value?.version === 2 && value?.state?.receipts) throw new Error('Journal serialization failed');
     return stringify(value, ...args);
   };
   try {

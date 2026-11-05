@@ -1,5 +1,6 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { assertAccountingStorageVersion, paymentJournalMetadata } from '@/features/finance/types/paymentJournalInstallation';
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
@@ -122,6 +123,7 @@ function migrateLedgerData(persistedState: unknown): LedgerData {
   const transfers = normalizeRecords<Transfer>(saved.transfers);
 
   return {
+    paymentJournal: paymentJournalMetadata(saved).paymentJournal,
     accounts,
     transactions,
     transfers,
@@ -1032,7 +1034,7 @@ export const useLedgerStore = create<LedgerStore>()(
 
       resetLedger: () => {
         if (!get().clearAccountsAndTransactions()) return false;
-        set({ ...initialData });
+        set({ ...initialData, ...paymentJournalMetadata(get()) });
         return true;
       },
       });
@@ -1044,14 +1046,17 @@ export const useLedgerStore = create<LedgerStore>()(
 
       // Persist data only, never action functions.
       partialize: (state): LedgerData => ({
+        ...paymentJournalMetadata(state),
         accounts: state.accounts,
         categories: state.categories,
         transactions: state.transactions,
         transfers: state.transfers,
       }),
 
-      migrate: (persistedState, _persistedVersion): LedgerData =>
-        migrateLedgerData(persistedState),
+      migrate: (persistedState, persistedVersion): LedgerData => {
+        assertAccountingStorageVersion(persistedVersion);
+        return migrateLedgerData(persistedState);
+      },
 
       merge: (persistedState, currentState) => ({
         ...currentState,

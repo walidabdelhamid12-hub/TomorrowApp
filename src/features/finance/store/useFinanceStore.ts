@@ -1,4 +1,5 @@
 import { canEditLoanPayment, canReverseLoanPayment } from '@/features/finance/utils/loanPaymentPolicy';
+import { assertAccountingStorageVersion, paymentJournalMetadata } from '@/features/finance/types/paymentJournalInstallation';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
@@ -170,6 +171,7 @@ function migrateFinanceData(
   const saved = isRecord(persistedState) ? persistedState : {};
 
   return {
+    paymentJournal: paymentJournalMetadata(saved).paymentJournal,
     assets: normalizeRecords<Asset>(saved.assets),
     debts: normalizeRecords<Debt>(saved.debts),
     loans: normalizeRecords<Loan>(saved.loans).map((loan) => ({
@@ -888,7 +890,7 @@ export const useFinanceStore = create<FinanceStore>()(
         const ledger = readLedgerProtection();
         if (!useFinanceStore.persist.hasHydrated() || !ledger?.hydrated || get().loans.length || get().debts.length
           || ledger.transactions.some(t => isProtectedTransaction(t, get()))) return false;
-        set({ ...initialData });
+        set({ ...initialData, ...paymentJournalMetadata(get()) });
         return true;
       },
     }),
@@ -898,14 +900,17 @@ export const useFinanceStore = create<FinanceStore>()(
       storage: createJSONStorage(() => AsyncStorage),
 
       partialize: (state): FinanceData => ({
+        ...paymentJournalMetadata(state),
         assets: state.assets,
         debts: state.debts,
         loans: state.loans,
         cheques: state.cheques,
       }),
 
-      migrate: (persistedState, _persistedVersion): FinanceData =>
-        migrateFinanceData(persistedState),
+      migrate: (persistedState, persistedVersion): FinanceData => {
+        assertAccountingStorageVersion(persistedVersion);
+        return migrateFinanceData(persistedState);
+      },
 
       merge: (persistedState, currentState) => ({
         ...currentState,

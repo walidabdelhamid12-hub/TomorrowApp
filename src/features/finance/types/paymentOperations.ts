@@ -1,5 +1,6 @@
 import { roundMoney } from '@/features/finance/utils/finance';
 import { isValidISODate } from '@/features/finance/utils/input';
+import { readPaymentJournalInstallation, type PaymentJournalInstallation } from './paymentJournalInstallation';
 
 export type PaymentOperationId = string;
 type AccountFunding = Readonly<{ kind: 'account'; accountId: string; categoryId: string }>;
@@ -24,7 +25,10 @@ export interface PaymentOperationReceipt {
   readonly outcome?: PaymentOperationOutcome;
 }
 export type PreparedPaymentOperation = Omit<PaymentOperationReceipt, 'status' | 'outcome'>;
-export type PaymentOperationJournalData = { readonly receipts: readonly PaymentOperationReceipt[] };
+export type PaymentOperationJournalData = {
+  readonly receipts: readonly PaymentOperationReceipt[];
+  readonly installation?: PaymentJournalInstallation;
+};
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -78,7 +82,7 @@ export function isPaymentOperationReceipt(value: unknown): value is PaymentOpera
 
 /** Reject the entire document: never filter malformed entries into an empty journal. */
 export function readPaymentOperationJournal(value: unknown): PaymentOperationJournalData {
-  if (!record(value) || !keys(value, ['receipts']) || !Array.isArray(value.receipts)
+  if (!record(value) || !keys(value, ['receipts', 'installation']) || !Array.isArray(value.receipts)
     || !value.receipts.every(isPaymentOperationReceipt)) throw new Error('Invalid payment operation journal.');
   for (const key of ['operationId', 'paymentId', 'ledgerTransactionId'] as const) {
     const ids = value.receipts.map(receipt => receipt[key]).filter(id => id !== undefined);
@@ -86,6 +90,9 @@ export function readPaymentOperationJournal(value: unknown): PaymentOperationJou
   }
   // Copy before freezing: callers cannot mutate original requests or saved receipts.
   const copy = JSON.parse(JSON.stringify(value)) as PaymentOperationJournalData;
+  if ('installation' in value) {
+    Object.defineProperty(copy, 'installation', { value: readPaymentJournalInstallation(value.installation), enumerable: true });
+  }
   for (const receipt of copy.receipts) {
     Object.freeze(receipt.request.funding); Object.freeze(receipt.request);
     if (receipt.outcome) Object.freeze(receipt.outcome);

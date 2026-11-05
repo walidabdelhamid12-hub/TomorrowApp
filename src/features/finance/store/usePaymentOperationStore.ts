@@ -6,18 +6,35 @@ import {
   type PaymentOperationJournalData, type PaymentOperationOutcome, type PaymentOperationReceipt, type PreparedPaymentOperation,
 } from '@/features/finance/types/paymentOperations';
 import { createOrderedFinancePersistence } from './financePersistence';
+import { readPaymentJournalInstallation, type PaymentJournalInstallation } from '@/features/finance/types/paymentJournalInstallation';
 
 export const PAYMENT_OPERATION_STORAGE_KEY = 'tomorrow:payment-operations';
-const VERSION = 1;
+const VERSION = 2;
 type JournalPhase = 'unhydrated' | 'hydrating' | 'ready' | 'blocked' | 'closed';
+type JournalDocument = { source: 'missing' | 'legacy-v1' | 'v2'; data?: PaymentOperationJournalData };
+function readJournalDocument(raw: string | null): JournalDocument {
+  if (raw === null) return { source: 'missing' };
+  const envelope: unknown = JSON.parse(raw);
+  if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)
+    || Object.keys(envelope).some(key => key !== 'state' && key !== 'version')
+    || !('version' in envelope) || ![1, VERSION].includes(envelope.version as number) || !('state' in envelope)) {
+    throw new Error('Invalid or unsupported payment operation journal envelope.');
+  }
+  const data = readPaymentOperationJournal(envelope.state);
+  if (envelope.version === 1 && data.installation) throw new Error('Version 1 journal cannot contain installation metadata.');
+  return { source: envelope.version === 1 ? 'legacy-v1' : 'v2', data };
+}
 interface PaymentOperationStore {
   getState: () => PaymentOperationJournalData;
   subscribe: (listener: (state: PaymentOperationJournalData, previous: PaymentOperationJournalData) => void) => () => void;
-  getStatus: () => { phase: JournalPhase; error: unknown };
+  getStatus: () => { phase: JournalPhase; error: unknown; source: 'unknown' | 'missing' | 'legacy-v1' | 'v2' };
   hydrate: () => Promise<void>;
   close: () => Promise<void>;
   prepare: (input: PreparedPaymentOperation) => Promise<PaymentOperationReceipt>;
   complete: (operationId: string, outcome: PaymentOperationOutcome) => Promise<PaymentOperationReceipt>;
+  beginInstallation: (generationId: string) => Promise<PaymentOperationJournalData>;
+  activateInstallation: (generationId: string) => Promise<PaymentOperationJournalData>;
+  readPersisted: () => Promise<JournalDocument>;
 }
 const owners = new WeakMap<object, PaymentOperationStore>();
 
@@ -35,6 +52,7 @@ export function createPaymentOperationStore(backend: StateStorage = AsyncStorage
   const persistence = createOrderedFinancePersistence(backend);
   let phase: JournalPhase = 'unhydrated';
   let failure: unknown;
+  let source: 'unknown' | 'missing' | 'legacy-v1' | 'v2' = 'unknown';
   let hydration: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
   let closed = false;
@@ -44,14 +62,12 @@ export function createPaymentOperationStore(backend: StateStorage = AsyncStorage
     ...persistence.storage,
     getItem: async key => {
       const raw = await persistence.storage.getItem(key);
-      if (raw === null) return null; // New installation only; JSON null is invalid.
-      const envelope: unknown = JSON.parse(raw);
-      if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)
-        || Object.keys(envelope).some(key => key !== 'state' && key !== 'version')
-        || !('version' in envelope) || envelope.version !== VERSION || !('state' in envelope)) {
-        throw new Error('Invalid or unsupported payment operation journal envelope.');
+      const document = readJournalDocument(raw);
+      source = document.source;
+      if (document.source === 'legacy-v1') {
+        // Compatibility is read-only: no automatic migration write on startup.
+        return JSON.stringify({ version: VERSION, state: document.data });
       }
-      readPaymentOperationJournal(envelope.state);
       return raw;
     },
     // Tombstones must not be erased via persist.clearStorage().
@@ -109,7 +125,7 @@ export function createPaymentOperationStore(backend: StateStorage = AsyncStorage
   const api: PaymentOperationStore = {
     getState: store.getState,
     subscribe: store.subscribe,
-    getStatus: () => ({ phase: closed ? 'closed' : phase, error: failure }),
+    getStatus: () => ({ phase: closed ? 'closed' : phase, error: failure, source }),
     hydrate: (): Promise<void> => {
       if (closed) return Promise.reject(new Error('Payment operation journal is closed.'));
       if (phase === 'blocked') return Promise.reject(failure);
@@ -135,6 +151,13 @@ export function createPaymentOperationStore(backend: StateStorage = AsyncStorage
       })();
       return closing;
     },
+    beginInstallation: generationId => installationChange(generationId, 'initializing'),
+    activateInstallation: generationId => installationChange(generationId, 'active'),
+    readPersisted: async () => {
+      ready();
+      try { return readJournalDocument(await persistence.storage.getItem(PAYMENT_OPERATION_STORAGE_KEY)); }
+      catch (error) { phase = 'blocked'; failure = error; throw error; }
+    },
     prepare: (input: PreparedPaymentOperation) => {
       try {
         ready();
@@ -148,7 +171,8 @@ export function createPaymentOperationStore(backend: StateStorage = AsyncStorage
             await flush();
             return existing;
           }
-          await save({ receipts: [...store.getState().receipts, receipt] });
+          if (store.getState().installation?.phase === 'initializing') throw new Error('Journal installation is incomplete.');
+          await save({ ...store.getState(), receipts: [...store.getState().receipts, receipt] });
           return receipt;
         });
       } catch (error) { return Promise.reject(error); }
@@ -165,13 +189,32 @@ export function createPaymentOperationStore(backend: StateStorage = AsyncStorage
         return transition('complete', completed, async () => {
           const existing = store.getState().receipts.find(r => r.operationId === operationId);
           if (!existing || (existing.status !== 'prepared' && existing.status !== 'completed')) throw new Error('Operation cannot be completed.');
-          if (existing.status !== 'completed') await save({ receipts: store.getState().receipts.map(r => r === existing ? completed : r) });
+          if (existing.status !== 'completed') await save({ ...store.getState(), receipts: store.getState().receipts.map(r => r === existing ? completed : r) });
           else await flush();
           return completed;
         });
       } catch (error) { return Promise.reject(error); }
     },
   };
+  function installationChange(generationId: string, target: PaymentJournalInstallation['phase']): Promise<PaymentOperationJournalData> {
+    try {
+      ready();
+      const installation = readPaymentJournalInstallation({ schemaVersion: 1, generationId, phase: target });
+      const result = transitionTail.then(async () => {
+        ready();
+        const current = store.getState();
+        if (current.installation && current.installation.generationId !== generationId) throw new Error('Journal generation cannot change.');
+        if (current.receipts.length) throw new Error('Existing operation receipts require separate recovery verification.');
+        if (target === 'active' && !current.installation) throw new Error('Installation must be initialized first.');
+        if (current.installation?.phase === 'active') return current; // Never downgrade activation.
+        const next = readPaymentOperationJournal({ ...current, installation });
+        await save(next);
+        return next;
+      });
+      transitionTail = result.then(() => {}, () => {});
+      return result;
+    } catch (error) { return Promise.reject(error); }
+  }
   owners.set(ownerIdentity, api);
   return api;
 }
