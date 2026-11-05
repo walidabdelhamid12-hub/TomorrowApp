@@ -451,7 +451,10 @@ for (const [first, second] of [['debt', 'debt'], ['loan', 'loan'], ['debt', 'loa
       if (duplicate) await assert.rejects(s.runtime.persistence.flush(F));
       else {
         s.finance.getState().clearAssets(); await s.runtime.persistence.flush(F);
-        assert.deepEqual(JSON.parse(s.native.data.get(F)).state, x.finance);
+        const expected = clone(x.finance);
+        // Task 4 retains all history and irreversibly consumes historical candidates.
+        expected.creationProvenance.entries.forEach(e => { e.disposition = 'consumed'; });
+        assert.deepEqual(JSON.parse(s.native.data.get(F)).state, expected);
       }
     });
   }
@@ -502,7 +505,9 @@ for (const kind of ['debt', 'loan']) {
     const s = await actual(x); assert.equal(s.finance.persist.hasHydrated(), true);
     assert.deepEqual(s.finance.getState()[kind === 'debt' ? 'debts' : 'loans'].at(-1).payments, owner.payments);
     s.finance.getState().clearAssets(); await s.runtime.persistence.flush(F);
-    assert.deepEqual(JSON.parse(s.native.data.get(F)).state, x.finance);
+    const expected = clone(x.finance);
+    if (historical) expected.creationProvenance.entries[0].disposition = 'consumed';
+    assert.deepEqual(JSON.parse(s.native.data.get(F)).state, expected);
   });
 }
 for (const payments of [undefined, null, 'corrupt', {}]) test(`unowned legacy loan keeps existing normalization for ${String(payments)}`, async () => {

@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import { createJSONStorage } from 'zustand/middleware';
 import { paymentRuntimePersist as persist } from './paymentOperationRuntime';
 import { readFinanceCreationProvenance } from './paymentAccountingVerification';
+import { preserveCreationLifecycle } from './creationProvenance';
 import { readLedgerProtection } from '@/features/finance/store/ledgerProtectionReader';
 import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
 
@@ -255,7 +256,17 @@ function applyAssetPatch(asset: Asset, patch: AssetPatch): Asset {
 
 export const useFinanceStore = create<FinanceStore>()(
   persist(
-    (set, get) => {
+    (rawSet, get) => {
+      // Domain changes and negative eligibility evidence share one persisted set.
+      // Runtime/private setters and hydration retain their existing boundaries.
+      const set: typeof rawSet = (partial, replace) => {
+        if (!get().creationProvenance) return rawSet(partial, replace as false);
+        const previous = get();
+        const patch = typeof partial === 'function' ? partial(previous) : partial;
+        const next = (replace ? patch : { ...previous, ...patch }) as FinanceStore;
+        const evidence = preserveCreationLifecycle(previous, next, readLedgerProtection());
+        return rawSet({ ...next, ...evidence }, true);
+      };
       const addDebtPayment = (debtId: EntityId, input: NewDebtPaymentInput, reservedId?: string): EntityId | null => {
         const debt = get().debts.find((item) => item.id === debtId);
         if (!debt) return null;
