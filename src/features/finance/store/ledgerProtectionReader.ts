@@ -1,6 +1,6 @@
 import type { LedgerData } from '@/features/finance/types/ledger';
 
-type ProtectionSnapshot = Pick<LedgerData, 'transactions' | 'transfers'> & { hydrated: boolean };
+type ProtectionSnapshot = Pick<LedgerData, 'transactions' | 'transfers' | 'accounts' | 'categories'> & { hydrated: boolean };
 let reader: (() => ProtectionSnapshot) | undefined;
 
 // A lazy reader keeps Finance's deletion guards independent of ledger initialization.

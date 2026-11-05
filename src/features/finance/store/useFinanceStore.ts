@@ -1,3 +1,5 @@
+import { isPaymentOperationReceipt, type PaymentOperationReceipt } from '@/features/finance/types/paymentOperations';
+import { reservedPaymentAvailable, reservedPaymentFundingValid } from '@/features/finance/utils/reservedPayments';
 import { canEditLoanPayment, canReverseLoanPayment } from '@/features/finance/utils/loanPaymentPolicy';
 import { assertAccountingStorageVersion, paymentJournalMetadata } from '@/features/finance/types/paymentJournalInstallation';
 
@@ -53,6 +55,9 @@ import {
 /* -------------------------------------------------------------------------- */
 
 interface FinanceActions {
+  /** Inactive primitives: caller must acknowledge the prepared journal and hold the accounting gate. */
+  addReservedDebtPayment: (receipt: PaymentOperationReceipt) => EntityId | null;
+  addReservedLoanPayment: (receipt: PaymentOperationReceipt) => EntityId | null;
   addAsset: (input: NewAssetInput) => EntityId;
   updateAsset: (id: EntityId, patch: AssetPatch) => void;
   deleteAsset: (id: EntityId) => void;
@@ -247,8 +252,120 @@ function applyAssetPatch(asset: Asset, patch: AssetPatch): Asset {
 
 export const useFinanceStore = create<FinanceStore>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      const addDebtPayment = (debtId: EntityId, input: NewDebtPaymentInput, reservedId?: string): EntityId | null => {
+        const debt = get().debts.find((item) => item.id === debtId);
+        if (!debt) return null;
+
+        const amount = roundMoney(input.amount);
+        const alreadyPaid = getDebtPaid(debt);
+        const remaining = getDebtRemaining(debt);
+
+        if (
+          !Number.isFinite(amount) ||
+          amount <= 0 ||
+          !Number.isFinite(remaining) ||
+          amount > remaining
+        ) {
+          return null;
+        }
+
+        const payment: DebtPayment = {
+          ...input,
+          amount,
+          id: reservedId ?? generateId('dpy'),
+        };
+
+        set((state) => ({
+          debts: patchParent(state.debts, debtId, (debt) => ({
+            ...debt,
+            payments: [...debt.payments, payment],
+          })),
+        }));
+
+        return payment.id;
+      };
+      const addLoanPayment = (loanId: EntityId, input: NewLoanPaymentInput, reservedId?: string): EntityId | null => {
+        const loan = get().loans.find((item) => item.id === loanId);
+        if (!loan || loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed') return null;
+
+        const amount = roundMoney(input.amount);
+        const latePaymentFee = roundMoney(input.latePaymentFee ?? 0);
+        const paymentMode = input.paymentMode ?? 'split';
+        const principalAmount = paymentMode === 'simple'
+          ? undefined
+          : roundMoney(input.principalAmount ?? amount);
+        const interestAmount = paymentMode === 'simple'
+          ? undefined
+          : roundMoney(input.interestAmount ?? amount - (principalAmount ?? amount));
+        const principalLimit = roundMoney(loan.receivedAmount ?? loan.principalAmount ?? 0);
+        const principalAlreadyPaid = roundMoney(
+          loan.payments.reduce(
+            (sum, payment) => sum + (
+              payment.paymentMode === 'simple'
+                ? 0
+                : payment.principalAmount ?? payment.amount
+            ),
+            0
+          )
+        );
+        const totalLimit = getLoanTotal(loan);
+        const totalAlreadyPaid = getLoanPaidAmount(loan);
+
+        if (
+          !Number.isFinite(amount) || amount <= 0 ||
+          !Number.isFinite(latePaymentFee) || latePaymentFee < 0 ||
+          !Number.isFinite(totalLimit) || totalLimit <= 0 ||
+          !Number.isFinite(totalAlreadyPaid) ||
+          roundMoney(amount + totalAlreadyPaid) > totalLimit ||
+          (paymentMode !== 'simple' && (
+            principalAmount === undefined || !Number.isFinite(principalAmount) || principalAmount < 0 ||
+            interestAmount === undefined || !Number.isFinite(interestAmount) || interestAmount < 0 ||
+            roundMoney(principalAmount + interestAmount) !== amount ||
+            !Number.isFinite(principalAlreadyPaid) ||
+            !Number.isFinite(principalLimit) ||
+            roundMoney(principalAmount + principalAlreadyPaid) > principalLimit
+          ))
+        ) {
+          return null;
+        }
+
+        const payment: LoanPayment = {
+          ...input,
+          amount,
+          latePaymentFee,
+          paymentMode,
+          ...(paymentMode === 'simple' ? {} : { principalAmount, interestAmount }),
+          id: reservedId ?? generateId('lpy'),
+        };
+
+        set((state) => ({
+          loans: patchParent(state.loans, loanId, (currentLoan) => ({
+            ...currentLoan,
+            payments: [...currentLoan.payments, payment],
+          })),
+        }));
+
+        return payment.id;
+      };
+      const reserved = (receipt: PaymentOperationReceipt, kind: 'debt' | 'loan'): EntityId | null => {
+        const ledger = readLedgerProtection();
+        if (!useFinanceStore.persist.hasHydrated() || !ledger?.hydrated
+          || !isPaymentOperationReceipt(receipt) || receipt.status !== 'prepared'
+          || receipt.request.entityType !== kind || !reservedPaymentAvailable(receipt, get(), ledger)
+          || !reservedPaymentFundingValid(receipt, get(), ledger)) return null;
+        const request = receipt.request;
+        const input = { amount: request.amount, date: request.date, note: request.note,
+          ...(request.funding.kind === 'account' ? { accountId: request.funding.accountId }
+            : { paymentMethodLabel: request.funding.methodLabel }) };
+        return request.entityType === 'debt'
+          ? addDebtPayment(request.entityId, input, receipt.paymentId)
+          : addLoanPayment(request.entityId, { ...input, latePaymentFee: request.latePaymentFee, paymentMode: 'simple' }, receipt.paymentId);
+      };
+      return ({
       ...initialData,
+      addReservedDebtPayment: receipt => reserved(receipt, 'debt'),
+      addReservedLoanPayment: receipt => reserved(receipt, 'loan'),
 
       /* Assets */
       addAsset: (input) => {
@@ -411,38 +528,7 @@ export const useFinanceStore = create<FinanceStore>()(
         return true;
       },
 
-      addDebtPayment: (debtId, input) => {
-        const debt = get().debts.find((item) => item.id === debtId);
-        if (!debt) return null;
-
-        const amount = roundMoney(input.amount);
-        const alreadyPaid = getDebtPaid(debt);
-        const remaining = getDebtRemaining(debt);
-
-        if (
-          !Number.isFinite(amount) ||
-          amount <= 0 ||
-          !Number.isFinite(remaining) ||
-          amount > remaining
-        ) {
-          return null;
-        }
-
-        const payment: DebtPayment = {
-          ...input,
-          amount,
-          id: generateId('dpy'),
-        };
-
-        set((state) => ({
-          debts: patchParent(state.debts, debtId, (debt) => ({
-            ...debt,
-            payments: [...debt.payments, payment],
-          })),
-        }));
-
-        return payment.id;
-      },
+      addDebtPayment: (id, input) => addDebtPayment(id, input),
 
       // Attach a newly created ledger transaction to an unlinked payment.
       // This is deliberately separate from editing an already-posted payment.
@@ -671,69 +757,7 @@ export const useFinanceStore = create<FinanceStore>()(
         return true;
       },
 
-      addLoanPayment: (loanId, input) => {
-        const loan = get().loans.find((item) => item.id === loanId);
-        if (!loan || loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed') return null;
-
-        const amount = roundMoney(input.amount);
-        const latePaymentFee = roundMoney(input.latePaymentFee ?? 0);
-        const paymentMode = input.paymentMode ?? 'split';
-        const principalAmount = paymentMode === 'simple'
-          ? undefined
-          : roundMoney(input.principalAmount ?? amount);
-        const interestAmount = paymentMode === 'simple'
-          ? undefined
-          : roundMoney(input.interestAmount ?? amount - (principalAmount ?? amount));
-        const principalLimit = roundMoney(loan.receivedAmount ?? loan.principalAmount ?? 0);
-        const principalAlreadyPaid = roundMoney(
-          loan.payments.reduce(
-            (sum, payment) => sum + (
-              payment.paymentMode === 'simple'
-                ? 0
-                : payment.principalAmount ?? payment.amount
-            ),
-            0
-          )
-        );
-        const totalLimit = getLoanTotal(loan);
-        const totalAlreadyPaid = getLoanPaidAmount(loan);
-
-        if (
-          !Number.isFinite(amount) || amount <= 0 ||
-          !Number.isFinite(latePaymentFee) || latePaymentFee < 0 ||
-          !Number.isFinite(totalLimit) || totalLimit <= 0 ||
-          !Number.isFinite(totalAlreadyPaid) ||
-          roundMoney(amount + totalAlreadyPaid) > totalLimit ||
-          (paymentMode !== 'simple' && (
-            principalAmount === undefined || !Number.isFinite(principalAmount) || principalAmount < 0 ||
-            interestAmount === undefined || !Number.isFinite(interestAmount) || interestAmount < 0 ||
-            roundMoney(principalAmount + interestAmount) !== amount ||
-            !Number.isFinite(principalAlreadyPaid) ||
-            !Number.isFinite(principalLimit) ||
-            roundMoney(principalAmount + principalAlreadyPaid) > principalLimit
-          ))
-        ) {
-          return null;
-        }
-
-        const payment: LoanPayment = {
-          ...input,
-          amount,
-          latePaymentFee,
-          paymentMode,
-          ...(paymentMode === 'simple' ? {} : { principalAmount, interestAmount }),
-          id: generateId('lpy'),
-        };
-
-        set((state) => ({
-          loans: patchParent(state.loans, loanId, (currentLoan) => ({
-            ...currentLoan,
-            payments: [...currentLoan.payments, payment],
-          })),
-        }));
-
-        return payment.id;
-      },
+      addLoanPayment: (id, input) => addLoanPayment(id, input),
 
       updateLoanPayment: (loanId, paymentId, patch) => {
         const loan = get().loans.find((item) => item.id === loanId);
@@ -894,7 +918,8 @@ export const useFinanceStore = create<FinanceStore>()(
         set({ ...initialData, ...paymentJournalMetadata(get()) });
         return true;
       },
-    }),
+    });
+    },
     {
       name: 'tomorrow:finance',
       version: STORAGE_VERSION,

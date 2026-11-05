@@ -923,3 +923,141 @@ test('invalid persisted amount visibility stays hidden', async () => {
   await preferences.persist.rehydrate();
   assert.equal(preferences.getState().amountsVisible, false);
 });
+
+// Phase 2C-1: reservation-only primitives. No journal/coordinator activation.
+function reservation(kind = 'debt', changes = {}) {
+  return { operationId: 'operation-reserved', status: 'prepared', paymentId: 'reserved-payment',
+    ledgerTransactionId: 'reserved-transaction', request: {
+      entityType: kind, entityId: kind, currencyCode: 'USD', amount: 25, date,
+      funding: { kind: 'account', accountId: 'a', categoryId: 'out' },
+      ...(kind === 'debt' ? { direction: 'payable' } : { latePaymentFee: 3, settlement: false }),
+      ...changes,
+    } };
+}
+const insertReserved = r => r.request.entityType === 'debt'
+  ? finance.getState().addReservedDebtPayment(r) : finance.getState().addReservedLoanPayment(r);
+function rejectReserved(r, ledgerOnly = false) {
+  const previous = snapshot();
+  assert.equal(ledgerOnly ? ledger.getState().addReservedPaymentTransaction(r) : insertReserved(r), null);
+  assert.deepEqual(snapshot(), previous);
+}
+for (const kind of ['debt', 'loan']) {
+  test('reserved ' + kind + ' uses exact IDs, links once and reverses using existing accounting', () => {
+    const r = reservation(kind); const beforeBalance = balance('a');
+    const beforeCount = ledger.getState().transactions.length;
+    assert.equal(insertReserved(r), r.paymentId);
+    assert.equal(ledger.getState().transactions.length, beforeCount);
+    rejectReserved(r);
+    assert.equal(ledger.getState().addReservedPaymentTransaction(r), r.ledgerTransactionId);
+    rejectReserved(r, true);
+    const state = finance.getState();
+    assert.equal(kind === 'debt' ? state.linkDebtPaymentTransaction(kind, r.paymentId, r.ledgerTransactionId)
+      : state.updateLoanPayment(kind, r.paymentId, { ledgerTransactionId: r.ledgerTransactionId }), true);
+    assert.equal(balance('a'), beforeBalance - (kind === 'loan' ? 28 : 25));
+    assert.equal(reverseLinkedPayment({ entityType: kind, entityId: kind, paymentId: r.paymentId }).ok, true);
+    assert.equal(balance('a'), beforeBalance);
+  });
+  for (const amount of [0, -1, NaN, Infinity, 10000, 0.0001]) {
+    test('reserved ' + kind + ' rejects amount ' + amount + ' without writes', () => rejectReserved(reservation(kind, { amount })));
+  }
+  for (const field of ['paymentId', 'ledgerTransactionId']) {
+    for (const id of ['', ' spaced ', 'dp', 'lp', 'dt', 'lt', 'a', 'out']) {
+      test('reserved ' + kind + ' rejects occupied/invalid ' + field + ' ' + JSON.stringify(id), () => {
+        rejectReserved({ ...reservation(kind), [field]: id });
+      });
+    }
+  }
+  test('reserved ' + kind + ' rejects missing parent, currency/date and funding mismatches', () => {
+    for (const changes of [{ entityId: 'missing' }, { currencyCode: 'EGP' }, { date: 'invalid' },
+      { funding: { kind: 'account', accountId: 'missing', categoryId: 'out' } },
+      { funding: { kind: 'account', accountId: 'a', categoryId: 'in' } }]) rejectReserved(reservation(kind, changes));
+    ledger.setState(s => ({ accounts: s.accounts.map(a => ({ ...a, archived: true })) }));
+    rejectReserved(reservation(kind));
+  });
+  test('reserved ' + kind + ' rejects orphan ownership and duplicate parent IDs', () => {
+    ledger.setState(s => ({ transactions: [...s.transactions, { ...s.transactions[0], id: 'orphan', linkedPaymentId: 'reserved-payment' }] }));
+    rejectReserved(reservation(kind));
+    ledger.setState(s => ({ transactions: s.transactions.filter(t => t.id !== 'orphan') }));
+    const key = kind === 'debt' ? 'debts' : 'loans';
+    finance.setState(s => ({ [key]: [...s[key], s[key][0]] }));
+    rejectReserved(reservation(kind));
+  });
+  test('reserved ' + kind + ' ledger rejects changed payment and transaction ownership collisions', () => {
+    const r = reservation(kind); assert.equal(insertReserved(r), r.paymentId);
+    const key = kind === 'debt' ? 'debts' : 'loans';
+    finance.setState(s => ({ [key]: s[key].map(parent => ({ ...parent, payments: parent.payments.map(p => p.id === r.paymentId ? { ...p, amount: 26 } : p) })) }));
+    rejectReserved(r, true);
+    finance.setState(s => ({ [key]: s[key].map(parent => ({ ...parent, payments: parent.payments.map(p => p.id === r.paymentId ? { ...p, amount: 25 } : p) })) }));
+    ledger.setState(s => ({ transactions: [...s.transactions, { ...s.transactions[0], id: r.ledgerTransactionId }] }));
+    rejectReserved(r, true);
+  });
+}
+test('reserved Receivable derives income and preserves currency and remaining principal', () => {
+  changeDebt(d => ({ ...d, direction: 'receivable' }));
+  const r = reservation('debt', { direction: 'receivable', funding: { kind: 'account', accountId: 'a', categoryId: 'in' } });
+  const previous = balance('a'); assert.equal(insertReserved(r), r.paymentId);
+  assert.equal(ledger.getState().addReservedPaymentTransaction(r), r.ledgerTransactionId);
+  assert.equal(balance('a'), previous + 25);
+  assert.equal(getDebtRemaining(finance.getState().debts[0]), 425);
+});
+test('reserved custom-method loan creates only Finance payment; simple fee/principal allocation preserved', () => {
+  const r = reservation('loan', { funding: { kind: 'custom', methodLabel: 'Cash outside accounts' } });
+  delete r.ledgerTransactionId;
+  const previous = structuredClone(ledger.getState().transactions);
+  assert.equal(insertReserved(r), r.paymentId);
+  const p = finance.getState().loans[0].payments.find(p => p.id === r.paymentId);
+  assert.equal(p.paymentMode, 'simple'); assert.equal(p.principalAmount, undefined);
+  assert.equal(p.interestAmount, undefined); assert.equal(p.latePaymentFee, 3);
+  assert.equal(p.accountId, undefined); assert.equal(p.paymentMethodLabel, 'Cash outside accounts');
+  assert.equal(getLoanRemainingAmount(finance.getState().loans[0]), 1075);
+  rejectReserved(r, true); assert.deepEqual(ledger.getState().transactions, previous);
+});
+for (const status of ['settled', 'completed', 'closed']) {
+  test('reserved loan preserves terminal ' + status + ' rejection', () => {
+    changeLoan(l => ({ ...l, status })); rejectReserved(reservation('loan'));
+  });
+}
+test('reserved settlement payment permits existing explicit lifecycle transition, without implicitly settling on insertion', () => {
+  const r = reservation('loan', { settlement: true, amount: 100 });
+  assert.equal(insertReserved(r), r.paymentId);
+  assert.equal(finance.getState().loans[0].status, 'active');
+  assert.equal(ledger.getState().addReservedPaymentTransaction(r), r.ledgerTransactionId);
+  assert.equal(finance.getState().updateLoanPayment('loan', r.paymentId, { ledgerTransactionId: r.ledgerTransactionId }), true);
+  finance.getState().updateLoan('loan', { status: 'settled', settlementAmount: 100,
+    settlementPaymentId: r.paymentId, settlementDate: date, settlementAccountId: 'a' });
+  assert.equal(finance.getState().loans[0].status, 'settled');
+  assert.equal(reverseLinkedPayment({ entityType: 'loan', entityId: 'loan', paymentId: r.paymentId }).ok, true);
+  assert.equal(finance.getState().loans[0].status, 'active');
+});
+test('reserved APIs reject completed receipts, identical reserved IDs and wrong primitive kind', () => {
+  const r = reservation(); rejectReserved({ ...r, ledgerTransactionId: r.paymentId });
+  rejectReserved({ ...r, status: 'completed', outcome: { paymentId: r.paymentId, ledgerTransactionId: r.ledgerTransactionId } });
+  assert.equal(finance.getState().addReservedLoanPayment(r), null);
+  assert.equal(finance.getState().addReservedDebtPayment(reservation('loan')), null);
+});
+
+test('legacy creation actions ignore extra reserved-ID arguments and continue generating their own IDs', () => {
+  const debtId = finance.getState().addDebtPayment('debt', { amount: 1, date, accountId: 'a' }, 'dp');
+  const loanId = finance.getState().addLoanPayment('loan', { amount: 1, date, accountId: 'a', paymentMode: 'simple' }, 'lp');
+  assert.ok(debtId && debtId !== 'dp'); assert.ok(loanId && loanId !== 'lp');
+  const txId = ledger.getState().addPaymentTransaction({ entityType: 'debt', entityId: 'debt', paymentId: debtId }, 'out', 'dt');
+  assert.ok(txId && txId !== 'dt');
+});
+for (const change of [
+  { latePaymentFee: -1 }, { latePaymentFee: Infinity },
+  { funding: { kind: 'custom', methodLabel: ' ' } },
+]) test('reserved loan rejects malformed fee/custom method ' + JSON.stringify(change), () => {
+  const r = reservation('loan', change);
+  if (r.request.funding.kind === 'custom') delete r.ledgerTransactionId;
+  rejectReserved(r);
+});
+test('reserved loan rejects credit-card funding and mismatched debt direction', () => {
+  ledger.setState(s => ({ accounts: s.accounts.map(a => ({ ...a, type: 'credit_card' })) }));
+  rejectReserved(reservation('loan'));
+  rejectReserved(reservation('debt', { direction: 'receivable' }));
+});
+test('reserved Ledger insertion rejects a payment ID that acquired competing transaction ownership', () => {
+  const r = reservation(); assert.equal(insertReserved(r), r.paymentId);
+  ledger.setState(s => ({ transactions: [...s.transactions, { ...s.transactions[0], id: r.paymentId }] }));
+  rejectReserved(r, true);
+});

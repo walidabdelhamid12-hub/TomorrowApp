@@ -1,3 +1,5 @@
+import { isPaymentOperationReceipt, type PaymentOperationReceipt } from '@/features/finance/types/paymentOperations';
+import { reservedPaymentMatches } from '@/features/finance/utils/reservedPayments';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assertAccountingStorageVersion, paymentJournalMetadata } from '@/features/finance/types/paymentJournalInstallation';
@@ -42,6 +44,8 @@ import { getAccountBalance } from '@/features/finance/utils/ledger';
 /* -------------------------------------------------------------------------- */
 
 interface LedgerActions {
+  /** Caller must acknowledge the prepared journal and hold the accounting gate. */
+  addReservedPaymentTransaction: (receipt: PaymentOperationReceipt) => EntityId | null;
   // Accounts
   addAccount: (input: NewAccountInput) => EntityId;
   updateAccount: (id: EntityId, patch: AccountPatch) => void;
@@ -353,7 +357,7 @@ function buildTransfer(
 export const useLedgerStore = create<LedgerStore>()(
   persist(
     (set, get) => {
-      const createTransaction = (input: NewTransactionInput): EntityId | null => {
+      const createTransaction = (input: NewTransactionInput, reservedId?: string): EntityId | null => {
         if (input.entryType === 'refund' &&
           (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated())) return null;
         const { accounts, categories, transactions } = get();
@@ -428,7 +432,7 @@ export const useLedgerStore = create<LedgerStore>()(
         const transaction: Transaction = {
           ...normalizedInput,
           currencyCode: account.currencyCode,
-          id: generateId('trx'),
+          id: reservedId ?? generateId('trx'),
           createdAt: timestamp,
           updatedAt: timestamp,
         };
@@ -438,6 +442,32 @@ export const useLedgerStore = create<LedgerStore>()(
         }));
 
         return transaction.id;
+      };
+      const addPaymentTransaction = (ref: PaymentRef, categoryId: string, reservedId?: string): EntityId | null => {
+        if (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated()) return null;
+        const finance = useFinanceStore.getState();
+        const parents = ref.entityType === 'debt' ? finance.debts : finance.loans;
+        const matches = parents.filter(p => p.id === ref.entityId);
+        const payments = matches.length === 1 ? (matches[0].payments ?? []).filter(p => p.id === ref.paymentId) : [];
+        if (payments.length !== 1) return null;
+        const parent = matches[0], payment = payments[0];
+        const isLoan = ref.entityType === 'loan';
+        const debt = isLoan ? undefined : finance.debts.find(d => d.id === parent.id);
+        const fee = isLoan ? (payment as LoanPayment).latePaymentFee ?? 0 : 0;
+        const account = get().accounts.filter(a => a.id === payment.accountId);
+        if (payment.ledgerTransactionId || !isValidISODate(payment.date)
+          || !Number.isFinite(payment.amount) || payment.amount <= 0 || !Number.isFinite(fee) || fee < 0
+          || account.length !== 1 || account[0].archived || account[0].currencyCode !== parent.currencyCode
+          || (isLoan && (account[0].type === 'credit_card' || (payment as LoanPayment).paymentMode !== 'simple'))
+          || (debt && debt.direction !== 'receivable' && debt.direction !== 'payable')
+          || get().transactions.some(t => !(isLoan && isVerifiedLoanReceipt(t, parent as Loan, finance, get()))
+            && (t.linkedPaymentId === payment.id
+              || (t.linkedEntityId === parent.id && (!t.linkedPaymentId || t.linkedEntityType !== ref.entityType))))) return null;
+        const type = debt?.direction === 'receivable' ? 'income' : 'expense';
+        return createTransaction({ accountId: account[0].id, categoryId, amount: roundMoney(payment.amount + fee),
+          type, date: payment.date, note: payment.note,
+          purpose: isLoan ? 'loan_payment' : type === 'income' ? 'debt_collection' : 'debt_payment',
+          linkedEntityType: ref.entityType, linkedEntityId: parent.id, linkedPaymentId: payment.id }, reservedId);
       };
       return ({
       ...initialData,
@@ -692,31 +722,14 @@ export const useLedgerStore = create<LedgerStore>()(
         });
       },
 
-      addPaymentTransaction: (ref, categoryId) => {
-        if (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated()) return null;
-        const finance = useFinanceStore.getState();
-        const parents = ref.entityType === 'debt' ? finance.debts : finance.loans;
-        const matches = parents.filter(p => p.id === ref.entityId);
-        const payments = matches.length === 1 ? (matches[0].payments ?? []).filter(p => p.id === ref.paymentId) : [];
-        if (payments.length !== 1) return null;
-        const parent = matches[0], payment = payments[0];
-        const isLoan = ref.entityType === 'loan';
-        const debt = isLoan ? undefined : finance.debts.find(d => d.id === parent.id);
-        const fee = isLoan ? (payment as LoanPayment).latePaymentFee ?? 0 : 0;
-        const account = get().accounts.filter(a => a.id === payment.accountId);
-        if (payment.ledgerTransactionId || !isValidISODate(payment.date)
-          || !Number.isFinite(payment.amount) || payment.amount <= 0 || !Number.isFinite(fee) || fee < 0
-          || account.length !== 1 || account[0].archived || account[0].currencyCode !== parent.currencyCode
-          || (isLoan && (account[0].type === 'credit_card' || (payment as LoanPayment).paymentMode !== 'simple'))
-          || (debt && debt.direction !== 'receivable' && debt.direction !== 'payable')
-          || get().transactions.some(t => !(isLoan && isVerifiedLoanReceipt(t, parent as Loan, finance, get()))
-            && (t.linkedPaymentId === payment.id
-              || (t.linkedEntityId === parent.id && (!t.linkedPaymentId || t.linkedEntityType !== ref.entityType))))) return null;
-        const type = debt?.direction === 'receivable' ? 'income' : 'expense';
-        return createTransaction({ accountId: account[0].id, categoryId, amount: roundMoney(payment.amount + fee),
-          type, date: payment.date, note: payment.note,
-          purpose: isLoan ? 'loan_payment' : type === 'income' ? 'debt_collection' : 'debt_payment',
-          linkedEntityType: ref.entityType, linkedEntityId: parent.id, linkedPaymentId: payment.id });
+      addPaymentTransaction: (ref, categoryId) => addPaymentTransaction(ref, categoryId),
+      addReservedPaymentTransaction: receipt => {
+        if (!isPaymentOperationReceipt(receipt) || receipt.status !== 'prepared'
+          || receipt.request.funding.kind !== 'account'
+          || !reservedPaymentMatches(receipt, useFinanceStore.getState(), get())) return null;
+        return addPaymentTransaction({ entityType: receipt.request.entityType,
+          entityId: receipt.request.entityId, paymentId: receipt.paymentId }, receipt.request.funding.categoryId,
+          receipt.ledgerTransactionId);
       },
 
       addLoanReceiptTransaction: (input) => {
