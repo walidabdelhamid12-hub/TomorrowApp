@@ -3,7 +3,9 @@ import type { StateCreator } from 'zustand/vanilla';
 import { persist, createJSONStorage, type PersistOptions, type StateStorage } from 'zustand/middleware';
 import { createOrderedFinancePersistence } from './financePersistence';
 import { createPaymentOperationStore, PAYMENT_OPERATION_STORAGE_KEY } from './usePaymentOperationStore';
-import { freezeEvidence } from '../types/paymentRecovery';
+import { freezeEvidence, object, sameEvidence, text, type EntityRef, type RevisionHead } from '../types/paymentRecovery';
+import { CoordinatorLeaseInterrupted, copyCoordinatorData, type CoordinatorCapability, type CoordinatorWriteLease, type StageBinding } from './paymentRuntimeAuthorization';
+import { readRecoveryJournalDocument, verifyPersistedPaymentAccounting } from './paymentAccountingVerification';
 
 export const PAYMENT_PERSISTENCE_KEYS = Object.freeze([
   'tomorrow:finance', 'tomorrow:ledger', PAYMENT_OPERATION_STORAGE_KEY,
@@ -14,6 +16,31 @@ type Tracked = ReturnType<typeof createOrderedFinancePersistence>;
 const instances = new WeakMap<object, PaymentOperationRuntime>();
 const legacyBindings = new Set<string>();
 let installed: PaymentOperationRuntime | undefined;
+type LeaseRequest = Readonly<{ operationId: string; entity: EntityRef; predecessor: RevisionHead | null }>;
+type StagePort = { hydrated: () => boolean; write: (binding: StageBinding, data: unknown) => Promise<void> };
+type LeaseOwner = { request: LeaseRequest; active: boolean; busy: boolean; issued: number;
+  pending: Set<Promise<void>>; errors: unknown[]; stages: Set<string>; interrupt: (error: Error) => void };
+type PrivateRuntime = { tracked: Tracked; ports: Map<AccountingKey, StagePort>; owner?: LeaseOwner; fence?: string;
+  coordinatorSession: boolean;
+  capabilities: WeakMap<object, { owner: LeaseOwner; binding: StageBinding; used: boolean }>;
+  run: <T>(request: LeaseRequest, job: (lease: CoordinatorWriteLease) => Promise<T>) => Promise<T> };
+// Neither privileged adapters nor registered store ports are reachable through runtime/state/options.
+const privateRuntimes = new WeakMap<PaymentOperationRuntime, PrivateRuntime>();
+const stageKey = (stage: StageBinding['stage']): PaymentPersistenceKey => {
+  if (stage === 'finance-insert' || stage === 'finance-finalize') return 'tomorrow:finance';
+  if (stage === 'ledger-insert' || stage === 'ledger-head') return 'tomorrow:ledger';
+  if (stage === 'journal-prepare' || stage === 'journal-complete') return PAYMENT_OPERATION_STORAGE_KEY;
+  throw new Error('Unsupported coordinator stage.');
+};
+
+/** Internal factory only. No application caller, posting plan, or readiness permission. */
+export function createCoordinatorRuntimeAccess(runtime: PaymentOperationRuntime) {
+  const owner = privateRuntimes.get(runtime);
+  if (!owner) throw new Error('Unknown coordinator runtime.');
+  if (runtime.getStatus().phase !== 'open') throw new Error('Coordinator runtime is closed or closing.');
+  owner.coordinatorSession = true;
+  return Object.freeze({ withWriteLease: <T>(request: LeaseRequest, job: (lease: CoordinatorWriteLease) => Promise<T>) => owner.run(request, job) });
+}
 
 /** Dormant until explicitly constructed; owns no accounting-store imports. */
 export class PaymentOperationRuntime {
@@ -32,6 +59,10 @@ export class PaymentOperationRuntime {
 
   assertMutationAllowed(): void {
     if (this.snapshotReading) { this.interference++; throw new Error('Recovery snapshot excludes mutations.'); }
+    const internal = privateRuntimes.get(this);
+    if (internal?.fence) throw new Error(`Accounting writes fenced: ${internal.fence}`);
+    if (internal?.owner) throw new Error('Coordinator ownership excludes public mutations.');
+    if (internal?.coordinatorSession) throw new Error('Coordinator session is write-closed to public mutations.');
     if (this.phase !== 'open') throw new Error('Payment persistence runtime is closed or closing.');
   }
 
@@ -65,13 +96,15 @@ export class PaymentOperationRuntime {
         }
         catch (error) { return Promise.reject(error); }
       },
+      settle: key => { knownKey(key); return tracked.settle(key); },
       storage: {
         getItem: async key => { open(key); await this.persistence.flush(key); return tracked.storage.getItem(key); },
         setItem: (key, value) => { this.assertMutationAllowed(); open(key); return tracked.storage.setItem(key, value); },
         removeItem: key => { this.assertMutationAllowed(); open(key); return tracked.storage.removeItem(key); },
       },
-      runMutation: (key, change) => {
-        this.assertMutationAllowed();
+      runMutation: (key, change) => { this.assertMutationAllowed(); return runTrackedMutation(key, change); },
+    };
+    const runTrackedMutation: Tracked['runMutation'] = (key, change) => {
         open(key);
         const depth = depths.get(key) ?? 0;
         let resolve: (() => void) | undefined, reject: ((error: unknown) => void) | undefined;
@@ -95,8 +128,9 @@ export class PaymentOperationRuntime {
             else void tracked.flush(key).then(resolve!, reject!);
           }
         }
-      },
     };
+    privateRuntimes.set(this, { tracked: { ...tracked, runMutation: runTrackedMutation }, ports: new Map(), capabilities: new WeakMap(), coordinatorSession: false,
+      run: (request, job) => this.runCoordinatorLease(request, job) });
     // The raw backend identity is shared with normal journal factory callers;
     // an already-owned journal with a different adapter is rejected, not reused.
     this.journal = createPaymentOperationStore(backend, backend, this.persistence);
@@ -106,8 +140,149 @@ export class PaymentOperationRuntime {
 
   getStatus() {
     return { phase: this.phase, boundKeys: [...this.bindings], hydratingKeys: [...this.hydrations.keys()], postingAllowed: false as const,
+      readiness: 'blocked' as const, writeFence: privateRuntimes.get(this)?.fence,
+      coordinatorSession: privateRuntimes.get(this)?.coordinatorSession ? 'write-closed' as const : 'inactive' as const,
       productionActivation: 'blocked' as const,
       failures: PAYMENT_PERSISTENCE_KEYS.filter(key => this.persistence.getFailure(key)).map(key => ({ key, error: this.persistence.getFailure(key) })) };
+  }
+
+  private runCoordinatorLease<T>(input: LeaseRequest, job: (lease: CoordinatorWriteLease) => Promise<T>): Promise<T> {
+    const internal = privateRuntimes.get(this)!;
+    if (internal.owner) return Promise.reject(new Error('A coordinator lease already owns this runtime; nested acquisition is forbidden.'));
+    let request: LeaseRequest;
+    const admission = () => {
+      if (this.phase !== 'open') throw new Error('Payment persistence runtime is closed or closing.');
+      if (this.snapshotReading) throw new Error('Recovery snapshot excludes coordinator admission.');
+      if (internal.fence) throw new Error(`Accounting writes fenced: ${internal.fence}`);
+    };
+    try {
+      admission();
+      request = freezeEvidence(copyCoordinatorData(input)) as LeaseRequest;
+      if (!text(request.operationId) || !object(request.entity) || !['debt', 'loan'].includes(request.entity.entityType)
+        || !text(request.entity.entityId) || Object.keys(request).length !== 3 || Object.keys(request.entity).length !== 2
+        || (request.predecessor !== null && (!object(request.predecessor) || Object.keys(request.predecessor).length !== 2
+          || !Number.isSafeInteger(request.predecessor.revision) || request.predecessor.revision < 1 || !text(request.predecessor.operationId)))) throw new Error('Invalid coordinator lease identity.');
+    } catch (error) { return Promise.reject(error); }
+    return this.exclusive(async () => {
+      admission();
+      this.hydrationAdmissionClosed = true;
+      let owner: LeaseOwner | undefined;
+      try {
+        await Promise.all([...this.hydrations.values()].map(h => h.promise));
+        await this.journal.drain();
+        admission();
+        if (internal.ports.size !== 2 || [...internal.ports.values()].some(p => !p.hydrated())) throw new Error('Both accounting stores must have successfully hydrated.');
+        let interrupt!: (error: Error) => void;
+        const interrupted = new Promise<never>((_yes, no) => { interrupt = no; });
+        void interrupted.catch(() => {});
+        owner = { request, active: true, busy: false, issued: 0, pending: new Set(), errors: [], stages: new Set(), interrupt };
+        internal.owner = owner;
+        // Capture the final accepted public prefix after establishing exclusion.
+        for (const key of PAYMENT_PERSISTENCE_KEYS) await this.persistence.flush(key);
+        const documents = Object.fromEntries(await Promise.all(PAYMENT_PERSISTENCE_KEYS.map(async key =>
+          [key, await this.persistence.storage.getItem(key)] as const))) as Record<PaymentPersistenceKey, string | null>;
+        const journalRaw = documents[PAYMENT_OPERATION_STORAGE_KEY];
+        if (journalRaw === null || JSON.parse(journalRaw).version !== 3) throw new Error('Coordinator leases require an existing V3 journal; no promotion is performed.');
+        const journal = readRecoveryJournalDocument(journalRaw);
+        const inspection = verifyPersistedPaymentAccounting(documents);
+        if (inspection.installation !== 'consistent' || inspection.globalIssues.length
+          || journal.receipts.some(r => !('schemaVersion' in r) || r.state !== 'completed')
+          || inspection.findings.some(f => f.operationId && !f.classification.startsWith('verified-'))) {
+          internal.fence = 'Persisted coordinator evidence is unresolved or conflicting; write admission remains closed.';
+          throw new Error(internal.fence);
+        }
+        if (this.phase !== 'open' || !owner.active) throw new CoordinatorLeaseInterrupted('rejected');
+        const liveOwner = owner;
+        const ensure = () => {
+          if (!liveOwner.active || internal.owner !== liveOwner || this.phase !== 'open') throw new Error('Coordinator lease expired or runtime closed or closing.');
+          if (internal.fence) throw new Error(`Accounting writes fenced: ${internal.fence}`);
+          if (liveOwner.busy) throw new Error('Coordinator stage is busy; reentry is forbidden.');
+        };
+        const bindingFor = (value: StageBinding): StageBinding => {
+          const binding = freezeEvidence(copyCoordinatorData(value)) as StageBinding;
+          if (Object.keys(binding).length !== 5 || binding.operationId !== request.operationId || !sameEvidence(binding.entity, request.entity)
+            || !sameEvidence(binding.predecessor, request.predecessor) || stageKey(binding.stage) !== binding.key) throw new Error('Wrong coordinator key/stage/operation/predecessor.');
+          return binding;
+        };
+        const lease: CoordinatorWriteLease = Object.freeze({
+          operationId: request.operationId,
+          issue: (value: StageBinding) => {
+            ensure(); liveOwner.busy = true;
+            try {
+              const binding = bindingFor(value);
+              if (liveOwner.stages.has(binding.stage)) throw new Error('Coordinator stage was already issued.');
+              liveOwner.stages.add(binding.stage);
+              const token = Object.freeze({}) as CoordinatorCapability;
+              internal.capabilities.set(token, { owner: liveOwner, binding, used: false }); return token;
+            } finally { liveOwner.busy = false; }
+          },
+          write: (token: CoordinatorCapability, value: StageBinding, data: unknown): Promise<void> => {
+            let entered = false;
+            try {
+              ensure();
+              const capability = token && internal.capabilities.get(token);
+              if (!capability || capability.owner !== liveOwner || capability.used) throw new Error('Forged, reused, or wrong-runtime coordinator capability.');
+              capability.used = true;
+              liveOwner.busy = true; entered = true;
+              const binding = bindingFor(value);
+              if (!sameEvidence(binding, capability.binding)) throw new Error('Capability binding does not match this stage.');
+              const port = internal.ports.get(binding.key as AccountingKey);
+              if (!port) throw new Error('No private journal posting transitions are implemented.');
+              const captured = freezeEvidence(copyCoordinatorData(data));
+              const task = Promise.resolve().then(async () => {
+                if (!liveOwner.active || this.phase !== 'open' || internal.fence) throw new CoordinatorLeaseInterrupted(liveOwner.issued ? 'uncertain' : 'rejected');
+                liveOwner.issued++;
+                await port.write(binding, captured);
+              }).catch(error => {
+                internal.fence ??= 'An authorized stage failed; inspect retained accounting evidence.';
+                liveOwner.errors.push(error); throw error;
+              }).finally(() => { liveOwner.busy = false; liveOwner.pending.delete(task); });
+              liveOwner.pending.add(task); void task.catch(() => {}); return task;
+            } catch (error) { if (entered) liveOwner.busy = false; return Promise.reject(error); }
+          },
+          fence: (reason: string) => { ensure(); internal.fence = text(reason) ? reason : 'Unresolved coordinator evidence.'; },
+        });
+        const work = Promise.resolve().then(() => job(lease));
+        void work.catch(() => {});
+        try {
+          const value = await Promise.race([work, interrupted]);
+          liveOwner.active = false;
+          await Promise.allSettled([...liveOwner.pending]);
+          if (liveOwner.errors.length) throw liveOwner.errors[0];
+          if (internal.fence) throw new Error(`Accounting writes fenced: ${internal.fence}`);
+          return value;
+        } finally { liveOwner.active = false; }
+      } catch (error) {
+        if (owner?.issued) internal.fence ??= 'Coordinator interrupted after an authorized stage; inspect retained evidence.';
+        throw error;
+      } finally {
+        if (owner) { owner.active = false; await Promise.allSettled([...owner.pending]); }
+        internal.owner = undefined;
+        this.hydrationAdmissionClosed = false;
+      }
+    });
+  }
+
+  /** Forensics only: raw persisted bytes, never a readiness/snapshot certificate. */
+  readForensicSnapshot() {
+    if (privateRuntimes.get(this)?.owner) return Promise.reject(new Error('Release the coordinator lease before forensic inspection.'));
+    const inspect = this.gateTail.then(async () => {
+      const previousAdmission = this.hydrationAdmissionClosed;
+      this.hydrationAdmissionClosed = true;
+      try {
+        await Promise.allSettled([...this.hydrations.values()].map(h => h.promise));
+        await this.journal.drain().catch(() => {});
+        await Promise.all(PAYMENT_PERSISTENCE_KEYS.map(key => this.persistence.settle(key)));
+        this.snapshotReading = true;
+        const documents = await Promise.all(PAYMENT_PERSISTENCE_KEYS.map(async key => {
+          try { return { key, raw: await this.backend.getItem(key) ?? null }; }
+          catch (error) { return { key, raw: null, error }; }
+        }));
+        return { postingAllowed: false as const, readiness: 'blocked' as const, coherent: false as const,
+          writeFence: privateRuntimes.get(this)?.fence, failures: this.getStatus().failures, documents };
+      } finally { this.snapshotReading = false; this.hydrationAdmissionClosed = previousAdmission; }
+    });
+    this.gateTail = inspect.then(() => {}, () => {}); return inspect;
   }
 
   bind(key: AccountingKey): void {
@@ -132,6 +307,7 @@ export class PaymentOperationRuntime {
   }
 
   exclusive<T>(change: () => Promise<T> | T): Promise<T> {
+    if (privateRuntimes.get(this)?.owner) return Promise.reject(new Error('Coordinator ownership forbids nested exclusive jobs.'));
     if (this.phase !== 'open') return Promise.reject(new Error('Payment persistence runtime is closed or closing.'));
     const result = this.gateTail.then(async () => {
       if (this.phase !== 'open') throw new Error('Payment persistence runtime is closed or closing.');
@@ -171,12 +347,19 @@ export class PaymentOperationRuntime {
   close(): Promise<void> {
     if (this.closing) return this.closing;
     this.phase = 'closing';
+    const internal = privateRuntimes.get(this)!;
+    if (internal.owner) {
+      if (internal.owner.issued) internal.fence ??= 'Runtime closed during a coordinator operation.';
+      internal.owner.active = false;
+      internal.owner.interrupt(new CoordinatorLeaseInterrupted(internal.owner.issued ? 'uncertain' : 'rejected'));
+    }
     this.closing = (async () => {
       await this.gateTail;
       await this.closeJournal();
       await Promise.allSettled([...this.hydrations.values()].map(item => item.promise));
       await Promise.allSettled([...this.acknowledgements.values()]);
       await Promise.allSettled(PAYMENT_PERSISTENCE_KEYS.map(key => this.persistence.flush(key)));
+      await Promise.all(PAYMENT_PERSISTENCE_KEYS.map(key => this.persistence.settle(key)));
       this.phase = 'closed';
       if (instances.get(this.backend) === this) instances.delete(this.backend);
       // Never switch mounted stores back to untracked persistence. A bound
@@ -223,18 +406,32 @@ export function paymentRuntimePersist<T, P = T>(
   }
   runtime.bind(key);
   const tracked = runtime.persistence;
+  const internal = privateRuntimes.get(runtime)!;
+  let frame: { next: T; phase: 'applying' | 'notifying' | 'serializing' | 'queued'; expected: unknown } | undefined;
+  let privateSet: ((state: T, replace: true) => unknown) | undefined;
+  let privateOptions: (() => PersistOptions<T, P>) | undefined;
   const json = createJSONStorage<P>(() => tracked.storage)!;
+  const privateJSON = createJSONStorage<P>(() => internal.tracked.storage)!;
   const storage: NonNullable<PersistOptions<T, P>['storage']> = {
     getItem: name => json.getItem(name),
-    setItem: (name, value) => tracked.runMutation(key, () => json.setItem(name, value)),
+    setItem: (name, value) => {
+      if (frame) {
+        if (frame.phase !== 'serializing' || name !== key || runtime.getStatus().phase !== 'open' || internal.fence
+          || !sameEvidence(copyCoordinatorData(value.state), frame.expected)) throw new Error('Invalid private persistence continuation.');
+        frame.phase = 'queued'; return privateJSON.setItem(name, value);
+      }
+      return tracked.runMutation(key, () => json.setItem(name, value));
+    },
     removeItem: name => tracked.storage.removeItem(name),
   };
   const creator = persist<T, [], [], P>((set, get, api) => {
+    privateSet = set;
     const mutate = <R>(change: () => R): R => {
       runtime.assertMutationAllowed();
       // Replacing persist configuration is not a supported write path. Detect
       // it before a state mutation could silently bypass the tracked adapter.
-      if ('persist' in api && (api.persist.getOptions().storage !== storage || api.persist.getOptions().name !== key)) throw new Error('Tracked persistence configuration cannot be replaced.');
+      const configuration = privateOptions?.() ?? ('persist' in api ? api.persist.getOptions() : undefined);
+      if (configuration && (configuration.storage !== storage || configuration.name !== key)) throw new Error('Tracked persistence configuration cannot be replaced.');
       return tracked.runMutation(key, change);
     };
     const original = api.setState;
@@ -243,7 +440,14 @@ export function paymentRuntimePersist<T, P = T>(
     return initializer(guardedSet, get, api);
   }, {
     ...options, storage,
-    partialize: state => tracked.runMutation(key, () => options.partialize ? options.partialize(state) : state as unknown as P),
+    partialize: state => {
+      const partialize = () => options.partialize ? options.partialize(state) : state as unknown as P;
+      if (frame) {
+        if (frame.phase !== 'serializing') throw new Error('Private persistence cannot run during subscriber notification.');
+        return copyCoordinatorData(partialize()) as P;
+      }
+      return tracked.runMutation(key, partialize);
+    },
     migrate: options.migrate ? (state, version) => tracked.runMutation(key, () => options.migrate!(state, version)) : undefined,
     onRehydrateStorage: state => {
       const end = runtime.beginHydration(key);
@@ -261,7 +465,17 @@ export function paymentRuntimePersist<T, P = T>(
   return (set, get, api) => {
     // Below persist: hydration uses this raw setter, bypassing the inner wrapper.
     const protect = (setter: typeof set): typeof set => ((...args: unknown[]) => {
-      runtime.assertMutationAllowed();
+      if (frame && frame.phase === 'applying' && args[0] === frame.next && args[1] === true) {
+        if (runtime.getStatus().phase !== 'open' || internal.fence || !internal.owner?.active) throw new Error('Private stage is no longer admitted.');
+        const current = frame; current.phase = 'notifying';
+        try { return Reflect.apply(setter, undefined, args); }
+        finally { current.phase = 'serializing'; }
+      }
+      // Already accepted hydration applies through the raw setter, without public authority.
+      // Public setters encounter their independent guard before reaching this path.
+      const acceptedHydration = internal.coordinatorSession && !internal.owner && !internal.fence
+        && runtime.getStatus().phase === 'open' && runtime.getStatus().hydratingKeys.includes(key);
+      if (!acceptedHydration) runtime.assertMutationAllowed();
       const [partial, replace] = args;
       const previous = get();
       const next = typeof partial === 'function' ? partial(previous) : partial;
@@ -276,13 +490,43 @@ export function paymentRuntimePersist<T, P = T>(
     // Metadata-bearing stores cannot change their key/adapter or erase storage
     // behind the runtime. Existing domain reset actions remain supported.
     const controls = (api as unknown as { persist: { setOptions: (options: unknown) => void; clearStorage: () => void;
-      rehydrate: () => Promise<void>; getOptions: () => object } }).persist;
+      rehydrate: () => Promise<void>; getOptions: () => PersistOptions<T, P>; hasHydrated: () => boolean } }).persist;
+    privateOptions = controls.getOptions;
     const rehydrate = controls.rehydrate;
     controls.rehydrate = () => { runtime.assertHydrationAllowed(); return rehydrate(); };
-    Object.freeze(controls.getOptions());
+    Object.freeze(privateOptions());
     Object.freeze(storage);
+    // Persist retains its private adapter; callers get a public, independently guarded facade.
+    const publicStorage = Object.freeze({ getItem: (name: string) => json.getItem(name),
+      setItem: (name: string, value: Parameters<typeof storage.setItem>[1]) => tracked.runMutation(key, () => json.setItem(name, value)),
+      removeItem: (name: string) => tracked.storage.removeItem(name) });
+    const view = Object.freeze({ ...privateOptions(), storage: publicStorage });
+    controls.getOptions = () => view;
     controls.setOptions = () => { runtime.assertMutationAllowed(); throw new Error('Tracked persistence configuration cannot be replaced.'); };
     controls.clearStorage = () => { runtime.assertMutationAllowed(); throw new Error('Use guarded domain reset actions; do not delete generation markers.'); };
+    internal.ports.set(key, {
+      hydrated: controls.hasHydrated,
+      write: async (binding, data) => {
+        const arrays = key === 'tomorrow:finance' ? ['assets', 'debts', 'loans', 'cheques'] : ['accounts', 'categories', 'transactions', 'transfers'];
+        if (!object(data) || Object.keys(data).some(k => ![...arrays, 'paymentJournal', 'paymentAccounting'].includes(k))
+          || arrays.some(k => !Array.isArray(data[k]))) throw new Error('Private stage requires a complete persisted accounting document.');
+        const current = get() as Record<string, unknown>;
+        if (!sameEvidence(data.paymentJournal, current.paymentJournal)) throw new Error('Private stages cannot change the installation generation marker.');
+        const metadata = current.paymentAccounting;
+        const heads = object(metadata) && Array.isArray(metadata.entityHeads) ? metadata.entityHeads.filter(h => object(h)
+          && sameEvidence(h.entity, binding.entity)) : [];
+        if (heads.length > 1 || !sameEvidence(heads[0]?.head ?? null, binding.predecessor)) throw new Error('Private stage predecessor revision mismatch.');
+        const next = freezeEvidence({ ...get(), ...Object.fromEntries([...arrays, 'paymentJournal', 'paymentAccounting'].map(k => [k, data[k]])) }) as T;
+        internal.tracked.runMutation(key, () => {
+          const expected = copyCoordinatorData(options.partialize ? options.partialize(next) : next);
+          if (!sameEvidence(JSON.parse(JSON.stringify(expected)), JSON.parse(JSON.stringify(data)))) throw new Error('Private stage partialization changed the supplied accounting image.');
+          frame = { next, expected, phase: 'applying' };
+          try { privateSet!(next, true); }
+          finally { frame = undefined; }
+        });
+        await tracked.flush(key);
+      },
+    });
     return state;
   };
 }

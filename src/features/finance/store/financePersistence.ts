@@ -80,5 +80,7 @@ export function createOrderedFinancePersistence(backend: StateStorage) {
     setItem: (key, value) => enqueue(key, 'write', () => backend.setItem(key, value)),
     removeItem: key => enqueue(key, 'remove', () => backend.removeItem(key)),
   };
-  return { storage, flush, runMutation, recordFailure, assertMutationAllowed: () => {}, getFailure: (key: string) => queues.get(key)?.failure };
+  // Forensic draining must wait for issued I/O even when flush rejects a sticky failure.
+  const settle = (key: string): Promise<void> => queueFor(key).tail.then(() => {}, () => {});
+  return { storage, flush, settle, runMutation, recordFailure, assertMutationAllowed: () => {}, getFailure: (key: string) => queues.get(key)?.failure };
 }
