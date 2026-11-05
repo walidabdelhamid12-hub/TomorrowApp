@@ -3,7 +3,7 @@ import type { StateStorage } from 'zustand/middleware';
 export class FinancePersistenceError extends Error {
   constructor(
     readonly key: string,
-    readonly operation: 'read' | 'write' | 'remove',
+    readonly operation: 'read' | 'write' | 'remove' | 'mutation',
     readonly originalError: unknown,
   ) {
     super(`Finance persistence ${operation} failed for ${key}. Reload and inspect saved state before retrying.`);
@@ -51,6 +51,17 @@ export function createOrderedFinancePersistence(backend: StateStorage) {
     const queue = queueFor(key);
     return queue.failure ? Promise.reject(queue.failure) : queue.tail;
   };
+  // Wrap synchronous Zustand mutations as well as storage. Subscribers,
+  // partialize and JSON.stringify can throw before setItem reaches this adapter.
+  const runMutation = <T>(key: string, change: () => T): T => {
+    const queue = queueFor(key);
+    if (queue.failure) throw queue.failure;
+    try { return change(); }
+    catch (error) {
+      queue.failure ??= new FinancePersistenceError(key, 'mutation', error);
+      throw queue.failure;
+    }
+  };
   const storage: StateStorage<Promise<void>> = {
     getItem: async key => {
       const queue = queueFor(key);
@@ -64,5 +75,5 @@ export function createOrderedFinancePersistence(backend: StateStorage) {
     setItem: (key, value) => enqueue(key, 'write', () => backend.setItem(key, value)),
     removeItem: key => enqueue(key, 'remove', () => backend.removeItem(key)),
   };
-  return { storage, flush, getFailure: (key: string) => queues.get(key)?.failure };
+  return { storage, flush, runMutation, getFailure: (key: string) => queues.get(key)?.failure };
 }

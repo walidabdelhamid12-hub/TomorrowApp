@@ -83,7 +83,7 @@ test('preparation and duplicate delivery cannot resolve before the storage ackno
 test('a throwing subscriber blocks optimistic in-memory receipts from being acknowledged on retry', async () => {
   const backend = memory(), journal = createPaymentOperationStore(backend); await journal.hydrate();
   const unsubscribe = journal.subscribe(() => { throw new Error('Subscriber failed'); });
-  await assert.rejects(journal.prepare(prepared()), /Subscriber failed/);
+  await assert.rejects(journal.prepare(prepared()), error => error.operation === 'mutation' && error.originalError.message === 'Subscriber failed');
   unsubscribe();
   assert.equal(journal.getStatus().phase, 'blocked');
   assert.equal(journal.getState().receipts.length, 1);
@@ -123,6 +123,7 @@ test('prepared and completed immutable requests/outcomes survive a fresh journal
   assert.ok(Object.isFrozen(saved) && Object.isFrozen(saved.request) && Object.isFrozen(saved.request.funding));
   const outcome = { paymentId: saved.paymentId, ledgerTransactionId: saved.ledgerTransactionId };
   await journal.complete('one', outcome); outcome.paymentId = 'changed';
+  await journal.close();
   const restarted = createPaymentOperationStore(backend); await restarted.hydrate();
   const completed = restarted.getState().receipts[0];
   assert.equal(completed.status, 'completed'); assert.equal(completed.outcome.paymentId, 'payment-one');
@@ -174,6 +175,7 @@ test('custom loan operation reserves and persists no ledger transaction', async 
   await journal.prepare(prepared('custom', req));
   await assert.rejects(journal.complete('custom', { paymentId: 'payment-custom', ledgerTransactionId: 'unexpected' }));
   await journal.complete('custom', { paymentId: 'payment-custom' });
+  await journal.close();
   const restarted = createPaymentOperationStore(backend); await restarted.hydrate();
   assert.equal(restarted.getState().receipts[0].ledgerTransactionId, undefined);
   assert.deepEqual(restarted.getState().receipts[0].outcome, { paymentId: 'payment-custom' });
@@ -333,8 +335,191 @@ for (const stage of ['prepare', 'complete']) {
     assert.equal(journal.getStatus().phase, 'blocked');
     await assert.rejects(journal.prepare(prepared())); await assert.rejects(journal.hydrate());
     backend.setItem = realSet;
+    await journal.close();
     const restarted = createPaymentOperationStore(backend); await restarted.hydrate();
     assert.equal(restarted.getState().receipts[0].status, stage === 'prepare' ? 'prepared' : 'completed');
     assert.deepEqual(backend.calls.filter(c => c[0] === 'set').map(c => c[1]), stage === 'prepare' ? [KEY] : [KEY, KEY]);
   });
 }
+
+for (const stage of ['prepare', 'complete']) {
+  for (const fail of [false, true]) {
+    test(`subscriber reentry into ${stage} shares the real ${fail ? 'failed' : 'successful'} acknowledgement`, async () => {
+      const backend = memory(), journal = createPaymentOperationStore(backend); await journal.hydrate();
+      if (stage === 'complete') await journal.prepare(prepared());
+      const before = backend.data.get(KEY), gate = deferred(); let writes = 0, duplicate;
+      backend.setItem = async (key, value) => { writes++; await gate.promise; backend.data.set(key, value); };
+      const submit = () => stage === 'prepare' ? journal.prepare(prepared())
+        : journal.complete('one', { paymentId: 'payment-one', ledgerTransactionId: 'transaction-one' });
+      const unsubscribe = journal.subscribe(() => { duplicate = submit(); });
+      const first = submit(); let resolved = false;
+      const observed = first.then(() => { resolved = true; }, () => {});
+      await tick();
+      assert.equal(first, duplicate);
+      assert.equal(resolved, false); assert.equal(writes, 1); assert.equal(backend.data.get(KEY), before);
+      const all = Promise.allSettled([first, duplicate]);
+      if (fail) gate.reject(new Error('Rejected acknowledgement')); else gate.resolve();
+      const results = await all; await observed; unsubscribe();
+      assert.ok(results.every(r => r.status === (fail ? 'rejected' : 'fulfilled')));
+      assert.equal(resolved, !fail);
+      if (fail) {
+        assert.equal(journal.getStatus().phase, 'blocked'); assert.equal(backend.data.get(KEY), before);
+      } else {
+        assert.equal(results[0].value, results[1].value);
+        assert.equal(results[0].value.status, stage === 'prepare' ? 'prepared' : 'completed');
+      }
+    });
+  }
+}
+
+test('reentrant retry cannot succeed when its subscriber throws before persistence enqueueing', async () => {
+  const backend = memory(), journal = createPaymentOperationStore(backend); await journal.hydrate();
+  let duplicate;
+  const unsubscribe = journal.subscribe(() => { duplicate = journal.prepare(prepared()); throw new Error('Subscriber failed'); });
+  const first = journal.prepare(prepared());
+  const firstResult = first.catch(error => error);
+  const error = await firstResult;
+  assert.equal(first, duplicate);
+  await assert.rejects(duplicate, other => other === error && other.operation === 'mutation');
+  assert.equal(journal.getStatus().phase, 'blocked'); assert.equal(backend.data.has(KEY), false);
+  unsubscribe();
+});
+
+test('reentrant conflicting request rejects without joining or changing the original operation', async () => {
+  const backend = memory(), journal = createPaymentOperationStore(backend); await journal.hydrate();
+  let conflicting;
+  const unsubscribe = journal.subscribe(() => {
+    conflicting = journal.prepare(prepared('one', { ...request(), amount: 26 })).catch(error => error);
+  });
+  const saved = await journal.prepare(prepared());
+  assert.match((await conflicting).message, /different immutable request/);
+  assert.equal(saved.request.amount, 25); assert.equal(journal.getStatus().phase, 'ready');
+  assert.equal(JSON.parse(backend.data.get(KEY)).state.receipts[0].request.amount, 25);
+  unsubscribe();
+});
+
+for (const failCompletion of [false, true]) {
+  test(`overlapping prepare/complete returns acknowledged snapshots when completion ${failCompletion ? 'fails' : 'succeeds'}`, async () => {
+    const backend = memory(), firstGate = deferred(), secondGate = deferred(); let writes = 0;
+    backend.setItem = async (key, value) => {
+      writes++; await (writes === 1 ? firstGate.promise : secondGate.promise); backend.data.set(key, value);
+    };
+    const journal = createPaymentOperationStore(backend); await journal.hydrate();
+    const preparation = journal.prepare(prepared());
+    const completion = journal.complete('one', { paymentId: 'payment-one', ledgerTransactionId: 'transaction-one' });
+    const completionResult = completion.then(value => ({ value }), error => ({ error }));
+    await tick(); assert.equal(writes, 1);
+    firstGate.resolve(); const acknowledged = await preparation; await tick();
+    assert.equal(writes, 2); assert.equal(acknowledged.status, 'prepared');
+    assert.equal(acknowledged.outcome, undefined); assert.ok(Object.isFrozen(acknowledged));
+    assert.equal(JSON.parse(backend.data.get(KEY)).state.receipts[0].status, 'prepared');
+    // Even though latest optimistic state is completed, the first caller only
+    // receives the prepared snapshot whose persistence actually succeeded.
+    assert.equal(journal.getState().receipts[0].status, 'completed');
+    if (failCompletion) secondGate.reject(new Error('Completion acknowledgement failed')); else secondGate.resolve();
+    const result = await completionResult;
+    assert.equal(acknowledged.status, 'prepared');
+    if (failCompletion) {
+      assert.ok(result.error instanceof FinancePersistenceError);
+      assert.equal(JSON.parse(backend.data.get(KEY)).state.receipts[0].status, 'prepared');
+      assert.equal(journal.getStatus().phase, 'blocked');
+    } else {
+      assert.equal(result.value.status, 'completed');
+      assert.deepEqual(result.value, JSON.parse(backend.data.get(KEY)).state.receipts[0]);
+    }
+  });
+}
+
+test('multiple factory callers share one owner and preserve both independent operations', async () => {
+  const backend = memory();
+  const a = createPaymentOperationStore(backend), b = createPaymentOperationStore(backend);
+  assert.equal(a, b); await Promise.all([a.hydrate(), b.hydrate()]);
+  await Promise.all([a.prepare(prepared('A')), b.prepare(prepared('B'))]);
+  assert.deepEqual(JSON.parse(backend.data.get(KEY)).state.receipts.map(r => r.operationId), ['A', 'B']);
+  assert.equal(a.getState(), b.getState());
+});
+
+test('backend wrappers sharing an explicit namespace identity cannot become competing owners', async () => {
+  const backend = memory(), identity = {};
+  const a = createPaymentOperationStore({ ...backend }, identity);
+  const b = createPaymentOperationStore({ ...backend }, identity);
+  assert.equal(a, b); await a.hydrate();
+  await a.prepare(prepared('A')); await b.prepare(prepared('B'));
+  assert.equal(JSON.parse(backend.data.get(KEY)).state.receipts.length, 2);
+});
+
+test('owner replacement waits for accepted writes and fences the closed owner', async () => {
+  const backend = memory(), gate = deferred();
+  backend.setItem = async (key, value) => { await gate.promise; backend.data.set(key, value); };
+  const original = createPaymentOperationStore(backend); await original.hydrate();
+  const preparing = original.prepare(prepared()); await tick();
+  let closed = false; const close = original.close().then(() => { closed = true; });
+  assert.equal(createPaymentOperationStore(backend), original);
+  await assert.rejects(original.prepare(prepared('two')), /closed/);
+  await tick(); assert.equal(closed, false);
+  gate.resolve(); await preparing; await close;
+  const fresh = createPaymentOperationStore(backend); assert.notEqual(fresh, original);
+  await fresh.hydrate(); assert.equal(fresh.getState().receipts[0].operationId, 'one');
+  await assert.rejects(original.hydrate(), /closed/); await assert.rejects(original.complete('one', {}), /closed/);
+});
+
+test('blocked owner cannot be bypassed by another factory call before explicit close and rehydration', async () => {
+  const backend = memory(), originalSet = backend.setItem;
+  backend.setItem = async () => { throw new Error('Failed write'); };
+  const journal = createPaymentOperationStore(backend); await journal.hydrate();
+  await assert.rejects(journal.prepare(prepared()));
+  assert.equal(createPaymentOperationStore(backend), journal);
+  await assert.rejects(createPaymentOperationStore(backend).prepare(prepared()));
+  await journal.close(); backend.setItem = originalSet;
+  const fresh = createPaymentOperationStore(backend); await fresh.hydrate();
+  assert.deepEqual(fresh.getState().receipts, []);
+  await fresh.prepare(prepared());
+});
+
+for (const failure of ['serialization', 'partialize', 'subscriber']) {
+  test(`guarded Zustand ${failure} error rejects barriers even before adapter enqueueing`, async () => {
+    const backend = memory(), tracked = createOrderedFinancePersistence(backend);
+    const store = createStore()(persist(() => ({ n: 0 }), { name: 'guarded', skipHydration: true,
+      storage: createJSONStorage(() => tracked.storage),
+      partialize: state => { if (failure === 'partialize') throw new Error('Partialize failed'); return state; },
+    }));
+    if (failure === 'subscriber') store.subscribe(() => { throw new Error('Subscriber failed'); });
+    assert.throws(() => tracked.runMutation('guarded', () => store.setState({ n: failure === 'serialization' ? 1n : 1 })),
+      error => error instanceof FinancePersistenceError && error.operation === 'mutation');
+    await assert.rejects(tracked.flush('guarded'));
+    await assert.rejects(tracked.storage.setItem('guarded', 'must not be written'));
+    assert.equal(tracked.getFailure('guarded').operation, 'mutation');
+    assert.equal(backend.calls.length, 0);
+  });
+}
+
+test('journal serialization failure and reentrant duplicate both reject without false acknowledgement', async () => {
+  const backend = memory(), journal = createPaymentOperationStore(backend); await journal.hydrate();
+  const stringify = JSON.stringify; let duplicate;
+  const unsubscribe = journal.subscribe(() => { duplicate = journal.prepare(prepared()); });
+  JSON.stringify = (value, ...args) => {
+    if (value?.version === 1 && value?.state?.receipts) throw new Error('Journal serialization failed');
+    return stringify(value, ...args);
+  };
+  try {
+    const first = journal.prepare(prepared());
+    const error = await first.catch(error => error);
+    assert.equal(first, duplicate);
+    assert.equal(error.operation, 'mutation'); assert.equal(error.originalError.message, 'Journal serialization failed');
+    await assert.rejects(duplicate);
+    assert.equal(backend.data.has(KEY), false); assert.equal(journal.getStatus().phase, 'blocked');
+  } finally { JSON.stringify = stringify; unsubscribe(); }
+});
+
+test('queued transitions capture caller inputs before awaiting or notifying subscribers', async () => {
+  const backend = memory(), journal = createPaymentOperationStore(backend); await journal.hydrate();
+  const input = prepared(); const preparing = journal.prepare(input);
+  input.request.amount = 999; input.request.funding.accountId = 'changed';
+  const saved = await preparing;
+  assert.equal(saved.request.amount, 25); assert.equal(saved.request.funding.accountId, 'a');
+  const outcome = { paymentId: 'payment-one', ledgerTransactionId: 'transaction-one' };
+  const completing = journal.complete('one', outcome); outcome.paymentId = 'changed';
+  const completed = await completing;
+  assert.equal(completed.outcome.paymentId, 'payment-one');
+  assert.deepEqual(completed, JSON.parse(backend.data.get(KEY)).state.receipts[0]);
+});
