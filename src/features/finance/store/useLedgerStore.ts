@@ -3,7 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assertAccountingStorageVersion, paymentJournalMetadata } from '@/features/finance/types/paymentJournalInstallation';
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { createJSONStorage } from 'zustand/middleware';
+import { paymentRuntimePersist as persist } from './paymentOperationRuntime';
 
 import { DEFAULT_CATEGORIES } from '@/features/finance/constants/defaultCategories';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';

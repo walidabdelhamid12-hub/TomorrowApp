@@ -36,7 +36,7 @@ interface PaymentOperationStore {
   activateInstallation: (generationId: string) => Promise<PaymentOperationJournalData>;
   readPersisted: () => Promise<JournalDocument>;
 }
-const owners = new WeakMap<object, PaymentOperationStore>();
+const owners = new WeakMap<object, { api: PaymentOperationStore; persistence: ReturnType<typeof createOrderedFinancePersistence> }>();
 
 /**
  * Dormant Phase 1 infrastructure: no automatic creation, hydration or posting.
@@ -46,10 +46,14 @@ const owners = new WeakMap<object, PaymentOperationStore>();
  * Hydration readiness
  * does not authorize posting or reconcile prepared/reversal/review receipts.
  */
-export function createPaymentOperationStore(backend: StateStorage = AsyncStorage, ownerIdentity: object = backend): PaymentOperationStore {
+export function createPaymentOperationStore(backend: StateStorage = AsyncStorage, ownerIdentity: object = backend,
+  sharedPersistence?: ReturnType<typeof createOrderedFinancePersistence>): PaymentOperationStore {
   const owner = owners.get(ownerIdentity);
-  if (owner) return owner;
-  const persistence = createOrderedFinancePersistence(backend);
+  if (owner) {
+    if (sharedPersistence && owner.persistence !== sharedPersistence) throw new Error('Journal owner uses a different persistence runtime.');
+    return owner.api;
+  }
+  const persistence = sharedPersistence ?? createOrderedFinancePersistence(backend);
   let phase: JournalPhase = 'unhydrated';
   let failure: unknown;
   let source: 'unknown' | 'missing' | 'legacy-v1' | 'v2' = 'unknown';
@@ -147,7 +151,7 @@ export function createPaymentOperationStore(backend: StateStorage = AsyncStorage
       closing = (async () => {
         await Promise.allSettled([hydration, transitionTail]);
         await persistence.flush(PAYMENT_OPERATION_STORAGE_KEY).catch(() => {});
-        if (owners.get(ownerIdentity) === api) owners.delete(ownerIdentity);
+        if (owners.get(ownerIdentity)?.api === api) owners.delete(ownerIdentity);
       })();
       return closing;
     },
@@ -215,6 +219,6 @@ export function createPaymentOperationStore(backend: StateStorage = AsyncStorage
       return result;
     } catch (error) { return Promise.reject(error); }
   }
-  owners.set(ownerIdentity, api);
+  owners.set(ownerIdentity, { api, persistence });
   return api;
 }

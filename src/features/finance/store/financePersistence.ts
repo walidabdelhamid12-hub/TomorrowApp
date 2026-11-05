@@ -31,6 +31,11 @@ export function createOrderedFinancePersistence(backend: StateStorage) {
     }
     return queue;
   };
+  const recordFailure = (key: string, operation: FinancePersistenceError['operation'], error: unknown) => {
+    const queue = queueFor(key);
+    queue.failure ??= new FinancePersistenceError(key, operation, error);
+    return queue.failure;
+  };
   const enqueue = (key: string, operation: 'write' | 'remove', write: () => unknown): Promise<void> => {
     const queue = queueFor(key);
     const result = queue.tail.then(async () => {
@@ -75,5 +80,5 @@ export function createOrderedFinancePersistence(backend: StateStorage) {
     setItem: (key, value) => enqueue(key, 'write', () => backend.setItem(key, value)),
     removeItem: key => enqueue(key, 'remove', () => backend.removeItem(key)),
   };
-  return { storage, flush, runMutation, getFailure: (key: string) => queues.get(key)?.failure };
+  return { storage, flush, runMutation, recordFailure, getFailure: (key: string) => queues.get(key)?.failure };
 }

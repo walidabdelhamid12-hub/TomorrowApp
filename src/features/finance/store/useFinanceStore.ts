@@ -4,7 +4,8 @@ import { assertAccountingStorageVersion, paymentJournalMetadata } from '@/featur
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { createJSONStorage } from 'zustand/middleware';
+import { paymentRuntimePersist as persist } from './paymentOperationRuntime';
 import { readLedgerProtection } from '@/features/finance/store/ledgerProtectionReader';
 import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
 
