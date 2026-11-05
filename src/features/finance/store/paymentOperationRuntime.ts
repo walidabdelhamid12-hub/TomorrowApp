@@ -6,6 +6,7 @@ import { createPaymentOperationStore, PAYMENT_OPERATION_STORAGE_KEY } from './us
 import { freezeEvidence, object, sameEvidence, text, type EntityRef, type RevisionHead } from '../types/paymentRecovery';
 import { CoordinatorLeaseInterrupted, copyCoordinatorData, type CoordinatorCapability, type CoordinatorWriteLease, type StageBinding } from './paymentRuntimeAuthorization';
 import { readRecoveryJournalDocument, verifyPersistedPaymentAccounting } from './paymentAccountingVerification';
+import { readCreationAttestationV1, type CreationAttestationV1 } from '../types/creationProvenance';
 
 export const PAYMENT_PERSISTENCE_KEYS = Object.freeze([
   'tomorrow:finance', 'tomorrow:ledger', PAYMENT_OPERATION_STORAGE_KEY,
@@ -23,6 +24,7 @@ type LeaseOwner = { request: LeaseRequest; active: boolean; busy: boolean; issue
 type PrivateRuntime = { tracked: Tracked; ports: Map<AccountingKey, StagePort>; owner?: LeaseOwner; fence?: string;
   coordinatorSession: boolean;
   capabilities: WeakMap<object, { owner: LeaseOwner; binding: StageBinding; used: boolean }>;
+  checkCreationAuthority: (input: unknown) => Promise<never>;
   run: <T>(request: LeaseRequest, job: (lease: CoordinatorWriteLease) => Promise<T>) => Promise<T> };
 // Neither privileged adapters nor registered store ports are reachable through runtime/state/options.
 const privateRuntimes = new WeakMap<PaymentOperationRuntime, PrivateRuntime>();
@@ -39,7 +41,11 @@ export function createCoordinatorRuntimeAccess(runtime: PaymentOperationRuntime)
   if (!owner) throw new Error('Unknown coordinator runtime.');
   if (runtime.getStatus().phase !== 'open') throw new Error('Coordinator runtime is closed or closing.');
   owner.coordinatorSession = true;
-  return Object.freeze({ withWriteLease: <T>(request: LeaseRequest, job: (lease: CoordinatorWriteLease) => Promise<T>) => owner.run(request, job) });
+  return Object.freeze({
+    withWriteLease: <T>(request: LeaseRequest, job: (lease: CoordinatorWriteLease) => Promise<T>) => owner.run(request, job),
+    // Internal denial-only boundary. This is not an issuance or creation API.
+    checkCreationAuthority: (input: unknown): Promise<never> => owner.checkCreationAuthority(input),
+  });
 }
 
 /** Dormant until explicitly constructed; owns no accounting-store imports. */
@@ -130,6 +136,7 @@ export class PaymentOperationRuntime {
         }
     };
     privateRuntimes.set(this, { tracked: { ...tracked, runMutation: runTrackedMutation }, ports: new Map(), capabilities: new WeakMap(), coordinatorSession: false,
+      checkCreationAuthority: input => this.checkCreationAuthority(input),
       run: (request, job) => this.runCoordinatorLease(request, job) });
     // The raw backend identity is shared with normal journal factory callers;
     // an already-owned journal with a different adapter is rejected, not reused.
@@ -144,6 +151,57 @@ export class PaymentOperationRuntime {
       coordinatorSession: privateRuntimes.get(this)?.coordinatorSession ? 'write-closed' as const : 'inactive' as const,
       productionActivation: 'blocked' as const,
       failures: PAYMENT_PERSISTENCE_KEYS.filter(key => this.persistence.getFailure(key)).map(key => ({ key, error: this.persistence.getFailure(key) })) };
+  }
+
+  /**
+   * Task 5 fail-closed infrastructure only. A parsed caller image is never proof
+   * that this runtime created a new entity. No trusted birth witness, capability,
+   * attestation, persistence continuation, or acknowledgement is issued here.
+   * A future internal allocation path must supply an unforgeable session identity
+   * while excluding hydration/public writers; that path does not exist in Task 5.
+   */
+  private checkCreationAuthority(input: unknown): Promise<never> {
+    let binding: CreationAttestationV1;
+    try { binding = readCreationAttestationV1(input); }
+    catch (error) { return Promise.reject(error); }
+    return this.runCoordinatorLease({ operationId: binding.creationId, entity: binding.entity, predecessor: null }, async () => {
+      const internal = privateRuntimes.get(this)!;
+      const live = () => {
+        if (this.phase !== 'open' || !internal.owner?.active || internal.fence) throw new Error('Creation authority expired or revoked.');
+      };
+      live();
+      // The same runtime/lease owns all three reads. No caller-supplied snapshot
+      // or injected readiness boolean can substitute for persisted inspection.
+      const documents = Object.fromEntries(await Promise.all(PAYMENT_PERSISTENCE_KEYS.map(async key =>
+        [key, await this.persistence.storage.getItem(key)] as const))) as Record<PaymentPersistenceKey, string | null>;
+      live();
+      const raw = documents[PAYMENT_OPERATION_STORAGE_KEY];
+      if (raw === null || JSON.parse(raw).version !== 3) throw new Error('Creation authority requires an existing V3 installation.');
+      const journal = readRecoveryJournalDocument(raw);
+      const inspection = verifyPersistedPaymentAccounting(documents);
+      if (inspection.installation !== 'consistent' || inspection.globalIssues.length
+        || journal.installation?.phase !== 'active' || journal.installation.generationId !== binding.generationId) {
+        throw new Error('Creation authority installation or generation is unverified or stale.');
+      }
+      const finance = JSON.parse(documents['tomorrow:finance']!).state;
+      const ledger = JSON.parse(documents['tomorrow:ledger']!).state;
+      const evidence = finance.creationProvenance?.entries ?? [];
+      if (evidence.some((e: { attestation: CreationAttestationV1 }) => e.attestation.creationId === binding.creationId)) {
+        throw new Error('Creation identity already has retained provenance.');
+      }
+      const records: { id: string }[] = [...finance.assets, ...finance.debts, ...finance.loans, ...finance.cheques,
+        ...ledger.accounts, ...ledger.categories, ...ledger.transactions, ...ledger.transfers,
+        ...finance.debts.flatMap((p: { payments: { id: string }[] }) => p.payments),
+        ...finance.loans.flatMap((p: { payments: { id: string }[] }) => p.payments)];
+      if (records.some(p => p.id === binding.entity.entityId || p.id === binding.creationId)
+        || evidence.some((e: { attestation: CreationAttestationV1 }) => e.attestation.entity.entityId === binding.entity.entityId)) {
+        throw new Error('Existing or retained identity cannot receive new creation authority.');
+      }
+      live();
+      // Even matching active V3 metadata plus record absence cannot prove fresh
+      // creation or restore continuity. Never promote caller input to authority.
+      throw new Error('Trusted creation authority unavailable: private fresh-entity allocation witness is not implemented.');
+    });
   }
 
   private runCoordinatorLease<T>(input: LeaseRequest, job: (lease: CoordinatorWriteLease) => Promise<T>): Promise<T> {
