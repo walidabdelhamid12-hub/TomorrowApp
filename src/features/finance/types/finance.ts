@@ -269,6 +269,7 @@ export type ChequePatch = Partial<
 /* -------------------------------------------------------------------------- */
 
 export interface FinanceData {
+  paymentAccounting?: import('./paymentRecovery').PaymentAccountingMetadata;
   paymentJournal?: PaymentJournalMarker;
   assets: Asset[];
   debts: Debt[];

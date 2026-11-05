@@ -1,6 +1,9 @@
 import type { PaymentOperationJournalData } from '@/features/finance/types/paymentOperations';
 import { readPaymentJournalMarker, assertAccountingStorageVersion, type PaymentJournalMarker } from '@/features/finance/types/paymentJournalInstallation';
 import type { createPaymentOperationStore } from './usePaymentOperationStore';
+import type { PaymentOperationRuntime } from './paymentOperationRuntime';
+import { verifyPaymentAccountingRecovery, type AccountingRecoveryResult } from './paymentAccountingVerification';
+import { readPaymentAccountingMetadata } from '../types/paymentRecovery';
 
 /** No production binding is provided until shared tracked persistence is wired. */
 export interface InstallationAccountingPort {
@@ -20,8 +23,9 @@ function readAccountingSnapshot(raw: string | null, kind: 'finance' | 'ledger'):
     || Object.keys(envelope).some(key => key !== 'state' && key !== 'version')) throw new Error(`Invalid ${kind} storage envelope.`);
   assertAccountingStorageVersion(envelope.version);
   const state = envelope.state;
+  if ('paymentAccounting' in state) readPaymentAccountingMetadata(state.paymentAccounting);
   const arrays = kind === 'finance' ? ['assets', 'debts', 'loans', 'cheques'] : ['accounts', 'categories', 'transactions', 'transfers'];
-  if (Object.keys(state).some(key => key !== 'paymentJournal' && !arrays.includes(key))) throw new Error(`Unsupported ${kind} storage fields.`);
+  if (Object.keys(state).some(key => !['paymentJournal', 'paymentAccounting', ...arrays].includes(key))) throw new Error(`Unsupported ${kind} storage fields.`);
   for (const key of arrays) {
     if (envelope.version === 2 && !(key in state)) throw new Error(`Missing ${kind} ${key}.`);
     if (key in state && (!Array.isArray(state[key]) || !(state[key] as unknown[]).every(row =>
@@ -33,7 +37,7 @@ function readAccountingSnapshot(raw: string | null, kind: 'finance' | 'ledger'):
     && (!Array.isArray(row.payments) || !row.payments.every(payment => object(payment) && typeof payment.id === 'string' && payment.id.length > 0)))) {
     throw new Error('Invalid historical payment records require review.');
   }
-  const managedEvidence = (rows as unknown[]).some(row => evidence(row)
+  const managedEvidence = 'paymentAccounting' in state || (rows as unknown[]).some(row => evidence(row)
     || (object(row) && Array.isArray(row.payments) && row.payments.some(evidence)));
   return { present: true, managedEvidence,
     ...('paymentJournal' in state ? { marker: readPaymentJournalMarker(state.paymentJournal) } : {}) };
@@ -51,6 +55,8 @@ export function createPaymentInstallationRecovery(options: {
   ledger: InstallationAccountingPort;
   createGenerationId: () => string;
   sharedPersistenceReady: () => boolean;
+  /** Optional dormant binding; metadata readiness alone cannot certify accounting. */
+  accountingRuntime?: PaymentOperationRuntime;
 }) {
   let status: Status = 'unchecked';
   let error: unknown;
@@ -92,6 +98,13 @@ export function createPaymentInstallationRecovery(options: {
     return result;
   };
   return {
+    verifyAccounting: (): Promise<AccountingRecoveryResult> => {
+      if (!options.accountingRuntime || options.accountingRuntime.journal !== options.journal) return Promise.resolve({
+        postingAllowed: false, readiness: 'blocked', installation: 'blocked',
+        globalIssues: ['A matching bound runtime is required for accounting recovery.'], findings: [],
+      });
+      return verifyPaymentAccountingRecovery(options.accountingRuntime);
+    },
     getStatus: () => ({ status, error, postingAllowed: false as const }),
     check: () => run(async () => {
       status = 'checking';

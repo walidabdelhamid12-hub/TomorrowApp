@@ -129,6 +129,7 @@ function migrateLedgerData(persistedState: unknown): LedgerData {
 
   return {
     paymentJournal: paymentJournalMetadata(saved).paymentJournal,
+    ...('paymentAccounting' in saved ? { paymentAccounting: paymentJournalMetadata(saved).paymentAccounting } : {}),
     accounts,
     transactions,
     transfers,

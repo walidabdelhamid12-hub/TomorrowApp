@@ -3,6 +3,7 @@ import type { StateCreator } from 'zustand/vanilla';
 import { persist, createJSONStorage, type PersistOptions, type StateStorage } from 'zustand/middleware';
 import { createOrderedFinancePersistence } from './financePersistence';
 import { createPaymentOperationStore, PAYMENT_OPERATION_STORAGE_KEY } from './usePaymentOperationStore';
+import { freezeEvidence } from '../types/paymentRecovery';
 
 export const PAYMENT_PERSISTENCE_KEYS = Object.freeze([
   'tomorrow:finance', 'tomorrow:ledger', PAYMENT_OPERATION_STORAGE_KEY,
@@ -25,6 +26,19 @@ export class PaymentOperationRuntime {
   private closing?: Promise<void>;
   private hydrations = new Map<AccountingKey, { promise: Promise<void>; finish: () => void }>();
   private acknowledgements = new Map<string, Promise<void>>();
+  private snapshotReading = false;
+  private hydrationAdmissionClosed = false;
+  private interference = 0;
+
+  assertMutationAllowed(): void {
+    if (this.snapshotReading) { this.interference++; throw new Error('Recovery snapshot excludes mutations.'); }
+    if (this.phase !== 'open') throw new Error('Payment persistence runtime is closed or closing.');
+  }
+
+  assertHydrationAllowed(): void {
+    if (this.hydrationAdmissionClosed) { this.interference++; throw new Error('Recovery snapshot excludes hydration.'); }
+    this.assertMutationAllowed();
+  }
 
   constructor(readonly backend: StateStorage) {
     const tracked = createOrderedFinancePersistence(backend);
@@ -38,6 +52,7 @@ export class PaymentOperationRuntime {
     };
     this.persistence = {
       ...tracked,
+      assertMutationAllowed: () => this.assertMutationAllowed(),
       flush: key => {
         try {
           knownKey(key);
@@ -52,10 +67,11 @@ export class PaymentOperationRuntime {
       },
       storage: {
         getItem: async key => { open(key); await this.persistence.flush(key); return tracked.storage.getItem(key); },
-        setItem: (key, value) => { open(key); return tracked.storage.setItem(key, value); },
-        removeItem: key => { open(key); return tracked.storage.removeItem(key); },
+        setItem: (key, value) => { this.assertMutationAllowed(); open(key); return tracked.storage.setItem(key, value); },
+        removeItem: key => { this.assertMutationAllowed(); open(key); return tracked.storage.removeItem(key); },
       },
       runMutation: (key, change) => {
+        this.assertMutationAllowed();
         open(key);
         const depth = depths.get(key) ?? 0;
         let resolve: (() => void) | undefined, reject: ((error: unknown) => void) | undefined;
@@ -100,6 +116,7 @@ export class PaymentOperationRuntime {
   }
 
   beginHydration(key: AccountingKey): () => void {
+    this.assertHydrationAllowed();
     if (this.phase !== 'open') throw new Error('Payment persistence runtime is closed or closing.');
     // Zustand supersedes older overlapping hydration attempts without invoking
     // their finish callback. Only the current attempt can apply state/migrate.
@@ -126,6 +143,28 @@ export class PaymentOperationRuntime {
     this.gateTail = result.then(() => {}, () => {});
     void result.catch(() => {});
     return result;
+  }
+
+  /** Explicit dormant read lease. No hydration, posting, repair, or journal transition. */
+  readRecoverySnapshot(): Promise<Readonly<Record<PaymentPersistenceKey, string | null>>> {
+    return this.exclusive(async () => {
+      if (this.bindings.size !== 2) throw new Error('Both accounting stores must be bound for a coherent snapshot.');
+      const counter = this.interference;
+      this.hydrationAdmissionClosed = true;
+      try {
+        await Promise.all([...this.hydrations.values()].map(h => h.promise));
+        await this.journal.drain();
+        this.assertMutationAllowed();
+        this.snapshotReading = true;
+        for (const key of PAYMENT_PERSISTENCE_KEYS) await this.persistence.flush(key);
+        const read = async () => Object.fromEntries(await Promise.all(PAYMENT_PERSISTENCE_KEYS.map(async key =>
+          [key, await this.persistence.storage.getItem(key)] as const))) as Record<PaymentPersistenceKey, string | null>;
+        const first = await read(), second = await read();
+        if (this.phase !== 'open' || this.interference !== counter
+          || PAYMENT_PERSISTENCE_KEYS.some(key => first[key] !== second[key])) throw new Error('Recovery snapshot was interrupted or inconsistent.');
+        return Object.freeze(first);
+      } finally { this.snapshotReading = false; this.hydrationAdmissionClosed = false; }
+    });
   }
 
   /** Fences new mutations/jobs; drains issued storage writes, including failures. */
@@ -192,6 +231,7 @@ export function paymentRuntimePersist<T, P = T>(
   };
   const creator = persist<T, [], [], P>((set, get, api) => {
     const mutate = <R>(change: () => R): R => {
+      runtime.assertMutationAllowed();
       // Replacing persist configuration is not a supported write path. Detect
       // it before a state mutation could silently bypass the tracked adapter.
       if ('persist' in api && (api.persist.getOptions().storage !== storage || api.persist.getOptions().name !== key)) throw new Error('Tracked persistence configuration cannot be replaced.');
@@ -219,12 +259,30 @@ export function paymentRuntimePersist<T, P = T>(
     },
   });
   return (set, get, api) => {
-    const state = creator(set, get, api);
+    // Below persist: hydration uses this raw setter, bypassing the inner wrapper.
+    const protect = (setter: typeof set): typeof set => ((...args: unknown[]) => {
+      runtime.assertMutationAllowed();
+      const [partial, replace] = args;
+      const previous = get();
+      const next = typeof partial === 'function' ? partial(previous) : partial;
+      if (Object.is(next, previous)) return;
+      const value = (replace ?? (typeof next !== 'object' || next === null)) ? next : Object.assign({}, previous, next);
+      freezeEvidence(value);
+      return Reflect.apply(setter, undefined, [value, true]);
+    }) as typeof set;
+    api.setState = protect(api.setState);
+    const state = creator(protect(set), get, api);
+    freezeEvidence(state);
     // Metadata-bearing stores cannot change their key/adapter or erase storage
     // behind the runtime. Existing domain reset actions remain supported.
-    const controls = (api as unknown as { persist: { setOptions: (options: unknown) => void; clearStorage: () => void } }).persist;
-    controls.setOptions = () => { throw new Error('Tracked persistence configuration cannot be replaced.'); };
-    controls.clearStorage = () => { throw new Error('Use guarded domain reset actions; do not delete generation markers.'); };
+    const controls = (api as unknown as { persist: { setOptions: (options: unknown) => void; clearStorage: () => void;
+      rehydrate: () => Promise<void>; getOptions: () => object } }).persist;
+    const rehydrate = controls.rehydrate;
+    controls.rehydrate = () => { runtime.assertHydrationAllowed(); return rehydrate(); };
+    Object.freeze(controls.getOptions());
+    Object.freeze(storage);
+    controls.setOptions = () => { runtime.assertMutationAllowed(); throw new Error('Tracked persistence configuration cannot be replaced.'); };
+    controls.clearStorage = () => { runtime.assertMutationAllowed(); throw new Error('Use guarded domain reset actions; do not delete generation markers.'); };
     return state;
   };
 }

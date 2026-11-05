@@ -1,3 +1,5 @@
+import { readPaymentAccountingMetadata, type PaymentAccountingMetadata } from './paymentRecovery';
+
 export interface PaymentJournalMarker {
   readonly schemaVersion: 1;
   readonly generationId: string;
@@ -26,8 +28,11 @@ export function readPaymentJournalInstallation(value: unknown): PaymentJournalIn
 }
 
 /** Missing metadata remains legacy; malformed metadata is never discarded. */
-export function paymentJournalMetadata(state: { paymentJournal?: unknown }): { paymentJournal?: PaymentJournalMarker } {
-  return state.paymentJournal === undefined ? {} : { paymentJournal: readPaymentJournalMarker(state.paymentJournal) };
+export function paymentJournalMetadata(state: { paymentJournal?: unknown; paymentAccounting?: unknown }): {
+  paymentJournal?: PaymentJournalMarker; paymentAccounting?: PaymentAccountingMetadata;
+} {
+  return { ...(state.paymentJournal === undefined ? {} : { paymentJournal: readPaymentJournalMarker(state.paymentJournal) }),
+    ...(state.paymentAccounting === undefined ? {} : { paymentAccounting: readPaymentAccountingMetadata(state.paymentAccounting) }) };
 }
 
 export function assertAccountingStorageVersion(version: number): void {

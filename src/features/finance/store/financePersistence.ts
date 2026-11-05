@@ -80,5 +80,5 @@ export function createOrderedFinancePersistence(backend: StateStorage) {
     setItem: (key, value) => enqueue(key, 'write', () => backend.setItem(key, value)),
     removeItem: key => enqueue(key, 'remove', () => backend.removeItem(key)),
   };
-  return { storage, flush, runMutation, recordFailure, getFailure: (key: string) => queues.get(key)?.failure };
+  return { storage, flush, runMutation, recordFailure, assertMutationAllowed: () => {}, getFailure: (key: string) => queues.get(key)?.failure };
 }

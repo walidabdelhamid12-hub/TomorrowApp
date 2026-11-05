@@ -25,6 +25,8 @@ function readJournalDocument(raw: string | null): JournalDocument {
   return { source: envelope.version === 1 ? 'legacy-v1' : 'v2', data };
 }
 interface PaymentOperationStore {
+  /** Drain already accepted journal work without hydrating or writing. */
+  drain: () => Promise<void>;
   getState: () => PaymentOperationJournalData;
   subscribe: (listener: (state: PaymentOperationJournalData, previous: PaymentOperationJournalData) => void) => () => void;
   getStatus: () => { phase: JournalPhase; error: unknown; source: 'unknown' | 'missing' | 'legacy-v1' | 'v2' };
@@ -110,6 +112,7 @@ export function createPaymentOperationStore(backend: StateStorage = AsyncStorage
     && a.ledgerTransactionId === b.ledgerTransactionId;
   const transition = (kind: 'prepare' | 'complete', receipt: PaymentOperationReceipt,
     change: () => Promise<PaymentOperationReceipt>): Promise<PaymentOperationReceipt> => {
+    persistence.assertMutationAllowed();
     const key = kind + ':' + receipt.operationId;
     const active = pending.get(key);
     if (active) {
@@ -127,10 +130,12 @@ export function createPaymentOperationStore(backend: StateStorage = AsyncStorage
     return result;
   };
   const api: PaymentOperationStore = {
+    drain: async () => { await hydration; await transitionTail; await flush(); },
     getState: store.getState,
     subscribe: store.subscribe,
     getStatus: () => ({ phase: closed ? 'closed' : phase, error: failure, source }),
     hydrate: (): Promise<void> => {
+      try { persistence.assertMutationAllowed(); } catch (error) { return Promise.reject(error); }
       if (closed) return Promise.reject(new Error('Payment operation journal is closed.'));
       if (phase === 'blocked') return Promise.reject(failure);
       if (hydration) return hydration;
@@ -202,6 +207,7 @@ export function createPaymentOperationStore(backend: StateStorage = AsyncStorage
   };
   function installationChange(generationId: string, target: PaymentJournalInstallation['phase']): Promise<PaymentOperationJournalData> {
     try {
+      persistence.assertMutationAllowed();
       ready();
       const installation = readPaymentJournalInstallation({ schemaVersion: 1, generationId, phase: target });
       const result = transitionTail.then(async () => {

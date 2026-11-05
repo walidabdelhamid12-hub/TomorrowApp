@@ -176,6 +176,7 @@ export type TransferPatch = Partial<NewTransferInput>;
 /* ------------------------------ Persisted data --------------------------- */
 
 export interface LedgerData {
+  paymentAccounting?: import('./paymentRecovery').PaymentAccountingMetadata;
   paymentJournal?: PaymentJournalMarker;
   accounts: Account[];
   categories: Category[];

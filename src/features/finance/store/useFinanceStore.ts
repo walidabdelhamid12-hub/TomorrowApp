@@ -178,6 +178,7 @@ function migrateFinanceData(
 
   return {
     paymentJournal: paymentJournalMetadata(saved).paymentJournal,
+    ...('paymentAccounting' in saved ? { paymentAccounting: paymentJournalMetadata(saved).paymentAccounting } : {}),
     assets: normalizeRecords<Asset>(saved.assets),
     debts: normalizeRecords<Debt>(saved.debts),
     loans: normalizeRecords<Loan>(saved.loans).map((loan) => ({
