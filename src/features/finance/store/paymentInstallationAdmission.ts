@@ -30,10 +30,10 @@ export function inspectInstallationAdmission(e: AdmissionEvidence): Installation
       !Number.isSafeInteger(e.recoveryFindingCount) || e.recoveryFindingCount !== 0) {
     return deny('Unresolved recovery findings or invalid counts.');
   }
-  if (!e.financePresent || !e.ledgerPresent) return deny('Accounting document missing.');
-  if (!e.financeHistoryEmpty || !e.ledgerHistoryEmpty) return deny('Historical accounting data needs separate review.');
-  if (!e.writeQueueDrained || !e.storageHealthy) return deny('Persistence not confirmed idle and healthy.');
-  if (!e.exclusiveMutationGateHeld) return deny('Exclusive mutation gate not held.');
+  if (e.financePresent !== true || e.ledgerPresent !== true) return deny('Accounting document missing.');
+  if (e.financeHistoryEmpty !== true || e.ledgerHistoryEmpty !== true) return deny('Historical accounting data needs separate review.');
+  if (e.writeQueueDrained !== true || e.storageHealthy !== true) return deny('Persistence not confirmed idle and healthy.');
+  if (e.exclusiveMutationGateHeld !== true) return deny('Exclusive mutation gate not held.');
   return Object.freeze({ status: 'preflight-candidate',
     reason: 'Read-only prerequisites observed; installation is NOT authorized.',
     postingAllowed: false, readiness: 'blocked', installationAuthorized: false });
