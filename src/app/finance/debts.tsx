@@ -246,7 +246,10 @@ export default function DebtsScreen() {
         return;
       }
     } else {
-      addDebt(data);
+      if (!addDebt(data)) {
+        Alert.alert('Cannot add debt', 'The debt was not saved. Check the details and try again.');
+        return;
+      }
     }
 
     closeDebtModal();

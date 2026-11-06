@@ -140,7 +140,10 @@ export default function LoansScreen() {
           ? { depositMethodLabel: customDepositMethod.trim() }
           : {}),
     };
-    addLoan(input);
+    if (!addLoan(input)) {
+      Alert.alert('Cannot add loan', 'The loan was not saved. Check the details and try again.');
+      return;
+    }
     resetLoanForm();
   };
 
