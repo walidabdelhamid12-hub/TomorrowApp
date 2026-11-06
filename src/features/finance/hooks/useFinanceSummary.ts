@@ -1,14 +1,14 @@
 
 import { useMemo } from 'react';
 
+import { useMonthlyFinanceSummary } from './useMonthlyFinanceSummary';
+
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
-import { getDebtRemaining, getLoanRemainingAmount, getLoanRemainingPrincipal, roundMoney, todayISO } from '@/features/finance/utils/finance';
+import { getDebtRemaining, getLoanRemainingAmount, getLoanRemainingPrincipal, roundMoney } from '@/features/finance/utils/finance';
 import {
-  filterByMonth,
   getAccountBalance,
-  getMonthKey,
 } from '@/features/finance/utils/ledger';
 import { convertAmount } from '@/features/finance/utils/money';
 import { getAssetValueInBase } from '@/features/finance/utils/valuation';
@@ -224,47 +224,7 @@ export function useFinanceSummary() {
       totals.loansRemainingTotal
   );
 
-  const month = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    let missing = 0;
-
-    const key = getMonthKey(todayISO());
-
-    for (const transaction of filterByMonth(transactions, key)) {
-      const converted = convertAmount(
-        transaction.amount,
-        transaction.currencyCode,
-        baseCurrency,
-        rates,
-        verifiedCurrencies
-      );
-
-      if (converted === null) {
-        missing += 1;
-        continue;
-      }
-
-      if (transaction.entryType === 'refund') {
-        expense -= converted;
-      } else if (transaction.type === 'income') {
-        income += converted;
-      } else {
-        expense += converted;
-      }
-    }
-
-    return {
-      income: roundMoney(income),
-      expense: roundMoney(Math.max(expense, 0)),
-      missing,
-    };
-  }, [
-    transactions,
-    baseCurrency,
-    rates,
-    verifiedCurrencies,
-  ]);
+  const month = useMonthlyFinanceSummary();
 
   const missing = totals.missing + month.missing;
 

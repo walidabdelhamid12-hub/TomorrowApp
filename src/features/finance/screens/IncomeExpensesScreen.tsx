@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Card, Screen } from '@/components/ui';
+import { useMonthlyFinanceSummary } from '@/features/finance/hooks/useMonthlyFinanceSummary';
 import { AddTransactionModal } from '@/features/finance/components/AddTransactionModal';
 import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
@@ -22,7 +23,8 @@ export function IncomeExpensesScreen({ kind }: IncomeExpensesScreenProps) {
   const accent = isIncome ? '#209B70' : '#D65353';
   const rows = transactions.filter((item) => item.type === kind)
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
-  const total = rows.reduce((sum, item) => sum + item.amount, 0);
+  const summary = useMonthlyFinanceSummary();
+  const total = isIncome ? summary.income : summary.expense;
 
   if (!ready) return <Screen><View style={styles.center}><ActivityIndicator color={moduleColors.finance} /></View></Screen>;
 
@@ -36,8 +38,9 @@ export function IncomeExpensesScreen({ kind }: IncomeExpensesScreenProps) {
         </View>
       </View>
       <Card>
-        <AppText color="textSecondary">Total {isIncome ? 'income' : 'expenses'}</AppText>
-        <AppText variant="h1" style={{ color: accent }}>{formatAmount(total)}</AppText>
+        <AppText color="textSecondary">{summary.missing > 0 ? 'Partial total' : 'Total'} {isIncome ? 'income' : 'expenses'} · This month ({summary.monthKey})</AppText>
+        <AppText variant="h1" style={{ color: accent }}>{formatAmount(total, summary.baseCurrency)} {summary.baseCurrency}</AppText>
+        {summary.missing > 0 ? <AppText color="textSecondary">Monthly total incomplete: {summary.missing} transaction(s) could not be converted. Check verified exchange rates.</AppText> : null}
       </Card>
       <View style={styles.sectionHeader}>
         <AppText variant="h3">Transactions</AppText>
