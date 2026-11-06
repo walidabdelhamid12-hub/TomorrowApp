@@ -133,21 +133,6 @@ export default function InstallmentsScreen() {
                   value={totalAmount} onChangeText={value => { setTotalAmount(value); setDraftSummary(null); }} />
               </View>
             </View>
-            <AppText variant="label" color="textSecondary">Currency</AppText>
-            <View style={styles.currencyOptions}>
-              {CURRENCIES.map(item => (
-                <Pressable key={item.code} accessibilityRole="button"
-                  accessibilityState={{ selected: currencyCode === item.code }}
-                  onPress={() => { setCurrencyCode(item.code); setDraftSummary(null); }}
-                  style={[styles.currencyCard, currencyCode === item.code && styles.currencyCardActive]}>
-                  <Text style={styles.currencyFlag}>{item.flag}</Text>
-                  <Text style={[styles.currencyCode, currencyCode === item.code && styles.currencyCodeActive]}>{item.code}</Text>
-                  <Text style={[styles.currencySymbol, currencyCode === item.code && styles.currencySymbolActive]}>
-                    {CURRENCY_SYMBOLS[item.code] ?? item.code}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
             <AppText variant="bodyStrong">Installment schedule</AppText>
             {rows.map((row, index) => (
               <View key={row.key} style={[styles.draftRow, { borderColor: colors.border }]}>
@@ -155,17 +140,6 @@ export default function InstallmentsScreen() {
                   <AppText variant="bodyStrong">Installment {index + 1}</AppText>
                   {rows.length > 1 && <AppButton title="Remove" variant="ghost" fullWidth={false}
                     onPress={() => { setRows(previous => previous.filter(item => item.key !== row.key)); setDraftSummary(null); }} />}
-                </View>
-                <AppText variant="label" color="textSecondary">Type</AppText>
-                <View style={styles.typeOptions}>
-                  {(['regular', 'irregular', 'down_payment'] as const).map(kind => (
-                    <Pressable key={kind} accessibilityRole="button"
-                      accessibilityState={{ selected: row.kind === kind }}
-                      onPress={() => changeRow(row.key, { kind })}
-                      style={[styles.typeOption, { borderColor: row.kind === kind ? moduleColors.finance : colors.border, backgroundColor: row.kind === kind ? tone.surface : colors.surface }]}>
-                      <AppText variant="caption" align="center">{kind === 'down_payment' ? 'Down Payment' : kind === 'regular' ? 'Regular' : 'Irregular'}</AppText>
-                    </Pressable>
-                  ))}
                 </View>
                 <View style={styles.twoColumns}>
                   <View style={styles.column}>
@@ -183,6 +157,17 @@ export default function InstallmentsScreen() {
                       value={row.amount} onChangeText={value => changeRow(row.key, { amount: value })} />
                   </View>
                 </View>
+                <AppText variant="label" color="textSecondary">Type</AppText>
+                <View style={styles.typeOptions}>
+                  {(['regular', 'irregular', 'down_payment'] as const).map(kind => (
+                    <Pressable key={kind} accessibilityRole="button"
+                      accessibilityState={{ selected: row.kind === kind }}
+                      onPress={() => changeRow(row.key, { kind })}
+                      style={[styles.typeOption, { borderColor: row.kind === kind ? moduleColors.finance : colors.border, backgroundColor: row.kind === kind ? tone.surface : colors.surface }]}>
+                      <AppText variant="caption" align="center">{kind === 'down_payment' ? 'Down Payment' : kind === 'regular' ? 'Regular' : 'Irregular'}</AppText>
+                    </Pressable>
+                  ))}
+                </View>
                 {datePickerRow === row.key && (
                   <DateTimePicker value={parseISODate(row.dueDate)} mode="date" display="default"
                     onChange={(event: DateTimePickerEvent, selected?: Date) => {
@@ -196,6 +181,21 @@ export default function InstallmentsScreen() {
                 )}
                </View>
             ))}
+            <AppText variant="label" color="textSecondary">Currency</AppText>
+            <View style={styles.currencyOptions}>
+              {CURRENCIES.map(item => (
+                <Pressable key={item.code} accessibilityRole="button"
+                  accessibilityState={{ selected: currencyCode === item.code }}
+                  onPress={() => { setCurrencyCode(item.code); setDraftSummary(null); }}
+                  style={[styles.currencyCard, currencyCode === item.code && styles.currencyCardActive]}>
+                  <Text style={styles.currencyFlag}>{item.flag}</Text>
+                  <Text style={[styles.currencyCode, currencyCode === item.code && styles.currencyCodeActive]}>{item.code}</Text>
+                  <Text style={[styles.currencySymbol, currencyCode === item.code && styles.currencySymbolActive]}>
+                    {CURRENCY_SYMBOLS[item.code] ?? item.code}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             <AppButton title="Add installment" accentColor={moduleColors.finance}
               leftIcon={<Ionicons name="add-circle-outline" size={20} color={colors.onPrimary} />} onPress={() => {
               setRows(previous => [...previous, { key: nextKey, kind: 'regular', dueDate: '', amount: '' }]);
