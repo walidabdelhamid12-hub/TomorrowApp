@@ -23,7 +23,7 @@ const deny = (reason: string): InstallationAdmission => Object.freeze({
   status: 'denied', reason, postingAllowed: false, readiness: 'blocked', installationAuthorized: false,
 });
 export function inspectInstallationAdmission(e: AdmissionEvidence): InstallationAdmission {
-  if (e.journalVersion === 'blocked') return deny('Malformed or unsupported journal.');
+  if (e.journalVersion !== 'missing' && e.journalVersion !== 'legacy' && e.journalVersion !== 'v3') return deny('Malformed or unsupported journal.');
   if (e.journalVersion === 'v3') return deny('Existing V3 requires recovery review, not reinstall.');
   if (e.recoveryInstallation !== 'legacy') return deny('Recovery is not clean legacy.');
   if (!Number.isSafeInteger(e.recoveryIssueCount) || e.recoveryIssueCount !== 0 ||
