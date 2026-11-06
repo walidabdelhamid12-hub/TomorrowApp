@@ -251,6 +251,10 @@ export default function FinanceHomeScreen() {
         openTransfer(null);
         break;
 
+      case 'cheques':
+        router.push('/finance/installments');
+        break;
+
       case 'loans':
         router.push('/finance/loans');
         break;
