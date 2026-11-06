@@ -18,15 +18,15 @@ export type PersistenceObservation = Readonly<{
 
 /** Byte equality is only an API-level observation; not a durability or cross-document certificate. */
 export function classifyPersistenceAck(o: PersistenceObservation): PersistenceAck {
-  if (!o.writeIssued) return { kind: 'rejected', stage: 'preflight', reason: o.error ?? 'Write not issued.' };
-  if (!o.writeAcknowledged) return { kind: 'uncertain', stage: 'write', reason: o.error ?? 'Write acknowledgement missing.' };
-  if (!o.readbackAcknowledged || o.actualRaw === undefined) {
+  if (o.writeIssued !== true) return { kind: 'rejected', stage: 'preflight', reason: o.error ?? 'Write not issued.' };
+  if (o.writeAcknowledged !== true) return { kind: 'uncertain', stage: 'write', reason: o.error ?? 'Write acknowledgement missing.' };
+  if (o.readbackAcknowledged !== true || typeof o.actualRaw !== 'string') {
     return { kind: 'uncertain', stage: 'readback', reason: o.error ?? 'Read-back acknowledgement missing.' };
   }
   if (o.actualRaw !== o.expectedRaw) {
     return { kind: 'conflict', stage: 'readback', reason: 'Persisted bytes differ from expected bytes.' };
   }
-  if (!o.key.trim() || !o.generationId.trim()) {
+  if (typeof o.key !== 'string' || !o.key.trim() || typeof o.generationId !== 'string' || !o.generationId.trim() || typeof o.expectedRaw !== 'string') {
     return { kind: 'conflict', stage: 'readback', reason: 'Missing persistence identity.' };
   }
   return { kind: 'readback-verified', key: o.key, generationId: o.generationId };
