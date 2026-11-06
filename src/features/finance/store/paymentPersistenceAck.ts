@@ -20,7 +20,7 @@ export type PersistenceObservation = Readonly<{
 export function classifyPersistenceAck(o: PersistenceObservation): PersistenceAck {
   if (o.writeIssued !== true) return { kind: 'rejected', stage: 'preflight', reason: o.error ?? 'Write not issued.' };
   if (o.writeAcknowledged !== true) return { kind: 'uncertain', stage: 'write', reason: o.error ?? 'Write acknowledgement missing.' };
-  if (o.readbackAcknowledged !== true || typeof o.actualRaw !== 'string') {
+  if (o.readbackAcknowledged !== true || o.actualRaw === undefined || (o.actualRaw !== null && typeof o.actualRaw !== 'string')) {
     return { kind: 'uncertain', stage: 'readback', reason: o.error ?? 'Read-back acknowledgement missing.' };
   }
   if (o.actualRaw !== o.expectedRaw) {
