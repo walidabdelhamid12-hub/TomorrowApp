@@ -45,7 +45,6 @@ function kindLabel(kind: string): string {
 
 type DraftRow = { key: number; kind: InstallmentScheduleItem['kind']; dueDate: string; amount: string };
 const initialRows: DraftRow[] = [{ key: 1, kind: 'regular', dueDate: '', amount: '' }];
-// Same currency symbols and card layout used by the Accounts and Assets forms.
 const CURRENCY_SYMBOLS: Record<string, string> = {
   EGP: 'E£', OMR: 'ر.ع.', SAR: 'ر.س', AED: 'د.إ', USD: '
 
