@@ -8,12 +8,12 @@ const vm = require('node:vm');
 const ts = require('typescript');
 const source = fs.readFileSync(path.join(__dirname,'../src/features/finance/store/paymentInstallationDiagnostics.ts'),'utf8');
 const compiled = ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-function harness({raw, readError, recoveryError, recovery, journal}={}) {
+function harness({raw, readError, recoveryError, recovery, journal, forceCandidate=false}={}) {
   const calls=[];
   const mocks={
     './paymentAccountingVerification':{verifyPersistedPaymentAccounting(value){calls.push('verify');if(recoveryError)throw recoveryError;return recovery??{installation:'legacy',globalIssues:[],findings:[]};}},
     './paymentJournalVersionDetection':{classifyPaymentJournalVersion(value){calls.push('journal');return journal??{kind:'legacy'};}},
-    './paymentInstallationAdmission':{inspectInstallationAdmission(e){calls.push('admission');return e.exclusiveMutationGateHeld === false?{status:'denied',reason:'No held lease',postingAllowed:false,readiness:'blocked',installationAuthorized:false}:{status:'preflight-candidate',reason:'unsafe',postingAllowed:false,readiness:'blocked',installationAuthorized:false};}},
+    './paymentInstallationAdmission':{inspectInstallationAdmission(e){calls.push('admission');return !forceCandidate && e.exclusiveMutationGateHeld === false?{status:'denied',reason:'No held lease',postingAllowed:false,readiness:'blocked',installationAuthorized:false}:{status:'preflight-candidate',reason:'unsafe',postingAllowed:false,readiness:'blocked',installationAuthorized:false};}},
   };
   const mod={exports:{}};
   vm.runInNewContext(compiled,{module:mod,exports:mod.exports,require(id){if(!mocks[id])throw Error('Unexpected dependency '+id);return mocks[id];}});
@@ -44,7 +44,7 @@ test('missing accounting documents remain denied',async()=>{
  const h=harness({raw:{'tomorrow:finance':null,'tomorrow:ledger':null,'tomorrow:payment-operations':null}});await denied(h);
 });
 test('bridge rejects even if admission dependency returns a candidate',async()=>{
- const h=harness();
+ const h=harness({forceCandidate:true});
  const result=await h.inspect(h.runtime);
  assert.equal(result.status,'denied');
 });
