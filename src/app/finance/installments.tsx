@@ -6,8 +6,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { AppButton, AppInput, AppText, Card, Screen } from '@/components/ui';
 import { CURRENCIES } from '@/features/finance/constants/currencies';
 import { validateStandaloneInstallmentDraft } from '@/features/finance/utils/installmentDraft';
-import type { InstallmentScheduleItem } from '@/features/finance/types/installments';
-import type { InstallmentCalculationInput } from '@/features/finance/types/installments';
+import type { InstallmentCalculationInput, InstallmentScheduleItem } from '@/features/finance/types/installments';
 import { calculateInstallments } from '@/features/finance/utils/installments';
 import { moduleColors, useTheme } from '@/theme';
 
