@@ -60,6 +60,7 @@ export default function InstallmentsScreen() {
   const [totalAmount, setTotalAmount] = useState('');
   const [rows, setRows] = useState<DraftRow[]>(initialRows);
   const [nextKey, setNextKey] = useState(2);
+  const [selectedRowKey, setSelectedRowKey] = useState(1);
   const [datePickerRow, setDatePickerRow] = useState<number | null>(null);
   const [draftError, setDraftError] = useState('');
   const [draftSummary, setDraftSummary] = useState<string | null>(null);
@@ -88,6 +89,8 @@ export default function InstallmentsScreen() {
   const result = useMemo(() => preview ? calculateInstallments({ ...DEMO, asOf: todayISO() }) : null, [preview]);
 
   const tone = colors.finance.account;
+  const selectedRow = rows.find(row => row.key === selectedRowKey) ?? rows[0];
+  const selectedIndex = rows.findIndex(row => row.key === selectedRow.key);
 
   return (
     <Screen scroll>
@@ -113,19 +116,23 @@ export default function InstallmentsScreen() {
           </AppText>
         </View>
       </Card>
-      <AppButton title={draftOpen ? 'Hide contract draft' : 'Create contract draft (preview only)'}
-        variant="outline" accentColor={moduleColors.finance}
-        onPress={() => setDraftOpen(value => !value)} style={{ marginTop: spacing.md }} />
-      {draftOpen && (
-        <Card variant="outlined" padded={false} style={[styles.contractCard, { borderColor: tone.border, marginTop: spacing.md }]}>
+      <Card variant="outlined" padded={false} style={[styles.contractCard, { borderColor: tone.border, marginTop: spacing.md }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={draftOpen ? 'Collapse new contract' : 'Expand new contract'}
+          accessibilityState={{ expanded: draftOpen }}
+          onPress={() => setDraftOpen(value => !value)}
+          style={styles.contractToggle}>
+          <Ionicons name="document-text-outline" size={20} color={moduleColors.finance} />
+          <AppText variant="bodyStrong" style={styles.flex}>New Contract</AppText>
+          <Ionicons name={draftOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
+        </Pressable>
+        {draftOpen && (
           <View style={styles.draftList}>
-            <AppText variant="bodyStrong">New contract — validation preview only</AppText>
             <AppText variant="caption" color="textSecondary">
-              Nothing is saved. No account, debt, loan, cheque or balance will change.
+              Validation preview only. Nothing is saved or posted to balances.
             </AppText>
             <View style={styles.twoColumns}>
               <View style={styles.column}>
-                <AppInput label="Contract name" placeholder="Office plan"
+                <AppInput label="Contract Name" placeholder="Office plan"
                   value={contractName} onChangeText={value => { setContractName(value); setDraftSummary(null); }} />
               </View>
               <View style={styles.column}>
@@ -133,54 +140,33 @@ export default function InstallmentsScreen() {
                   value={totalAmount} onChangeText={value => { setTotalAmount(value); setDraftSummary(null); }} />
               </View>
             </View>
-            <AppText variant="bodyStrong">Installment schedule</AppText>
-            {rows.map((row, index) => (
-              <View key={row.key} style={[styles.draftRow, { borderColor: colors.border }]}>
-                <View style={styles.detailRow}>
-                  <AppText variant="bodyStrong">Installment {index + 1}</AppText>
-                  {rows.length > 1 && <AppButton title="Remove" variant="ghost" fullWidth={false}
-                    onPress={() => { setRows(previous => previous.filter(item => item.key !== row.key)); setDraftSummary(null); }} />}
-                </View>
-                <View style={styles.twoColumns}>
-                  <View style={styles.column}>
-                    <AppInput label="Due Date" placeholder="YYYY-MM-DD"
-                      value={row.dueDate} onChangeText={value => changeRow(row.key, { dueDate: value })}
-                      rightElement={
-                        <Pressable accessibilityRole="button" accessibilityLabel={'Choose due date for installment ' + (index + 1)}
-                          hitSlop={10} onPress={() => setDatePickerRow(row.key)}>
-                          <Ionicons name="calendar-outline" size={20} color={moduleColors.finance} />
-                        </Pressable>
-                      } />
-                  </View>
-                  <View style={styles.column}>
-                    <AppInput label="Amount" placeholder="300.000" keyboardType="decimal-pad"
-                      value={row.amount} onChangeText={value => changeRow(row.key, { amount: value })} />
-                  </View>
-                </View>
-                <AppText variant="label" color="textSecondary">Type</AppText>
-                <View style={styles.typeOptions}>
-                  {(['regular', 'irregular', 'down_payment'] as const).map(kind => (
-                    <Pressable key={kind} accessibilityRole="button"
-                      accessibilityState={{ selected: row.kind === kind }}
-                      onPress={() => changeRow(row.key, { kind })}
-                      style={[styles.typeOption, { borderColor: row.kind === kind ? moduleColors.finance : colors.border, backgroundColor: row.kind === kind ? tone.surface : colors.surface }]}>
-                      <AppText variant="caption" align="center">{kind === 'down_payment' ? 'Down Payment' : kind === 'regular' ? 'Regular' : 'Irregular'}</AppText>
+            <View style={styles.twoColumns}>
+              <View style={styles.column}>
+                <AppInput label="Due Date" placeholder="YYYY-MM-DD"
+                  value={selectedRow.dueDate} onChangeText={value => changeRow(selectedRow.key, { dueDate: value })}
+                  rightElement={
+                    <Pressable accessibilityRole="button" accessibilityLabel={'Choose due date for installment ' + (selectedIndex + 1)}
+                      hitSlop={10} onPress={() => setDatePickerRow(selectedRow.key)}>
+                      <Ionicons name="calendar-outline" size={20} color={moduleColors.finance} />
                     </Pressable>
-                  ))}
-                </View>
-                {datePickerRow === row.key && (
-                  <DateTimePicker value={parseISODate(row.dueDate)} mode="date" display="default"
-                    onChange={(event: DateTimePickerEvent, selected?: Date) => {
-                      setDatePickerRow(null);
-                      if (event.type === 'set' && selected) {
-                        const iso = [selected.getFullYear(), String(selected.getMonth() + 1).padStart(2, '0'),
-                          String(selected.getDate()).padStart(2, '0')].join('-');
-                        changeRow(row.key, { dueDate: iso });
-                      }
-                    }} />
-                )}
-               </View>
-            ))}
+                  } />
+              </View>
+              <View style={styles.column}>
+                <AppInput label="Amount" placeholder="300.000" keyboardType="decimal-pad"
+                  value={selectedRow.amount} onChangeText={value => changeRow(selectedRow.key, { amount: value })} />
+              </View>
+            </View>
+            {datePickerRow === selectedRow.key && (
+              <DateTimePicker value={parseISODate(selectedRow.dueDate)} mode="date" display="default"
+                onChange={(event: DateTimePickerEvent, selected?: Date) => {
+                  setDatePickerRow(null);
+                  if (event.type === 'set' && selected) {
+                    const iso = [selected.getFullYear(), String(selected.getMonth() + 1).padStart(2, '0'),
+                      String(selected.getDate()).padStart(2, '0')].join('-');
+                    changeRow(selectedRow.key, { dueDate: iso });
+                  }
+                }} />
+            )}
             <AppText variant="label" color="textSecondary">Currency</AppText>
             <View style={styles.currencyOptions}>
               {CURRENCIES.map(item => (
@@ -196,12 +182,52 @@ export default function InstallmentsScreen() {
                 </Pressable>
               ))}
             </View>
+            <AppText variant="label" color="textSecondary">Type</AppText>
+            <View style={styles.typeOptions}>
+              {(['regular', 'irregular', 'down_payment'] as const).map(kind => (
+                <Pressable key={kind} accessibilityRole="button"
+                  accessibilityState={{ selected: selectedRow.kind === kind }}
+                  onPress={() => changeRow(selectedRow.key, { kind })}
+                  style={[styles.typeOption, { borderColor: selectedRow.kind === kind ? moduleColors.finance : colors.border, backgroundColor: selectedRow.kind === kind ? tone.surface : colors.surface }]}>
+                  <AppText variant="caption" align="center">{kind === 'down_payment' ? 'Down Payment' : kind === 'regular' ? 'Regular' : 'Irregular'}</AppText>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.installmentSelector}>
+              <AppText variant="bodyStrong">Installment</AppText>
+              <View style={styles.installmentPicker}>
+                {rows.map((row, index) => (
+                  <Pressable key={row.key} accessibilityRole="button"
+                    accessibilityLabel={'Edit installment ' + (index + 1)}
+                    accessibilityState={{ selected: selectedRow.key === row.key }}
+                    onPress={() => { setSelectedRowKey(row.key); setDatePickerRow(null); }}
+                    style={[styles.installmentNumber, { borderColor: selectedRow.key === row.key ? moduleColors.finance : colors.border,
+                      backgroundColor: selectedRow.key === row.key ? tone.surface : colors.surface }]}>
+                    <AppText variant="caption">{index + 1}</AppText>
+                  </Pressable>
+                ))}
+              </View>
+              {rows.length > 1 && (
+                <AppButton title="Remove" variant="ghost" fullWidth={false}
+                  onPress={() => {
+                    const remaining = rows.filter(row => row.key !== selectedRow.key);
+                    setRows(remaining);
+                    setSelectedRowKey(remaining[Math.min(selectedIndex, remaining.length - 1)].key);
+                    setDatePickerRow(null);
+                    setDraftSummary(null);
+                    setDraftError('');
+                  }} />
+              )}
+            </View>
             <AppButton title="Add installment" accentColor={moduleColors.finance}
               leftIcon={<Ionicons name="add-circle-outline" size={20} color={colors.onPrimary} />} onPress={() => {
-              setRows(previous => [...previous, { key: nextKey, kind: 'regular', dueDate: '', amount: '' }]);
-              setNextKey(value => value + 1);
-              setDraftSummary(null);
-            }} />
+                setRows(previous => [...previous, { key: nextKey, kind: 'regular', dueDate: '', amount: '' }]);
+                setSelectedRowKey(nextKey);
+                setNextKey(value => value + 1);
+                setDatePickerRow(null);
+                setDraftSummary(null);
+                setDraftError('');
+              }} />
             <AppButton title="Validate draft (no save)" accentColor={moduleColors.finance} onPress={checkDraft} />
             {draftError ? <AppText color="danger">{draftError}</AppText> : null}
             {draftSummary ? <View style={[styles.draftRow, { borderColor: tone.border }]}>
@@ -209,8 +235,9 @@ export default function InstallmentsScreen() {
               <AppText>{draftSummary}</AppText>
             </View> : null}
           </View>
-        </Card>
-      )}
+        )}
+      </Card>
+
       <Pressable accessibilityRole="button" accessibilityLabel={preview ? 'Hide demo preview' : 'Show demo preview'}
         onPress={() => setPreview(value => !value)}
         style={[styles.previewToggle, { borderColor: colors.border, backgroundColor: colors.surface }]}>
@@ -289,7 +316,11 @@ const styles = StyleSheet.create({
   details: { marginTop: 8, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, gap: 6 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center' },
   draftRow: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 8, gap: 6 },
-  draftList: { gap: 8 },
+  draftList: { gap: 8, paddingTop: 8 },
+  contractToggle: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 5 },
+  installmentSelector: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  installmentPicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, flex: 1 },
+  installmentNumber: { minWidth: 32, paddingHorizontal: 8, paddingVertical: 7, alignItems: 'center', borderWidth: 1, borderRadius: 8 },
   twoColumns: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   column: { flex: 1, minWidth: 0 },
   currencyOptions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 7, columnGap: 5 },
