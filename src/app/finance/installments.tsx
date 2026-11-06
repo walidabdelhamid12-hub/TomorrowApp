@@ -114,13 +114,21 @@ export default function InstallmentsScreen() {
         onPress={() => setDraftOpen(value => !value)} style={{ marginTop: spacing.md }} />
       {draftOpen && (
         <Card variant="outlined" padded={false} style={[styles.contractCard, { borderColor: tone.border, marginTop: spacing.md }]}>
-          <View style={styles.list}>
+          <View style={styles.draftList}>
             <AppText variant="bodyStrong">New contract — validation preview only</AppText>
             <AppText variant="caption" color="textSecondary">
               Nothing is saved. No account, debt, loan, cheque or balance will change.
             </AppText>
-            <AppInput label="Contract name" placeholder="e.g. Office installment plan"
-              value={contractName} onChangeText={value => { setContractName(value); setDraftSummary(null); }} />
+            <View style={styles.twoColumns}>
+              <View style={styles.column}>
+                <AppInput label="Contract name" placeholder="Office plan"
+                  value={contractName} onChangeText={value => { setContractName(value); setDraftSummary(null); }} />
+              </View>
+              <View style={styles.column}>
+                <AppInput label="Total Amount" placeholder="1200.000" keyboardType="decimal-pad"
+                  value={totalAmount} onChangeText={value => { setTotalAmount(value); setDraftSummary(null); }} />
+              </View>
+            </View>
             <AppText variant="label" color="textSecondary">Currency</AppText>
             <View style={styles.currencyOptions}>
               {CURRENCIES.map(item => (
@@ -132,9 +140,6 @@ export default function InstallmentsScreen() {
                 </Pressable>
               ))}
             </View>
-            <AppInput label="Total contract amount" placeholder="e.g. 1200.000"
-              keyboardType="decimal-pad" value={totalAmount}
-              onChangeText={value => { setTotalAmount(value); setDraftSummary(null); }} />
             <AppText variant="bodyStrong">Installment schedule</AppText>
             {rows.map((row, index) => (
               <View key={row.key} style={[styles.draftRow, { borderColor: colors.border }]}>
@@ -154,14 +159,22 @@ export default function InstallmentsScreen() {
                     </Pressable>
                   ))}
                 </View>
-                <AppInput label="Due date (YYYY-MM-DD)" placeholder="2027-03-10"
-                  value={row.dueDate} onChangeText={value => changeRow(row.key, { dueDate: value })}
-                  rightElement={
-                    <Pressable accessibilityRole="button" accessibilityLabel={'Choose due date for installment ' + (index + 1)}
-                      hitSlop={10} onPress={() => setDatePickerRow(row.key)}>
-                      <Ionicons name="calendar-outline" size={22} color={moduleColors.finance} />
-                    </Pressable>
-                  } />
+                <View style={styles.twoColumns}>
+                  <View style={styles.column}>
+                    <AppInput label="Due Date" placeholder="YYYY-MM-DD"
+                      value={row.dueDate} onChangeText={value => changeRow(row.key, { dueDate: value })}
+                      rightElement={
+                        <Pressable accessibilityRole="button" accessibilityLabel={'Choose due date for installment ' + (index + 1)}
+                          hitSlop={10} onPress={() => setDatePickerRow(row.key)}>
+                          <Ionicons name="calendar-outline" size={20} color={moduleColors.finance} />
+                        </Pressable>
+                      } />
+                  </View>
+                  <View style={styles.column}>
+                    <AppInput label="Amount" placeholder="300.000" keyboardType="decimal-pad"
+                      value={row.amount} onChangeText={value => changeRow(row.key, { amount: value })} />
+                  </View>
+                </View>
                 {datePickerRow === row.key && (
                   <DateTimePicker value={parseISODate(row.dueDate)} mode="date" display="default"
                     onChange={(event: DateTimePickerEvent, selected?: Date) => {
@@ -173,9 +186,7 @@ export default function InstallmentsScreen() {
                       }
                     }} />
                 )}
-                <AppInput label="Amount" placeholder="e.g. 300.000" keyboardType="decimal-pad"
-                  value={row.amount} onChangeText={value => changeRow(row.key, { amount: value })} />
-              </View>
+               </View>
             ))}
             <AppButton title="Add installment" accentColor={moduleColors.finance}
               leftIcon={<Ionicons name="add-circle-outline" size={20} color={colors.onPrimary} />} onPress={() => {
@@ -269,9 +280,12 @@ const styles = StyleSheet.create({
   amountBlock: { alignItems: 'flex-end', flexShrink: 1, maxWidth: '45%' },
   details: { marginTop: 8, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, gap: 6 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center' },
-  draftRow: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 10, gap: 10 },
-  currencyOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  currencyOption: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
+  draftRow: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 8, gap: 6 },
+  draftList: { gap: 8 },
+  twoColumns: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  column: { flex: 1, minWidth: 0 },
+  currencyOptions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 4, rowGap: 6 },
+  currencyOption: { width: '19%', borderWidth: 1, borderRadius: 8, paddingHorizontal: 1, paddingVertical: 7, alignItems: 'center' },
   typeOptions: { flexDirection: 'row', gap: 6 },
-  typeOption: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
+  typeOption: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 8, paddingHorizontal: 3, paddingVertical: 7, alignItems: 'center', justifyContent: 'center' },
 });
