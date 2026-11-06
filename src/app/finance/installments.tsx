@@ -1,3 +1,4 @@
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -31,6 +32,13 @@ function todayISO(): string {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 }
 
+function parseISODate(value: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date();
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : new Date();
+}
+
 function kindLabel(kind: string): string {
   return kind === 'down_payment' ? 'Down payment' : kind === 'regular' ? 'Regular installment' : 'Irregular installment';
 }
@@ -48,6 +56,7 @@ export default function InstallmentsScreen() {
   const [totalAmount, setTotalAmount] = useState('');
   const [rows, setRows] = useState<DraftRow[]>(initialRows);
   const [nextKey, setNextKey] = useState(2);
+  const [datePickerRow, setDatePickerRow] = useState<number | null>(null);
   const [draftError, setDraftError] = useState('');
   const [draftSummary, setDraftSummary] = useState<string | null>(null);
   const changeRow = (key: number, patch: Partial<DraftRow>) => {
@@ -119,7 +128,7 @@ export default function InstallmentsScreen() {
                   accessibilityState={{ selected: currencyCode === item.code }}
                   onPress={() => { setCurrencyCode(item.code); setDraftSummary(null); }}
                   style={[styles.currencyOption, { borderColor: currencyCode === item.code ? moduleColors.finance : colors.border }]}>
-                  <AppText>{item.code}</AppText>
+                  <AppText>{item.flag} {item.code}</AppText>
                 </Pressable>
               ))}
             </View>
@@ -135,23 +144,41 @@ export default function InstallmentsScreen() {
                     onPress={() => { setRows(previous => previous.filter(item => item.key !== row.key)); setDraftSummary(null); }} />}
                 </View>
                 <AppText variant="label" color="textSecondary">Type</AppText>
-                <View style={styles.currencyOptions}>
+                <View style={styles.typeOptions}>
                   {(['regular', 'irregular', 'down_payment'] as const).map(kind => (
                     <Pressable key={kind} accessibilityRole="button"
                       accessibilityState={{ selected: row.kind === kind }}
                       onPress={() => changeRow(row.key, { kind })}
-                      style={[styles.currencyOption, { borderColor: row.kind === kind ? moduleColors.finance : colors.border }]}>
-                      <AppText variant="caption">{kindLabel(kind)}</AppText>
+                      style={[styles.typeOption, { borderColor: row.kind === kind ? moduleColors.finance : colors.border, backgroundColor: row.kind === kind ? tone.surface : colors.surface }]}>
+                      <AppText variant="caption" align="center">{kind === 'down_payment' ? 'Down Payment' : kind === 'regular' ? 'Regular' : 'Irregular'}</AppText>
                     </Pressable>
                   ))}
                 </View>
                 <AppInput label="Due date (YYYY-MM-DD)" placeholder="2027-03-10"
-                  value={row.dueDate} onChangeText={value => changeRow(row.key, { dueDate: value })} />
+                  value={row.dueDate} onChangeText={value => changeRow(row.key, { dueDate: value })}
+                  rightElement={
+                    <Pressable accessibilityRole="button" accessibilityLabel={'Choose due date for installment ' + (index + 1)}
+                      hitSlop={10} onPress={() => setDatePickerRow(row.key)}>
+                      <Ionicons name="calendar-outline" size={22} color={moduleColors.finance} />
+                    </Pressable>
+                  } />
+                {datePickerRow === row.key && (
+                  <DateTimePicker value={parseISODate(row.dueDate)} mode="date" display="default"
+                    onChange={(event: DateTimePickerEvent, selected?: Date) => {
+                      setDatePickerRow(null);
+                      if (event.type === 'set' && selected) {
+                        const iso = [selected.getFullYear(), String(selected.getMonth() + 1).padStart(2, '0'),
+                          String(selected.getDate()).padStart(2, '0')].join('-');
+                        changeRow(row.key, { dueDate: iso });
+                      }
+                    }} />
+                )}
                 <AppInput label="Amount" placeholder="e.g. 300.000" keyboardType="decimal-pad"
                   value={row.amount} onChangeText={value => changeRow(row.key, { amount: value })} />
               </View>
             ))}
-            <AppButton title="Add installment" variant="secondary" onPress={() => {
+            <AppButton title="Add installment" accentColor={moduleColors.finance}
+              leftIcon={<Ionicons name="add-circle-outline" size={20} color={colors.onPrimary} />} onPress={() => {
               setRows(previous => [...previous, { key: nextKey, kind: 'regular', dueDate: '', amount: '' }]);
               setNextKey(value => value + 1);
               setDraftSummary(null);
@@ -245,4 +272,6 @@ const styles = StyleSheet.create({
   draftRow: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 10, gap: 10 },
   currencyOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   currencyOption: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
+  typeOptions: { flexDirection: 'row', gap: 6 },
+  typeOption: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
 });
