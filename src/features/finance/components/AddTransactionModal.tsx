@@ -1,3 +1,4 @@
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
@@ -23,6 +24,8 @@ import { ScanDocumentButton } from '@/features/finance/components/ScanDocumentBu
 import { getCurrencyLabel } from '@/features/finance/constants/currencies';
 import type { ScanResult } from '@/features/finance/scanner/types';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
+import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
+import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
 import type {
   Category,
   NewCategoryInput,
@@ -84,6 +87,8 @@ export function AddTransactionModal({
   const accounts = useLedgerStore((s) => s.accounts);
   const categories = useLedgerStore((s) => s.categories);
   const transactions = useLedgerStore((s) => s.transactions);
+  const loans = useFinanceStore((s) => s.loans);
+  const debts = useFinanceStore((s) => s.debts);
   const addTransaction = useLedgerStore((s) => s.addTransaction);
   const updateTransaction = useLedgerStore((s) => s.updateTransaction);
   const addCategory = useLedgerStore((s) => s.addCategory);
@@ -166,6 +171,7 @@ export function AddTransactionModal({
         (item) =>
           item.type === 'expense' &&
           item.entryType !== 'refund' &&
+          !isProtectedTransaction(item, { loans, debts }) &&
           item.id !== transaction?.id,
       )
       .map((item) => {
@@ -191,7 +197,7 @@ export function AddTransactionModal({
       })
       .filter((item) => item.remainingAmount > 0)
       .sort((a, b) => b.transaction.date.localeCompare(a.transaction.date));
-  }, [transactions, transaction]);
+  }, [transactions, transaction, loans, debts]);
 
   const selectedOriginal = refundableTransactions.find(
     (item) => item.transaction.id === originalTransactionId,
@@ -412,6 +418,11 @@ export function AddTransactionModal({
   };
 
   const submit = () => {
+    const current = transaction && useLedgerStore.getState().transactions.find(t => t.id === transaction.id);
+    if (current && isProtectedTransaction(current, useFinanceStore.getState())) {
+      setError('This transaction belongs to a loan or debt. Manage its payment from Loans or Debts.');
+      return;
+    }
     const value = parseAmount(amount);
 
     if (value === null || value <= 0) {
@@ -765,31 +776,7 @@ export function AddTransactionModal({
                         </AppText>
                       </View>
 
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Edit ${category.name}`}
-                        onPress={() => openEditCategoryForm(category)}
-                        style={styles.categoryRowAction}
-                      >
-                        <Ionicons
-                          name="create-outline"
-                          size={21}
-                          color={colors.primary}
-                        />
-                      </Pressable>
-
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Delete ${category.name}`}
-                        onPress={() => requestDeleteCategory(category)}
-                        style={styles.categoryRowAction}
-                      >
-                        <Ionicons
-                          name="trash-outline"
-                          size={20}
-                          color={colors.danger}
-                        />
-                      </Pressable>
+                      <FinanceActionButtons label={category.name} onEdit={() => openEditCategoryForm(category)} onDelete={() => requestDeleteCategory(category)} />
                     </View>
                   );
                 })
@@ -1162,13 +1149,6 @@ const styles = StyleSheet.create({
   categoryManagerInfo: {
     flex: 1,
     gap: 3,
-  },
-  categoryRowAction: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 9,
   },
   categoryNameInput: {
     minHeight: 48,

@@ -1,3 +1,5 @@
+import { formatAmount } from '@/features/finance/utils/amountFormat';
+import { AssetTypeIcon } from '@/features/finance/components/AssetTypeIcon';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
@@ -5,6 +7,7 @@ import {
   Alert,
   Animated,
   Pressable,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -36,7 +39,15 @@ const showRate = (value: number): string =>
   String(Number(value.toFixed(4)));
 
 const showMetal = (value: number | null): string =>
-  value === null ? '' : String(Number(value.toFixed(2)));
+  value === null ? '' : formatAmount(value, 'KWD').replace(/,/g, '').replace(/0+$/, '').replace(/\.$/, '');
+
+// The clean display is never the source of truth for an untouched metal price.
+function metalChanged(text: string, canonical: number | null, edited: boolean): boolean {
+  if (!edited) return false;
+  if (text.trim() === '') return canonical !== null;
+  const value = parseAmount(text);
+  return value === null || value !== canonical;
+}
 
 function isValidRate(value: number | undefined): value is number {
   return (
@@ -97,18 +108,6 @@ const SOURCE_LABELS: Record<RateSource, string> = {
   default: 'N/C',
 };
 
-const SOURCE_BACKGROUNDS: Record<RateSource, string> = {
-  live: '#E7F5E9',
-  manual: '#E8F0FE',
-  default: '#FCE8E8',
-};
-
-const SOURCE_BORDERS: Record<RateSource, string> = {
-  live: '#A5D6A7',
-  manual: '#AFC7F5',
-  default: '#F0B4B4',
-};
-
 export function RatesModal({
   visible,
   onClose,
@@ -117,6 +116,8 @@ export function RatesModal({
   lastResult = null,
 }: RatesModalProps) {
   const { colors, spacing, radius, sizes } = useTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const stackMetals = width / fontScale < 360;
 
   const rates = useCurrencyStore((s) => s.rates);
   const metals = useCurrencyStore((s) => s.metals);
@@ -139,6 +140,8 @@ export function RatesModal({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [gold, setGold] = useState('');
   const [silver, setSilver] = useState('');
+  const [goldEdited, setGoldEdited] = useState(false);
+  const [silverEdited, setSilverEdited] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [refreshMessage, setRefreshMessage] =
     useState<RefreshResult | null>(null);
@@ -220,6 +223,8 @@ export function RatesModal({
     });
 
     setDrafts(initial);
+    setGoldEdited(false);
+    setSilverEdited(false);
 
     setGold(
       metals.gold24PerGram === null
@@ -247,9 +252,10 @@ export function RatesModal({
   const getMetalSource = (kind: MetalKey): RateSource =>
     metalSources[kind] ?? 'default';
 
+  const sourceTone = (source: RateSource) => colors.finance[source === 'live' ? 'income' : source === 'manual' ? 'account' : 'expense'];
   const getInputStatusStyle = (source: RateSource) => ({
-    backgroundColor: SOURCE_BACKGROUNDS[source],
-    borderColor: SOURCE_BORDERS[source],
+    backgroundColor: sourceTone(source).surface,
+    borderColor: sourceTone(source).border,
     borderWidth: 1,
   });
 
@@ -273,21 +279,11 @@ export function RatesModal({
       }
     }
 
-    const originalGoldDisplay =
-      metals.gold24PerGram === null
-        ? ''
-        : showMetal(metals.gold24PerGram / baseRate);
-
-    if (hasDisplayValueChanged(gold, originalGoldDisplay)) {
+    if (metalChanged(gold, metals.gold24PerGram === null ? null : metals.gold24PerGram / baseRate, goldEdited)) {
       return true;
     }
 
-    const originalSilverDisplay =
-      metals.silverPerGram === null
-        ? ''
-        : showMetal(metals.silverPerGram / baseRate);
-
-    if (hasDisplayValueChanged(silver, originalSilverDisplay)) {
+    if (metalChanged(silver, metals.silverPerGram === null ? null : metals.silverPerGram / baseRate, silverEdited)) {
       return true;
     }
 
@@ -387,6 +383,9 @@ export function RatesModal({
       }
     }
 
+    const goldChanged = metalChanged(gold, metals.gold24PerGram === null ? null : metals.gold24PerGram / baseRate, goldEdited);
+    const silverChanged = metalChanged(silver, metals.silverPerGram === null ? null : metals.silverPerGram / baseRate, silverEdited);
+
     const goldDisplay =
       gold.trim() === '' ? null : parseAmount(gold);
 
@@ -394,7 +393,7 @@ export function RatesModal({
       silver.trim() === '' ? null : parseAmount(silver);
 
     if (
-      gold.trim() !== '' &&
+      goldChanged && gold.trim() !== '' &&
       (goldDisplay === null || goldDisplay <= 0)
     ) {
       console.log('[RatesModal] SAVE STOPPED: invalid gold price');
@@ -405,7 +404,7 @@ export function RatesModal({
     }
 
     if (
-      silver.trim() !== '' &&
+      silverChanged && silver.trim() !== '' &&
       (silverDisplay === null || silverDisplay <= 0)
     ) {
       console.log('[RatesModal] SAVE STOPPED: invalid silver price');
@@ -416,10 +415,10 @@ export function RatesModal({
     }
 
     const goldStored =
-      goldDisplay === null ? null : goldDisplay * baseRate;
+      goldChanged ? goldDisplay === null ? null : goldDisplay * baseRate : metals.gold24PerGram;
 
     const silverStored =
-      silverDisplay === null ? null : silverDisplay * baseRate;
+      silverChanged ? silverDisplay === null ? null : silverDisplay * baseRate : metals.silverPerGram;
 
     if (
       (goldStored !== null &&
@@ -431,26 +430,6 @@ export function RatesModal({
       setError('One or more metal prices are invalid.');
       return;
     }
-
-    const originalGoldDisplay =
-      metals.gold24PerGram === null
-        ? ''
-        : showMetal(metals.gold24PerGram / baseRate);
-
-    const originalSilverDisplay =
-      metals.silverPerGram === null
-        ? ''
-        : showMetal(metals.silverPerGram / baseRate);
-
-    const goldChanged = hasDisplayValueChanged(
-      gold,
-      originalGoldDisplay,
-    );
-
-    const silverChanged = hasDisplayValueChanged(
-      silver,
-      originalSilverDisplay,
-    );
 
     console.log('[RatesModal] Changed currencies:', Object.keys(changedRates));
     console.log('[RatesModal] Gold changed:', goldChanged);
@@ -514,14 +493,14 @@ export function RatesModal({
   } as const;
 
   const metalCardStyle = {
-    flex: 0,
-    width: '40%',
+    flex: 1,
+    minWidth: 0,
     paddingVertical: spacing.xs * 0.56,
     paddingHorizontal: spacing.xs * 0.8,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: colors.finance.asset.border,
+    backgroundColor: colors.finance.asset.surface,
   } as const;
 
   const statusLegend = (
@@ -549,7 +528,7 @@ export function RatesModal({
                 width: 10,
                 height: 10,
                 borderRadius: 5,
-                backgroundColor: SOURCE_BORDERS[status],
+                backgroundColor: sourceTone(status).accent,
               }}
             />
             <AppText variant="caption" color="textSecondary">
@@ -713,8 +692,8 @@ export function RatesModal({
           METALS — PRICE PER GRAM IN {baseCurrency}
         </AppText>
 
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: spacing.sm }}>
-          <View style={metalCardStyle}>
+        <View testID="rates-metals" style={{ flexDirection: stackMetals ? 'column' : 'row', alignItems: 'stretch', gap: spacing.sm }}>
+          <View testID="rates-metal-gold" style={metalCardStyle}>
             <View
               style={{
                 flexDirection: 'row',
@@ -724,19 +703,23 @@ export function RatesModal({
                 marginBottom: spacing.xs * 0.56,
               }}
             >
-              <AppText style={{ fontSize: 11 }}>🥇</AppText>
+              <AssetTypeIcon category="gold" />
               <AppText
                 variant="label"
+                numberOfLines={stackMetals ? undefined : 1}
+                adjustsFontSizeToFit={!stackMetals}
+                minimumFontScale={0.9}
                 color="text"
-                style={{ fontWeight: '600' }}
+                style={{ fontWeight: '600', flexShrink: 1 }}
               >
-                Gold 24K
+                Gold (gram)
               </AppText>
             </View>
 
             <AppInput
+              accessibilityLabel="Gold price"
               value={gold}
-              onChangeText={setGold}
+              onChangeText={value => { setGold(value); setGoldEdited(true); }}
               keyboardType="decimal-pad"
               placeholder="not set"
               style={{
@@ -745,12 +728,12 @@ export function RatesModal({
                 paddingVertical: spacing.xs * 0.5,
                 ...getInputStatusStyle(getMetalSource('gold24PerGram')),
               }}
-              fieldStyle={{ minHeight: sizes.inputHeight * 0.392 }}
+              fieldStyle={{ minHeight: 44 }}
               containerStyle={{ width: '100%' }}
             />
           </View>
 
-          <View style={metalCardStyle}>
+          <View testID="rates-metal-silver" style={metalCardStyle}>
             <View
               style={{
                 flexDirection: 'row',
@@ -760,19 +743,23 @@ export function RatesModal({
                 marginBottom: spacing.xs * 0.8,
               }}
             >
-              <AppText style={{ fontSize: 16 }}>🥈</AppText>
+              <AssetTypeIcon category="silver" />
               <AppText
                 variant="label"
+                numberOfLines={stackMetals ? undefined : 1}
+                adjustsFontSizeToFit={!stackMetals}
+                minimumFontScale={0.9}
                 color="text"
-                style={{ fontWeight: '600' }}
+                style={{ fontWeight: '600', flexShrink: 1 }}
               >
-                Silver
+                Silver (gram)
               </AppText>
             </View>
 
             <AppInput
+              accessibilityLabel="Silver price"
               value={silver}
-              onChangeText={setSilver}
+              onChangeText={value => { setSilver(value); setSilverEdited(true); }}
               keyboardType="decimal-pad"
               placeholder="not set"
               style={{
@@ -781,7 +768,7 @@ export function RatesModal({
                 paddingVertical: spacing.xs * 0.5,
                 ...getInputStatusStyle(getMetalSource('silverPerGram')),
               }}
-              fieldStyle={{ minHeight: sizes.inputHeight * 0.392 }}
+              fieldStyle={{ minHeight: 44 }}
               containerStyle={{ width: '100%' }}
             />
           </View>
@@ -789,6 +776,7 @@ export function RatesModal({
 
       </View>
 
+      <AppText variant="caption" color="textSecondary">Gold is 24K. Metal prices retain full source precision; valuation uses that full price. Silver reference purity is unspecified by the source. Prices are per gram in {baseCurrency}.</AppText>
       {error ? (
         <AppText variant="caption" color="danger">
           {error}

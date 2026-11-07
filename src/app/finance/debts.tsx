@@ -1,12 +1,16 @@
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
+import { FinanceDetailsModal } from '@/features/finance/components/FinanceDetailsModal';
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
+import { editLinkedPayment, postLinkedPayment, reverseLinkedPayment } from '@/features/finance/store/paymentOperations';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Modal,
-    Platform,
+    PanResponder,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -34,6 +38,7 @@ import type {
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { getDebtPaid, getDebtRemaining, roundMoney } from '@/features/finance/utils/finance';
 import { parseAmount } from '@/features/finance/utils/money';
+import { focusLinkedRecords } from '@/features/finance/utils/transactionNavigation';
 import { moduleColors, useTheme } from '@/theme';
 
 type DebtTab = 'receivable' | 'payable';
@@ -115,8 +120,9 @@ const formatDate = (value?: string) => {
 
 export default function DebtsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ direction?: string }>();
+  const params = useLocalSearchParams<{ direction?: string; debtId?: string }>();
   const { colors } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
 
   const financeReady = useFinanceHydrated();
   const ledgerReady = useLedgerHydrated();
@@ -127,30 +133,9 @@ export default function DebtsScreen() {
   const updateDebt = useFinanceStore((state) => state.updateDebt);
   const deleteDebt = useFinanceStore((state) => state.deleteDebt);
 
-  const addDebtPayment = useFinanceStore(
-    (state) => state.addDebtPayment,
-  );
-  const deleteDebtPayment = useFinanceStore(
-    (state) => state.deleteDebtPayment,
-  );
-  const updateDebtPayment = useFinanceStore(
-    (state) => state.updateDebtPayment,
-  );
-  const linkDebtPaymentTransaction = useFinanceStore(
-    (state) => state.linkDebtPaymentTransaction,
-  );
-
   const accounts = useLedgerStore((state) => state.accounts);
   const categories = useLedgerStore((state) => state.categories);
-  const addTransaction = useLedgerStore(
-    (state) => state.addTransaction,
-  );
-  const updateTransaction = useLedgerStore(
-    (state) => state.updateTransaction,
-  );
-  const removeTransaction = useLedgerStore(
-    (state) => state.removeTransaction,
-  );
+  const transactions = useLedgerStore((state) => state.transactions);
 
   const [activeTab, setActiveTab] = useState<DebtTab>(
     params.direction === 'payable' ? 'payable' : 'receivable',
@@ -170,14 +155,28 @@ export default function DebtsScreen() {
     payment: DebtPayment;
   } | null>(null);
 
+  const [detailDebtId, setDetailDebtId] = useState<string | null>(null);
   const [expandedDebtId, setExpandedDebtId] = useState<string | null>(null);
+  const detailDebt = debts.filter(d => d.id === detailDebtId).length === 1 ? debts.find(d => d.id === detailDebtId) : undefined;
+  const swipe = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+    onPanResponderRelease: (_, g) => { if (Math.abs(g.dx) > 60 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5) setActiveTab(g.dx < 0 ? 'payable' : 'receivable'); },
+  }), []);
+  const linkedDebt = params.debtId === undefined ? undefined : focusLinkedRecords(debts, params.debtId)[0];
+  const linkedDebtId = linkedDebt?.id;
+  const linkedDebtDirection = linkedDebt?.direction;
+  useEffect(() => {
+    if (linkedDebtId && linkedDebtDirection) {
+      setActiveTab(linkedDebtDirection);
+    }
+  }, [linkedDebtId, linkedDebtDirection]);
 
   const visibleDebts = useMemo(
     () =>
-      debts
+      focusLinkedRecords(debts, params.debtId)
         .filter((debt) => debt.direction === activeTab)
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [debts, activeTab],
+    [debts, activeTab, params.debtId],
   );
 
   const activeAccounts = useMemo(
@@ -242,9 +241,15 @@ export default function DebtsScreen() {
         return;
       }
 
-      updateDebt(editingDebt.id, data);
+      if (!updateDebt(editingDebt.id, data)) {
+        Alert.alert('Cannot update debt', 'Currency cannot change while payment history or linked account transactions exist, or accounting data is not ready. The amount must also cover all recorded payments.');
+        return;
+      }
     } else {
-      addDebt(data);
+      if (!addDebt(data)) {
+        Alert.alert('Cannot add debt', 'The debt was not saved. Check the details and try again.');
+        return;
+      }
     }
 
     closeDebtModal();
@@ -262,21 +267,13 @@ export default function DebtsScreen() {
       return;
     }
 
-    const performDelete = () => deleteDebt(debt.id);
+    const performDelete = () => {
+      if (!deleteDebt(debt.id)) {
+        Alert.alert('Cannot delete debt', 'The debt may have payment history or linked account transactions, or its accounting data is not ready. Keep it to preserve its history.');
+      }
+    };
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(message)) performDelete();
-      return;
-    }
-
-    Alert.alert('Delete debt?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: performDelete,
-      },
-    ]);
+    confirm('Delete debt?', message, performDelete, 'Delete');
   };
 
   const openPayment = (debt: Debt) => {
@@ -391,63 +388,10 @@ export default function DebtsScreen() {
       return;
     }
 
-    const paymentId = addDebtPayment(paymentDebt.id, {
-      date: cleanPaymentDate,
-      amount,
-      note: paymentNote.trim() || undefined,
-      accountId: account.id,
-    });
-
-    if (!paymentId) {
-      Alert.alert(
-        'Could not save payment',
-        'The debt payment could not be created. No account transaction was added.',
-      );
-      return;
-    }
-
-    const transactionId = addTransaction({
-      accountId: account.id,
-      categoryId: category.id,
-      amount,
-      type: categoryKind,
-      date: cleanPaymentDate,
-      purpose:
-        paymentDebt.direction === 'receivable'
-          ? 'debt_collection'
-          : 'debt_payment',
-      linkedEntityType: 'debt',
-      linkedEntityId: paymentDebt.id,
-      linkedPaymentId: paymentId,
-    });
-
-    if (!transactionId) {
-      deleteDebtPayment(paymentDebt.id, paymentId);
-
-      Alert.alert(
-        'Transaction not saved',
-        'The account transaction could not be created. The debt payment was rolled back.',
-      );
-      return;
-    }
-
-    const paymentLinked = linkDebtPaymentTransaction(
-      paymentDebt.id,
-      paymentId,
-      transactionId,
-    );
-
-    if (!paymentLinked) {
-      // Roll back both sides if the newly posted transaction cannot be linked.
-      removeTransaction(transactionId);
-      deleteDebtPayment(paymentDebt.id, paymentId);
-
-      Alert.alert(
-        'Payment link failed',
-        'The account transaction could not be linked to the debt payment. Both changes were rolled back.',
-      );
-      return;
-    }
+    const result = postLinkedPayment({ entityType: 'debt', entityId: paymentDebt.id,
+      amount, date: cleanPaymentDate, note: paymentNote.trim() || undefined,
+      accountId: account.id, categoryId: category.id });
+    if (!result.ok) { Alert.alert('Payment not saved', result.reason); return; }
 
     closePayment();
 
@@ -463,179 +407,13 @@ export default function DebtsScreen() {
     debt: Debt,
     payment: DebtPayment,
   ) => {
-    const transactions = useLedgerStore.getState().transactions;
-
-    // Recover a payment created by the earlier buggy flow only when there is
-    // exactly one ledger entry with the complete matching debt/payment identity.
-    const matchingTransactions = payment.ledgerTransactionId
-      ? transactions.filter((item) => item.id === payment.ledgerTransactionId)
-      : transactions.filter(
-          (item) =>
-            item.linkedEntityType === 'debt' &&
-            item.linkedEntityId === debt.id &&
-            item.linkedPaymentId === payment.id &&
-            item.accountId === payment.accountId &&
-            item.amount === payment.amount &&
-            item.date === payment.date &&
-            item.currencyCode === debt.currencyCode &&
-            item.type ===
-              (debt.direction === 'receivable' ? 'income' : 'expense') &&
-            item.purpose ===
-              (debt.direction === 'receivable'
-                ? 'debt_collection'
-                : 'debt_payment'),
-        );
-
-    if (matchingTransactions.length !== 1) {
-      Alert.alert(
-        'Cannot edit this payment',
-        'A unique matching account transaction could not be verified. No changes were made.',
-      );
-      return;
-    }
-
-    const transaction = matchingTransactions[0];
-
-    if (!transaction) {
-      Alert.alert(
-        'Cannot edit this payment',
-        'A unique matching account transaction could not be verified. No changes were made.',
-      );
-      return;
-    }
-
-    if (
-      transaction.linkedEntityType !== 'debt' ||
-      transaction.linkedEntityId !== debt.id ||
-      transaction.linkedPaymentId !== payment.id ||
-      transaction.accountId !== payment.accountId ||
-      transaction.amount !== payment.amount ||
-      transaction.date !== payment.date ||
-      transaction.currencyCode !== debt.currencyCode ||
-      transaction.type !==
-        (debt.direction === 'receivable' ? 'income' : 'expense')
-    ) {
-      Alert.alert(
-        'Payment link mismatch',
-        'The linked account transaction could not be verified. No changes were made.',
-      );
-      return;
-    }
-
-    if (!payment.ledgerTransactionId) {
-      const recovered = linkDebtPaymentTransaction(
-        debt.id,
-        payment.id,
-        transaction.id,
-      );
-
-      if (!recovered) {
-        Alert.alert(
-          'Payment link recovery failed',
-          'The account transaction was found but could not be safely linked. No changes were made.',
-        );
-        return;
-      }
-    }
-
-    setEditingPayment({
-      debt,
-      payment: {
-        ...payment,
-        ledgerTransactionId: transaction.id,
-      },
-    });
+    setEditingPayment({ debt, payment });
   };
 
   const confirmDeletePayment = (debt: Debt, payment: DebtPayment) => {
-    const transactions = useLedgerStore.getState().transactions;
-    const expectedType = debt.direction === 'receivable' ? 'income' : 'expense';
-    const expectedPurpose =
-      debt.direction === 'receivable' ? 'debt_collection' : 'debt_payment';
-
-    const matchingTransactions = payment.ledgerTransactionId
-      ? transactions.filter((item) => item.id === payment.ledgerTransactionId)
-      : transactions.filter(
-          (item) =>
-            item.linkedEntityType === 'debt' &&
-            item.linkedEntityId === debt.id &&
-            item.linkedPaymentId === payment.id &&
-            item.accountId === payment.accountId &&
-            item.amount === payment.amount &&
-            item.date === payment.date &&
-            item.currencyCode === debt.currencyCode &&
-            item.type === expectedType &&
-            item.purpose === expectedPurpose,
-        );
-
-    if (matchingTransactions.length !== 1) {
-      Alert.alert(
-        'Cannot delete payment',
-        'A unique matching account transaction could not be verified. Nothing was deleted.',
-      );
-      return;
-    }
-
-    const transaction = matchingTransactions[0];
-    if (
-      !transaction ||
-      transaction.linkedEntityType !== 'debt' ||
-      transaction.linkedEntityId !== debt.id ||
-      transaction.linkedPaymentId !== payment.id ||
-      transaction.accountId !== payment.accountId ||
-      transaction.amount !== payment.amount ||
-      transaction.date !== payment.date ||
-      transaction.currencyCode !== debt.currencyCode ||
-      transaction.type !== expectedType ||
-      transaction.purpose !== expectedPurpose
-    ) {
-      Alert.alert(
-        'Payment link mismatch',
-        'The linked account transaction could not be verified. Nothing was deleted.',
-      );
-      return;
-    }
-
-    if (!payment.ledgerTransactionId) {
-      const recovered = linkDebtPaymentTransaction(
-        debt.id,
-        payment.id,
-        transaction.id,
-      );
-      if (!recovered) {
-        Alert.alert(
-          'Payment link recovery failed',
-          'The account transaction was found but could not be safely linked. Nothing was deleted.',
-        );
-        return;
-      }
-    }
-
     const performDelete = () => {
-      // Remove the verified ledger entry first. The finance record is removed
-      // only after the ledger confirms success, so balances cannot be orphaned.
-      const transactionRemoved = removeTransaction(transaction.id);
-      if (!transactionRemoved) {
-        Alert.alert(
-          'Cannot delete payment',
-          'The linked account transaction could not be removed (it may have dependent refunds). The payment was kept.',
-        );
-        return;
-      }
-
-      const paymentRemoved = deleteDebtPayment(
-        debt.id,
-        payment.id,
-        transaction.id,
-      );
-      if (!paymentRemoved) {
-        Alert.alert(
-          'Payment deletion incomplete',
-          'The account transaction was removed, but the payment record could not be deleted. Please contact support before making further changes.',
-        );
-        return;
-      }
-
+      const result = reverseLinkedPayment({ entityType: 'debt', entityId: debt.id, paymentId: payment.id });
+      if (!result.ok) { Alert.alert('Cannot delete payment', result.reason); return; }
       Alert.alert('Deleted', 'The payment and its linked account transaction were deleted.');
     };
 
@@ -643,15 +421,7 @@ export default function DebtsScreen() {
       `Delete this ${debt.direction === 'receivable' ? 'collection' : 'payment'} of ` +
       `${formatAmount(payment.amount, debt.currencyCode)} ${debt.currencyCode}? The linked account balance will be reversed.`;
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(message)) performDelete();
-      return;
-    }
-
-    Alert.alert('Delete payment?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: performDelete },
-    ]);
+    confirm('Delete payment?', message, performDelete, 'Delete');
   };
 
   const closeEditPayment = () => {
@@ -692,75 +462,9 @@ export default function DebtsScreen() {
       return;
     }
 
-    if (!payment.ledgerTransactionId) {
-      Alert.alert(
-        'Cannot edit payment',
-        'This payment has no linked account transaction.',
-      );
-      return;
-    }
-
-    // Read the latest transaction state before changing either store.
-    const transaction = useLedgerStore
-      .getState()
-      .transactions.find(
-        (item) => item.id === payment.ledgerTransactionId,
-      );
-
-    if (
-      !transaction ||
-      transaction.linkedEntityType !== 'debt' ||
-      transaction.linkedEntityId !== debt.id ||
-      transaction.linkedPaymentId !== payment.id ||
-      transaction.accountId !== payment.accountId ||
-      transaction.currencyCode !== debt.currencyCode
-    ) {
-      Alert.alert(
-        'Payment link mismatch',
-        'The account transaction could not be verified. No changes were made.',
-      );
-      return;
-    }
-
-    // Update the existing ledger entry. Never create a replacement transaction.
-    const transactionUpdated = updateTransaction(
-      transaction.id,
-      {
-        amount,
-        date: cleanDate,
-        note: note.trim() || undefined,
-      },
-    );
-
-    if (!transactionUpdated) {
-      Alert.alert(
-        'Update failed',
-        'The account transaction could not be updated. The debt payment was not changed.',
-      );
-      return;
-    }
-
-    // The payment record is updated only after its linked transaction succeeds.
-    const paymentUpdated = updateDebtPayment(debt.id, payment.id, {
-      amount,
-      date: cleanDate,
-      note: note.trim() || undefined,
-    });
-
-    if (!paymentUpdated) {
-      // Restore the already-updated ledger entry if the debt record rejected
-      // the change, keeping both persisted stores consistent.
-      updateTransaction(transaction.id, {
-        amount: transaction.amount,
-        date: transaction.date,
-        note: transaction.note,
-      });
-      Alert.alert(
-        'Update failed',
-        'The debt payment could not be updated. The account transaction was restored.',
-      );
-      return;
-    }
+    const result = editLinkedPayment({ entityType: 'debt', entityId: debt.id, paymentId: payment.id },
+      { amount, date: cleanDate, note: note.trim() || undefined });
+    if (!result.ok) { Alert.alert('Update failed', result.reason); return; }
 
     setEditingPayment(null);
 
@@ -808,6 +512,14 @@ export default function DebtsScreen() {
 
   return (
     <Screen scroll>
+      {confirmation}
+      <View {...swipe.panHandlers}>
+      {params.debtId !== undefined && (
+        <Card variant="filled">
+          <AppText>{visibleDebts.length ? 'Showing the debt linked to your transaction.' : 'The linked debt is unavailable in this tab. No other debt has been selected.'}</AppText>
+          <AppButton title="View all debts" variant="ghost" onPress={() => router.replace('/finance/debts')} />
+        </Card>
+      )}
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -828,7 +540,7 @@ export default function DebtsScreen() {
 
       <View style={styles.tabs}>
         <Pressable
-          onPress={() => setActiveTab('receivable')}
+          accessibilityRole="tab" accessibilityState={{ selected: activeTab === 'receivable' }} onPress={() => setActiveTab('receivable')}
           style={[
             styles.tab,
             activeTab === 'receivable' && styles.receivableTabActive,
@@ -850,7 +562,7 @@ export default function DebtsScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => setActiveTab('payable')}
+          accessibilityRole="tab" accessibilityState={{ selected: activeTab === 'payable' }} onPress={() => setActiveTab('payable')}
           style={[
             styles.tab,
             activeTab === 'payable' && styles.payableTabActive,
@@ -873,75 +585,23 @@ export default function DebtsScreen() {
       </View>
 
       <View style={styles.summaryGrid}>
-        <Card style={styles.summaryCard}>
-          <AppText variant="caption" color="textSecondary">
-            Total
-          </AppText>
-
-          {currencyTotals.length === 0 ? (
-            <AppText style={styles.summaryAmount}>0</AppText>
-          ) : (
-            currencyTotals.map((item) => (
-              <AppText key={item.currencyCode} style={styles.summaryAmount}>
-                {item.currencyCode} {formatAmount(item.total, item.currencyCode)}
-              </AppText>
-            ))
-          )}
-        </Card>
-
-        <Card style={styles.summaryCard}>
-          <AppText variant="caption" color="textSecondary">
-            Paid / Collected
-          </AppText>
-
-          {currencyTotals.length === 0 ? (
-            <AppText style={[styles.summaryAmount, { color: '#059669' }]}>
-              0
-            </AppText>
-          ) : (
-            currencyTotals.map((item) => (
-              <AppText
-                key={item.currencyCode}
-                style={[styles.summaryAmount, { color: '#059669' }]}
-              >
-                {item.currencyCode} {formatAmount(item.paid, item.currencyCode)}
-              </AppText>
-            ))
-          )}
-        </Card>
-
-        <Card style={styles.summaryCard}>
-          <AppText variant="caption" color="textSecondary">
-            Remaining
-          </AppText>
-
-          {currencyTotals.length === 0 ? (
-            <AppText
-              style={[
-                styles.summaryAmount,
-                {
-                  color: activeTab === 'receivable' ? '#059669' : '#DC2626',
-                },
-              ]}
-            >
-              0
-            </AppText>
-          ) : (
-            currencyTotals.map((item) => (
-              <AppText
-                key={item.currencyCode}
-                style={[
-                  styles.summaryAmount,
-                  {
-                    color: activeTab === 'receivable' ? '#059669' : '#DC2626',
-                  },
-                ]}
-              >
-                {item.currencyCode} {formatAmount(item.remaining, item.currencyCode)}
-              </AppText>
-            ))
-          )}
-        </Card>
+        {([
+          { label: 'Total', key: 'total' as const, color: colors.text },
+          { label: activeTab === 'receivable' ? 'Collected' : 'Paid', key: 'paid' as const, color: activeTab === 'receivable' ? '#059669' : '#DC2626' },
+          { label: 'Remaining', key: 'remaining' as const, color: activeTab === 'receivable' ? '#059669' : '#DC2626' },
+        ]).map(metric => (
+          <Card key={metric.key} style={styles.summaryCard}>
+            <AppText variant="caption" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{metric.label}</AppText>
+            {(currencyTotals.length ? currencyTotals : [{ currencyCode: '', total: 0, paid: 0, remaining: 0 }]).map(item => (
+              <View key={item.currencyCode} style={styles.summaryCurrency}>
+                <AppText style={[styles.summaryAmount, { color: metric.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
+                  {formatAmount(item[metric.key], item.currencyCode)}
+                </AppText>
+                {item.currencyCode ? <AppText variant="caption" color="textSecondary" numberOfLines={1}>{item.currencyCode}</AppText> : null}
+              </View>
+            ))}
+          </Card>
+        ))}
       </View>
 
       <AppButton
@@ -988,8 +648,9 @@ export default function DebtsScreen() {
             <Card key={debt.id} style={styles.debtCard}>
               <Pressable
                 onPress={() =>
-                  setExpandedDebtId(expanded ? null : debt.id)
+                  setDetailDebtId(debt.id)
                 }
+                accessibilityRole="button" accessibilityLabel={'Details for ' + debt.personName}
                 style={styles.debtMain}
               >
                 <View style={styles.debtTopRow}>
@@ -1058,142 +719,38 @@ export default function DebtsScreen() {
                   <AppText variant="caption" color="textSecondary">
                     Paid / collected: {formatAmount(paid, debt.currencyCode)}
                   </AppText>
-                  <Ionicons
-                    name={expanded ? 'chevron-up' : 'chevron-down'}
-                    size={18}
-                    color={colors.textSecondary}
-                  />
+                  <AppText variant="caption" color="textSecondary">Details</AppText>
                 </View>
               </Pressable>
-
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={(expanded ? 'Hide' : 'Show') + ' payment history for ' + debt.personName}
+                accessibilityState={{ expanded }}
+                onPress={() => setExpandedDebtId(expanded ? null : debt.id)}
+                style={styles.historyToggle}
+              >
+                <AppText variant="caption" color="textSecondary">
+                  Payment history ({debt.payments.length})
+                </AppText>
+                <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={19} color={colors.textSecondary} />
+              </Pressable>
               {expanded && (
-                <View style={styles.expandedContent}>
-                  {debt.notes ? (
-                    <View style={styles.notesBox}>
-                      <AppText variant="caption" color="textSecondary">
-                        Notes
-                      </AppText>
-                      <AppText>{debt.notes}</AppText>
-                    </View>
-                  ) : null}
-
-                  {debt.payments.length > 0 && (
-                    <View style={styles.paymentHistory}>
-                      <AppText style={styles.historyTitle}>
-                        Payment history
-                      </AppText>
-
-                      {debt.payments.map((payment) => (
-                        <View key={payment.id} style={styles.paymentRow}>
-                          <View style={styles.paymentInfo}>
-                            <AppText style={styles.paymentDate}>
-                              {formatDate(payment.date)}
-                            </AppText>
-
-                            {payment.note ? (
-                              <AppText
-                                variant="caption"
-                                color="textSecondary"
-                              >
-                                {payment.note}
-                              </AppText>
-                            ) : null}
-                          </View>
-
-                          <View style={styles.paymentActions}>
-                            <AppText style={styles.paymentAmount}>
-                              {formatAmount(payment.amount, debt.currencyCode)} {debt.currencyCode}
-                            </AppText>
-
-                            <View style={styles.paymentActionButtons}>
-                              <Pressable
-                                onPress={() => openEditPayment(debt, payment)}
-                                style={styles.editPaymentButton}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Edit payment dated ${formatDate(payment.date)}`}
-                              >
-                                <Ionicons
-                                  name="create-outline"
-                                  size={16}
-                                  color={moduleColors.finance}
-                                />
-                                <AppText style={styles.editPaymentText}>
-                                  Edit
-                                </AppText>
-                              </Pressable>
-
-                              <Pressable
-                                onPress={() => confirmDeletePayment(debt, payment)}
-                                style={styles.deletePaymentButton}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Delete payment dated ${formatDate(payment.date)}`}
-                              >
-                                <Ionicons
-                                  name="trash-outline"
-                                  size={16}
-                                  color="#DC2626"
-                                />
-                              </Pressable>
-                            </View>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  <View style={styles.actionRow}>
-                    {remaining > 0 && (
-                      <Pressable
-                        onPress={() => openPayment(debt)}
-                        style={[
-                          styles.primaryAction,
-                          {
-                            backgroundColor:
-                              activeTab === 'receivable'
-                                ? '#059669'
-                                : '#DC2626',
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name={
-                            activeTab === 'receivable'
-                              ? 'download-outline'
-                              : 'card-outline'
-                          }
-                          size={17}
-                          color="#fff"
-                        />
-                        <AppText style={styles.primaryActionText}>
-                          {activeTab === 'receivable'
-                            ? 'Record collection'
-                            : 'Record payment'}
-                        </AppText>
-                      </Pressable>
-                    )}
-
-                    <Pressable
-                      onPress={() => openEditDebt(debt)}
-                      style={styles.secondaryAction}
-                    >
-                      <Ionicons
-                        name="create-outline"
-                        size={18}
-                        color={moduleColors.finance}
+                <View style={styles.quickHistory}>
+                  {debt.payments.length === 0 ? (
+                    <AppText variant="caption" color="textSecondary">No payments recorded yet.</AppText>
+                  ) : debt.payments.map(payment => (
+                    <View key={payment.id} style={styles.quickPayment}>
+                      <View style={styles.quickPaymentRow}>
+                        <AppText style={styles.paymentDate}>{formatDate(payment.date)}</AppText>
+                        <AppText style={styles.paymentAmount}>{formatAmount(payment.amount, debt.currencyCode)} {debt.currencyCode}</AppText>
+                      </View>
+                      <FinanceActionButtons
+                        label={'payment dated ' + formatDate(payment.date)}
+                        onEdit={() => openEditPayment(debt, payment)}
+                        onDelete={() => confirmDeletePayment(debt, payment)}
                       />
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() => confirmDeleteDebt(debt)}
-                      style={styles.secondaryAction}
-                    >
-                      <Ionicons
-                        name="trash-outline"
-                        size={18}
-                        color={colors.danger}
-                      />
-                    </Pressable>
-                  </View>
+                    </View>
+                  ))}
                 </View>
               )}
             </Card>
@@ -1205,6 +762,9 @@ export default function DebtsScreen() {
         visible={debtModalVisible}
         direction={activeTab as DebtDirection}
         debt={editingDebt}
+        currencyLocked={!!editingDebt && (!ready
+          || (debts.find(debt => debt.id === editingDebt.id)?.payments ?? []).length > 0
+          || transactions.some(transaction => transaction.linkedEntityId === editingDebt.id))}
         onClose={closeDebtModal}
         onSave={handleSaveDebt}
       />
@@ -1235,6 +795,55 @@ export default function DebtsScreen() {
         onClose={closeEditPayment}
         onSave={handleSavePaymentEdit}
       />
+      <FinanceDetailsModal
+        compact
+        title={detailDebtId === null ? undefined : detailDebt?.personName ?? 'Debt unavailable'}
+        subtitle={detailDebt ? 'Debt recorded on ' + formatDate(detailDebt.date) : undefined}
+        onClose={() => setDetailDebtId(null)}
+        metrics={detailDebt ? [
+          { label: 'Remaining', value: formatAmount(getRemainingAmount(detailDebt), detailDebt.currencyCode) + ' ' + detailDebt.currencyCode },
+          { label: 'Original', value: formatAmount(detailDebt.amount, detailDebt.currencyCode) + ' ' + detailDebt.currencyCode },
+          { label: 'Paid / collected', value: formatAmount(getPaidAmount(detailDebt), detailDebt.currencyCode) + ' ' + detailDebt.currencyCode },
+          { label: 'Type', value: detailDebt.direction === 'receivable' ? 'Receivable' : 'Payable' },
+        ] : []}
+        lines={detailDebt ? [...(detailDebt.dueDate ? ['Due: ' + formatDate(detailDebt.dueDate)] : []), ...(detailDebt.notes?.trim() ? ['Notes: ' + detailDebt.notes.trim()] : [])] : ['No unique debt is available.']}
+      >
+        {detailDebt && (
+          <View style={{ gap: 12, paddingTop: 8 }}>
+            {detailDebt.payments.length > 0 && (
+              <View style={styles.paymentHistory}>
+                <AppText style={styles.historyTitle}>Payment history</AppText>
+                {detailDebt.payments.map(payment => (
+                  <View key={payment.id} style={styles.paymentRow}>
+                    <View style={styles.paymentInfo}>
+                      <AppText style={styles.paymentDate}>{formatDate(payment.date)}</AppText>
+                      {payment.note ? <AppText variant="caption" color="textSecondary">{payment.note}</AppText> : null}
+                    </View>
+                    <View style={styles.paymentActions}>
+                      <AppText style={styles.paymentAmount}>{formatAmount(payment.amount, detailDebt.currencyCode)} {detailDebt.currencyCode}</AppText>
+                      <FinanceActionButtons label={'payment dated ' + formatDate(payment.date)}
+                        onEdit={() => { setDetailDebtId(null); openEditPayment(detailDebt, payment); }}
+                        onDelete={() => confirmDeletePayment(detailDebt, payment)} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+            {getRemainingAmount(detailDebt) > 0 && (
+              <Pressable accessibilityRole="button"
+                onPress={() => { setDetailDebtId(null); openPayment(detailDebt); }}
+                style={[styles.primaryAction, { backgroundColor: detailDebt.direction === 'receivable' ? '#059669' : '#DC2626' }]}>
+                <Ionicons name={detailDebt.direction === 'receivable' ? 'download-outline' : 'card-outline'} size={17} color="#fff" />
+                <AppText style={styles.primaryActionText}>{detailDebt.direction === 'receivable' ? 'Record collection' : 'Record payment'}</AppText>
+              </Pressable>
+            )}
+            <FinanceActionButtons label={detailDebt.personName}
+              onEdit={() => { setDetailDebtId(null); openEditDebt(detailDebt); }}
+              onDelete={() => confirmDeleteDebt(detailDebt)} />
+          </View>
+        )}
+      </FinanceDetailsModal>
+      </View>
     </Screen>
   );
 }
@@ -1955,6 +1564,10 @@ function ModalEditPayment({
 }
 
 const styles = StyleSheet.create({
+  historyToggle: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 4 },
+  quickHistory: { paddingHorizontal: 12, paddingBottom: 6, gap: 2 },
+  quickPayment: { paddingTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#94A3B855' },
+  quickPaymentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 22 },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -2014,13 +1627,16 @@ const styles = StyleSheet.create({
   summaryCard: {
     flex: 1,
     paddingHorizontal: 9,
-    paddingVertical: 12,
-    gap: 5,
-    minHeight: 90,
+    paddingVertical: 7,
+    gap: 3,
+    minHeight: 75,
+    alignItems: 'center',
   },
+  summaryCurrency: { alignItems: 'center', width: '100%', gap: 0 },
   summaryAmount: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
+    textAlign: 'center',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -2116,9 +1732,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   paymentRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     gap: 8,
     paddingVertical: 7,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -2141,38 +1756,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 7,
   },
-  paymentActionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  editPaymentButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-  },
-  editPaymentText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: moduleColors.finance,
-  },
-  deletePaymentButton: {
-    width: 31,
-    height: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    borderRadius: 8,
-    backgroundColor: '#FEF2F2',
-  },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     gap: 9,
   },
@@ -2190,15 +1777,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '700',
-  },
-  secondaryAction: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   modalOverlay: {
     flex: 1,

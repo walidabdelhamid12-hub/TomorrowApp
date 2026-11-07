@@ -1,8 +1,17 @@
+import { isPaymentOperationReceipt, type PaymentOperationReceipt } from '@/features/finance/types/paymentOperations';
+import { reservedPaymentAvailable, reservedPaymentFundingValid } from '@/features/finance/utils/reservedPayments';
+import { canEditLoanPayment, canReverseLoanPayment } from '@/features/finance/utils/loanPaymentPolicy';
+import { assertAccountingStorageVersion, paymentJournalMetadata } from '@/features/finance/types/paymentJournalInstallation';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { createJSONStorage } from 'zustand/middleware';
+import { paymentRuntimePersist as persist } from './paymentOperationRuntime';
+import { readFinanceCreationProvenance } from './paymentAccountingVerification';
+import { preserveCreationLifecycle } from './creationProvenance';
+import { readLedgerProtection } from '@/features/finance/store/ledgerProtectionReader';
+import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
 
 import type {
   Asset,
@@ -48,6 +57,9 @@ import {
 /* -------------------------------------------------------------------------- */
 
 interface FinanceActions {
+  /** Inactive primitives: caller must acknowledge the prepared journal and hold the accounting gate. */
+  addReservedDebtPayment: (receipt: PaymentOperationReceipt) => EntityId | null;
+  addReservedLoanPayment: (receipt: PaymentOperationReceipt) => EntityId | null;
   addAsset: (input: NewAssetInput) => EntityId;
   updateAsset: (id: EntityId, patch: AssetPatch) => void;
   deleteAsset: (id: EntityId) => void;
@@ -64,8 +76,8 @@ interface FinanceActions {
   deleteAssetEntry: (assetId: EntityId, entryId: EntityId) => void;
 
   addDebt: (input: NewDebtInput) => EntityId | null;
-  updateDebt: (id: EntityId, patch: DebtPatch) => void;
-  deleteDebt: (id: EntityId) => void;
+  updateDebt: (id: EntityId, patch: DebtPatch) => boolean;
+  deleteDebt: (id: EntityId) => boolean;
   addDebtPayment: (
     debtId: EntityId,
     input: NewDebtPaymentInput
@@ -88,7 +100,7 @@ interface FinanceActions {
 
   addLoan: (input: NewLoanInput) => EntityId | null;
   updateLoan: (id: EntityId, patch: LoanPatch) => void;
-  deleteLoan: (id: EntityId) => void;
+  deleteLoan: (id: EntityId) => boolean;
   addLoanPayment: (
     loanId: EntityId,
     input: NewLoanPaymentInput
@@ -97,8 +109,8 @@ interface FinanceActions {
     loanId: EntityId,
     paymentId: EntityId,
     patch: LoanPaymentPatch
-  ) => void;
-  deleteLoanPayment: (loanId: EntityId, paymentId: EntityId) => void;
+  ) => boolean;
+  deleteLoanPayment: (loanId: EntityId, paymentId: EntityId) => boolean;
 
   addCheque: (input: NewChequeInput) => EntityId;
   updateCheque: (id: EntityId, patch: ChequePatch) => void;
@@ -109,7 +121,7 @@ interface FinanceActions {
     paidDate?: ISODate
   ) => void;
 
-  resetFinanceData: () => void;
+  resetFinanceData: () => boolean;
 }
 
 export type FinanceStore = FinanceData & FinanceActions;
@@ -167,6 +179,9 @@ function migrateFinanceData(
   const saved = isRecord(persistedState) ? persistedState : {};
 
   return {
+    ...readFinanceCreationProvenance(saved),
+    paymentJournal: paymentJournalMetadata(saved).paymentJournal,
+    ...('paymentAccounting' in saved ? { paymentAccounting: paymentJournalMetadata(saved).paymentAccounting } : {}),
     assets: normalizeRecords<Asset>(saved.assets),
     debts: normalizeRecords<Debt>(saved.debts),
     loans: normalizeRecords<Loan>(saved.loans).map((loan) => ({
@@ -241,8 +256,130 @@ function applyAssetPatch(asset: Asset, patch: AssetPatch): Asset {
 
 export const useFinanceStore = create<FinanceStore>()(
   persist(
-    (set, get) => ({
+    (rawSet, get) => {
+      // Domain changes and negative eligibility evidence share one persisted set.
+      // Runtime/private setters and hydration retain their existing boundaries.
+      const set: typeof rawSet = (partial, replace) => {
+        if (!get().creationProvenance) return rawSet(partial, replace as false);
+        const previous = get();
+        const patch = typeof partial === 'function' ? partial(previous) : partial;
+        const next = (replace ? patch : { ...previous, ...patch }) as FinanceStore;
+        const evidence = preserveCreationLifecycle(previous, next, readLedgerProtection());
+        return rawSet({ ...next, ...evidence }, true);
+      };
+      const addDebtPayment = (debtId: EntityId, input: NewDebtPaymentInput, reservedId?: string): EntityId | null => {
+        const debt = get().debts.find((item) => item.id === debtId);
+        if (!debt) return null;
+
+        const amount = roundMoney(input.amount);
+        const alreadyPaid = getDebtPaid(debt);
+        const remaining = getDebtRemaining(debt);
+
+        if (
+          !Number.isFinite(amount) ||
+          amount <= 0 ||
+          !Number.isFinite(remaining) ||
+          amount > remaining
+        ) {
+          return null;
+        }
+
+        const payment: DebtPayment = {
+          ...input,
+          amount,
+          id: reservedId ?? generateId('dpy'),
+        };
+
+        set((state) => ({
+          debts: patchParent(state.debts, debtId, (debt) => ({
+            ...debt,
+            payments: [...debt.payments, payment],
+          })),
+        }));
+
+        return payment.id;
+      };
+      const addLoanPayment = (loanId: EntityId, input: NewLoanPaymentInput, reservedId?: string): EntityId | null => {
+        const loan = get().loans.find((item) => item.id === loanId);
+        if (!loan || loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed') return null;
+
+        const amount = roundMoney(input.amount);
+        const latePaymentFee = roundMoney(input.latePaymentFee ?? 0);
+        const paymentMode = input.paymentMode ?? 'split';
+        const principalAmount = paymentMode === 'simple'
+          ? undefined
+          : roundMoney(input.principalAmount ?? amount);
+        const interestAmount = paymentMode === 'simple'
+          ? undefined
+          : roundMoney(input.interestAmount ?? amount - (principalAmount ?? amount));
+        const principalLimit = roundMoney(loan.receivedAmount ?? loan.principalAmount ?? 0);
+        const principalAlreadyPaid = roundMoney(
+          loan.payments.reduce(
+            (sum, payment) => sum + (
+              payment.paymentMode === 'simple'
+                ? 0
+                : payment.principalAmount ?? payment.amount
+            ),
+            0
+          )
+        );
+        const totalLimit = getLoanTotal(loan);
+        const totalAlreadyPaid = getLoanPaidAmount(loan);
+
+        if (
+          !Number.isFinite(amount) || amount <= 0 ||
+          !Number.isFinite(latePaymentFee) || latePaymentFee < 0 ||
+          !Number.isFinite(totalLimit) || totalLimit <= 0 ||
+          !Number.isFinite(totalAlreadyPaid) ||
+          roundMoney(amount + totalAlreadyPaid) > totalLimit ||
+          (paymentMode !== 'simple' && (
+            principalAmount === undefined || !Number.isFinite(principalAmount) || principalAmount < 0 ||
+            interestAmount === undefined || !Number.isFinite(interestAmount) || interestAmount < 0 ||
+            roundMoney(principalAmount + interestAmount) !== amount ||
+            !Number.isFinite(principalAlreadyPaid) ||
+            !Number.isFinite(principalLimit) ||
+            roundMoney(principalAmount + principalAlreadyPaid) > principalLimit
+          ))
+        ) {
+          return null;
+        }
+
+        const payment: LoanPayment = {
+          ...input,
+          amount,
+          latePaymentFee,
+          paymentMode,
+          ...(paymentMode === 'simple' ? {} : { principalAmount, interestAmount }),
+          id: reservedId ?? generateId('lpy'),
+        };
+
+        set((state) => ({
+          loans: patchParent(state.loans, loanId, (currentLoan) => ({
+            ...currentLoan,
+            payments: [...currentLoan.payments, payment],
+          })),
+        }));
+
+        return payment.id;
+      };
+      const reserved = (receipt: PaymentOperationReceipt, kind: 'debt' | 'loan'): EntityId | null => {
+        const ledger = readLedgerProtection();
+        if (!useFinanceStore.persist.hasHydrated() || !ledger?.hydrated
+          || !isPaymentOperationReceipt(receipt) || receipt.status !== 'prepared'
+          || receipt.request.entityType !== kind || !reservedPaymentAvailable(receipt, get(), ledger)
+          || !reservedPaymentFundingValid(receipt, get(), ledger)) return null;
+        const request = receipt.request;
+        const input = { amount: request.amount, date: request.date, note: request.note,
+          ...(request.funding.kind === 'account' ? { accountId: request.funding.accountId }
+            : { paymentMethodLabel: request.funding.methodLabel }) };
+        return request.entityType === 'debt'
+          ? addDebtPayment(request.entityId, input, receipt.paymentId)
+          : addLoanPayment(request.entityId, { ...input, latePaymentFee: request.latePaymentFee, paymentMode: 'simple' }, receipt.paymentId);
+      };
+      return ({
       ...initialData,
+      addReservedDebtPayment: receipt => reserved(receipt, 'debt'),
+      addReservedLoanPayment: receipt => reserved(receipt, 'loan'),
 
       /* Assets */
       addAsset: (input) => {
@@ -356,10 +493,19 @@ export const useFinanceStore = create<FinanceStore>()(
       },
 
       updateDebt: (id, patch) => {
-        const debt = get().debts.find((item) => item.id === id);
-        if (!debt) return;
+        const matches = get().debts.filter((item) => item.id === id);
+        if (matches.length !== 1) return false;
+        const debt = matches[0];
 
         const cleanPatch = withRounded(definedOnly(patch), ['amount']);
+        if (cleanPatch.currencyCode !== undefined && cleanPatch.currencyCode !== debt.currencyCode) {
+          const ledger = readLedgerProtection();
+          // Legacy/orphan ledger ownership counts even when payment history is empty.
+          // Unavailable accounting data cannot prove that a currency change is safe.
+          if (!useFinanceStore.persist.hasHydrated() || !ledger?.hydrated
+            || (debt.payments ?? []).length > 0
+            || ledger.transactions.some(transaction => transaction.linkedEntityId === id)) return false;
+        }
         if (typeof cleanPatch.amount === 'number') {
           const alreadyPaid = getDebtPaid(debt);
           if (
@@ -367,7 +513,7 @@ export const useFinanceStore = create<FinanceStore>()(
             cleanPatch.amount <= 0 ||
             cleanPatch.amount < alreadyPaid
           ) {
-            return;
+            return false;
           }
         }
 
@@ -377,51 +523,26 @@ export const useFinanceStore = create<FinanceStore>()(
             ...cleanPatch,
           })),
         }));
+        return true;
       },
 
       deleteDebt: (id) => {
-        const debt = get().debts.find((item) => item.id === id);
-        // Keep the debt record whenever it has payment history. Its payments
-        // may already be reflected in the ledger and must never be orphaned.
-        if (!debt || (debt.payments ?? []).length > 0) return;
+        const ledger = readLedgerProtection();
+        const matches = get().debts.filter(debt => debt.id === id);
+        // Empty legacy payment arrays do not prove that no cash was posted.
+        // An explicit debt ID is sufficient to block destruction even if the
+        // transaction's remaining ownership metadata is missing or conflicting.
+        if (!useFinanceStore.persist.hasHydrated() || !ledger?.hydrated || matches.length !== 1
+          || (matches[0].payments ?? []).length > 0
+          || ledger.transactions.some(transaction => transaction.linkedEntityId === id)) return false;
 
         set((state) => ({
           debts: state.debts.filter((item) => item.id !== id),
         }));
+        return true;
       },
 
-      addDebtPayment: (debtId, input) => {
-        const debt = get().debts.find((item) => item.id === debtId);
-        if (!debt) return null;
-
-        const amount = roundMoney(input.amount);
-        const alreadyPaid = getDebtPaid(debt);
-        const remaining = getDebtRemaining(debt);
-
-        if (
-          !Number.isFinite(amount) ||
-          amount <= 0 ||
-          !Number.isFinite(remaining) ||
-          amount > remaining
-        ) {
-          return null;
-        }
-
-        const payment: DebtPayment = {
-          ...input,
-          amount,
-          id: generateId('dpy'),
-        };
-
-        set((state) => ({
-          debts: patchParent(state.debts, debtId, (debt) => ({
-            ...debt,
-            payments: [...debt.payments, payment],
-          })),
-        }));
-
-        return payment.id;
-      },
+      addDebtPayment: (id, input) => addDebtPayment(id, input),
 
       // Attach a newly created ledger transaction to an unlinked payment.
       // This is deliberately separate from editing an already-posted payment.
@@ -460,6 +581,7 @@ export const useFinanceStore = create<FinanceStore>()(
       },
 
       updateDebtPayment: (debtId, paymentId, patch) => {
+        if ('ledgerTransactionId' in patch) return false;
         const debt = get().debts.find((item) => item.id === debtId);
         const currentPayment = debt?.payments.find((item) => item.id === paymentId);
         // Older payment records without a verified ledger link are read-only:
@@ -635,79 +757,28 @@ export const useFinanceStore = create<FinanceStore>()(
         }));
       },
 
-      deleteLoan: (id) =>
-        set((state) => ({
-          loans: state.loans.filter((loan) => loan.id !== id),
-        })),
-
-      addLoanPayment: (loanId, input) => {
-        const loan = get().loans.find((item) => item.id === loanId);
-        if (!loan || loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed') return null;
-
-        const amount = roundMoney(input.amount);
-        const latePaymentFee = roundMoney(input.latePaymentFee ?? 0);
-        const paymentMode = input.paymentMode ?? 'split';
-        const principalAmount = paymentMode === 'simple'
-          ? undefined
-          : roundMoney(input.principalAmount ?? amount);
-        const interestAmount = paymentMode === 'simple'
-          ? undefined
-          : roundMoney(input.interestAmount ?? amount - (principalAmount ?? amount));
-        const principalLimit = roundMoney(loan.receivedAmount ?? loan.principalAmount ?? 0);
-        const principalAlreadyPaid = roundMoney(
-          loan.payments.reduce(
-            (sum, payment) => sum + (
-              payment.paymentMode === 'simple'
-                ? 0
-                : payment.principalAmount ?? payment.amount
-            ),
-            0
-          )
-        );
-        const totalLimit = getLoanTotal(loan);
-        const totalAlreadyPaid = getLoanPaidAmount(loan);
-
-        if (
-          !Number.isFinite(amount) || amount <= 0 ||
-          !Number.isFinite(latePaymentFee) || latePaymentFee < 0 ||
-          !Number.isFinite(totalLimit) || totalLimit <= 0 ||
-          !Number.isFinite(totalAlreadyPaid) ||
-          roundMoney(amount + totalAlreadyPaid) > totalLimit ||
-          (paymentMode !== 'simple' && (
-            principalAmount === undefined || !Number.isFinite(principalAmount) || principalAmount < 0 ||
-            interestAmount === undefined || !Number.isFinite(interestAmount) || interestAmount < 0 ||
-            roundMoney(principalAmount + interestAmount) !== amount ||
-            !Number.isFinite(principalAlreadyPaid) ||
-            !Number.isFinite(principalLimit) ||
-            roundMoney(principalAmount + principalAlreadyPaid) > principalLimit
-          ))
-        ) {
-          return null;
-        }
-
-        const payment: LoanPayment = {
-          ...input,
-          amount,
-          latePaymentFee,
-          paymentMode,
-          ...(paymentMode === 'simple' ? {} : { principalAmount, interestAmount }),
-          id: generateId('lpy'),
-        };
-
-        set((state) => ({
-          loans: patchParent(state.loans, loanId, (currentLoan) => ({
-            ...currentLoan,
-            payments: [...currentLoan.payments, payment],
-          })),
-        }));
-
-        return payment.id;
+      deleteLoan: (id) => {
+        const ledger = readLedgerProtection();
+        const matches = get().loans.filter(l => l.id === id);
+        const loan = matches[0];
+        if (!useFinanceStore.persist.hasHydrated() || !ledger?.hydrated || matches.length !== 1
+          || (loan.payments ?? []).length || loan.receiptTransactionId || loan.receivedAt
+          || loan.receivedAmount !== undefined || loan.settlementPaymentId || loan.settlementDate
+          || loan.settlementAmount !== undefined || loan.closureDate || loan.closureReason
+          || (loan.status !== undefined && loan.status !== 'active')
+          || ledger.transactions.some(t => t.linkedEntityId === id || (loan.payments ?? []).some(p => p.id === t.linkedPaymentId))) return false;
+        set(state => ({ loans: state.loans.filter(l => l.id !== id) }));
+        return true;
       },
+
+      addLoanPayment: (id, input) => addLoanPayment(id, input),
 
       updateLoanPayment: (loanId, paymentId, patch) => {
         const loan = get().loans.find((item) => item.id === loanId);
         const currentPayment = loan?.payments.find((item) => item.id === paymentId);
-        if (!loan || !currentPayment) return;
+        if (!loan || !currentPayment || !canEditLoanPayment(loan)) return false;
+        if (currentPayment.ledgerTransactionId && 'ledgerTransactionId' in patch
+          && patch.ledgerTransactionId !== currentPayment.ledgerTransactionId) return false;
 
         const cleanPatch = withRounded(definedOnly(patch), [
           'amount',
@@ -755,7 +826,7 @@ export const useFinanceStore = create<FinanceStore>()(
             roundMoney(nextPrincipal + otherPrincipalPaid) > principalLimit
           ))
         ) {
-          return;
+          return false;
         }
 
         set((state) => ({
@@ -777,9 +848,12 @@ export const useFinanceStore = create<FinanceStore>()(
             ),
           })),
         }));
+        return true;
       },
 
-      deleteLoanPayment: (loanId, paymentId) =>
+      deleteLoanPayment: (loanId, paymentId) => {
+        const loan = get().loans.find(l => l.id === loanId);
+        if (!loan?.payments.some(p => p.id === paymentId) || !canReverseLoanPayment(loan, paymentId)) return false;
         set((state) => ({
           loans: patchParent(state.loans, loanId, (loan) => ({
             ...loan,
@@ -787,7 +861,9 @@ export const useFinanceStore = create<FinanceStore>()(
               (payment) => payment.id !== paymentId
             ),
           })),
-        })),
+        }));
+        return true;
+      },
 
       /* Cheques */
       addCheque: (input) => {
@@ -849,27 +925,41 @@ export const useFinanceStore = create<FinanceStore>()(
         })),
 
       /* Reset */
-      resetFinanceData: () => set({ ...initialData }),
-    }),
+      resetFinanceData: () => {
+        const ledger = readLedgerProtection();
+        if (!useFinanceStore.persist.hasHydrated() || !ledger?.hydrated || get().loans.length || get().debts.length
+          || ledger.transactions.some(t => isProtectedTransaction(t, get()))) return false;
+        set({ ...initialData, ...paymentJournalMetadata(get()) });
+        return true;
+      },
+    });
+    },
     {
       name: 'tomorrow:finance',
       version: STORAGE_VERSION,
       storage: createJSONStorage(() => AsyncStorage),
 
       partialize: (state): FinanceData => ({
+        ...readFinanceCreationProvenance(state as unknown as Record<string, unknown>),
+        ...paymentJournalMetadata(state),
         assets: state.assets,
         debts: state.debts,
         loans: state.loans,
         cheques: state.cheques,
       }),
 
-      migrate: (persistedState, _persistedVersion): FinanceData =>
-        migrateFinanceData(persistedState),
+      migrate: (persistedState, persistedVersion): FinanceData => {
+        assertAccountingStorageVersion(persistedVersion);
+        return migrateFinanceData(persistedState);
+      },
 
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...migrateFinanceData(persistedState),
-      }),
+      merge: (persistedState, currentState) => {
+        const restored = migrateFinanceData(persistedState);
+        const merged = { ...currentState, ...restored };
+        // An absent persisted field must not inherit evidence from the old session.
+        if (!Object.hasOwn(restored, 'creationProvenance')) delete merged.creationProvenance;
+        return merged;
+      },
 
       onRehydrateStorage: () => (_state, error) => {
         if (error) {

@@ -1,3 +1,4 @@
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
@@ -475,31 +476,8 @@ export function CategoryManagementScreen({
                     </AppText>
                   </View>
 
-                  <Pressable
-                    onPress={() => openEditEditor(category)}
-                    hitSlop={10}
-                    style={styles.iconButton}
-                  >
-                    <Ionicons
-                      name="create-outline"
-                      size={21}
-                      color={colors.primary}
-                    />
-                  </Pressable>
-
-                  {!category.isDefault ? (
-                    <Pressable
-                      onPress={() => handleDelete(category)}
-                      hitSlop={10}
-                      style={styles.iconButton}
-                    >
-                      <Ionicons
-                        name="trash-outline"
-                        size={20}
-                        color={colors.danger}
-                      />
-                    </Pressable>
-                  ) : null}
+                  <FinanceActionButtons label={category.name} onEdit={() => openEditEditor(category)}
+                    onDelete={category.isDefault ? undefined : () => handleDelete(category)} />
                 </View>
               </Card>
             ))}
@@ -584,12 +562,6 @@ const styles = StyleSheet.create({
   categoryInfo: {
     flex: 1,
     gap: 4,
-  },
-  iconButton: {
-    width: 34,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   emptyState: {
     alignItems: 'center',

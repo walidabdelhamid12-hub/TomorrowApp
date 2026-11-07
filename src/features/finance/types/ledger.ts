@@ -1,4 +1,5 @@
 
+import type { PaymentJournalMarker } from './paymentJournalInstallation';
 import type {
   CurrencyCode,
   EntityId,
@@ -70,7 +71,8 @@ export type TransactionPurpose =
   | 'debt_collection'
   | 'loan_payment'
   | 'loan_principal_payment'
-  | 'loan_interest_payment';
+  | 'loan_interest_payment'
+  | 'property_installment_payment';
 
 export interface Transaction extends Timestamps {
   id: EntityId;
@@ -101,7 +103,7 @@ export interface Transaction extends Timestamps {
    * Optional link to the debt or loan settled by this transaction.
    * These fields allow the app to prevent duplicate ledger posting.
    */
-  linkedEntityType?: 'debt' | 'loan';
+  linkedEntityType?: 'debt' | 'loan' | 'property';
   linkedEntityId?: EntityId;
   linkedPaymentId?: EntityId;
 
@@ -114,7 +116,9 @@ export type NewTransactionInput = Omit<
   'id' | 'currencyCode' | 'createdAt' | 'updatedAt'
 >;
 
-export type TransactionPatch = Partial<NewTransactionInput>;
+/** Ownership is established by payment posting, never by a generic edit. */
+export type TransactionPatch = Partial<Omit<NewTransactionInput,
+  'purpose' | 'linkedEntityType' | 'linkedEntityId' | 'linkedPaymentId'>>;
 
 /* -------------------------------- Transfers ------------------------------- */
 
@@ -172,6 +176,8 @@ export type TransferPatch = Partial<NewTransferInput>;
 /* ------------------------------ Persisted data --------------------------- */
 
 export interface LedgerData {
+  paymentAccounting?: import('./paymentRecovery').PaymentAccountingMetadata;
+  paymentJournal?: PaymentJournalMarker;
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];

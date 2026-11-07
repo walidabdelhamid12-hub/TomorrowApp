@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { AccountDropdown } from './AccountDropdown';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import {
   AppButton,
@@ -32,6 +33,8 @@ export function TransferModal({
   transfer = null,
 }: TransferModalProps) {
   const { colors, spacing } = useTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const stackFields = width / fontScale < 360;
 
   const accounts = useLedgerStore((state) => state.accounts);
   const addTransfer = useLedgerStore((state) => state.addTransfer);
@@ -46,7 +49,8 @@ export function TransferModal({
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | undefined>();
-  const [preserveLoadedRate, setPreserveLoadedRate] = useState(false);
+  const [loadedTransfer, setLoadedTransfer] = useState<Transfer | null | undefined>(undefined);
+  const rateSelection = useRef('');
 
   const isEditing = !!transfer;
 
@@ -124,7 +128,9 @@ export function TransferModal({
 
   // Load the existing transfer when opening the modal in edit mode.
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) { setLoadedTransfer(undefined); return; }
+    setLoadedTransfer(transfer);
+    rateSelection.current = transfer ? [transfer.fromAccountId, transfer.toAccountId, transfer.type].join('|') : '';
 
     if (transfer) {
       setMode(transfer.type);
@@ -147,7 +153,6 @@ export function TransferModal({
       setExchangeRate(String(originalRate));
       setDate(transfer.date);
       setNote(transfer.note ?? '');
-      setPreserveLoadedRate(true);
     } else {
       setMode('internal');
       setFromAccountId('');
@@ -156,71 +161,29 @@ export function TransferModal({
       setExchangeRate('1');
       setDate(todayISO());
       setNote('');
-      setPreserveLoadedRate(false);
     }
 
     setError(undefined);
   }, [visible, transfer]);
 
   useEffect(() => {
-    if (!visible) return;
-
-    const firstSource = sourceAccounts[0];
-
-    if (!firstSource) {
-      setFromAccountId('');
-      return;
-    }
-
-    const currentSourceExists = sourceAccounts.some(
-      (account) => account.id === fromAccountId,
-    );
-
-    if (!currentSourceExists) {
-      setFromAccountId(firstSource.id);
-    }
-  }, [visible, sourceAccounts, fromAccountId]);
+    if (!visible || loadedTransfer !== transfer) return;
+    setFromAccountId(current => sourceAccounts.some(account => account.id === current) ? current : sourceAccounts[0]?.id ?? '');
+  }, [visible, loadedTransfer, transfer, sourceAccounts]);
 
   useEffect(() => {
-    if (!visible) return;
-
-    const firstDestination = destinationAccounts[0];
-
-    const currentDestinationExists = destinationAccounts.some(
-      (account) => account.id === toAccountId,
-    );
-
-    if (!currentDestinationExists) {
-      setToAccountId(firstDestination?.id ?? '');
-    }
-  }, [visible, destinationAccounts, toAccountId]);
+    if (!visible || loadedTransfer !== transfer) return;
+    setToAccountId(current => destinationAccounts.some(account => account.id === current) ? current : destinationAccounts[0]?.id ?? '');
+  }, [visible, loadedTransfer, transfer, destinationAccounts]);
 
   useEffect(() => {
-    if (!visible || !selectedSource || !selectedDestination) return;
-
-    // Keep the original exchange rate when loading an existing transfer.
-    if (preserveLoadedRate) {
-      setPreserveLoadedRate(false);
-      return;
-    }
-
-    if (mode === 'credit_card_payment' || sameCurrency) {
-      setExchangeRate('1');
-      return;
-    }
-
-    setExchangeRate(String(suggestedRate));
-  }, [
-    visible,
-    selectedSource?.id,
-    selectedDestination?.id,
-    selectedSource?.currencyCode,
-    selectedDestination?.currencyCode,
-    mode,
-    sameCurrency,
-    suggestedRate,
-    preserveLoadedRate,
-  ]);
+    if (!visible || loadedTransfer !== transfer || !selectedSource || !selectedDestination) return;
+    const selection = [selectedSource.id, selectedDestination.id, mode].join('|');
+    // Loading an edit or refreshing rates must not replace its stored/manual rate.
+    if (rateSelection.current === selection) return;
+    rateSelection.current = selection;
+    setExchangeRate(mode === 'credit_card_payment' || sameCurrency ? '1' : String(suggestedRate));
+  }, [visible, loadedTransfer, transfer, selectedSource, selectedDestination, mode, sameCurrency, suggestedRate]);
 
   const handleModeChange = (value: string) => {
     setMode(value as TransferMode);
@@ -365,6 +328,14 @@ export function TransferModal({
     onClose();
   };
 
+  const accountsSelected = !!selectedSource && !!selectedDestination;
+  const receivedText = accountsSelected && calculatedToAmount !== null
+    ? calculatedToAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '—';
+  const rateHint = sameCurrency || mode === 'credit_card_payment'
+    ? 'The exchange rate is fixed at 1 for this transfer.'
+    : `Suggested rate: ${suggestedRate.toLocaleString(undefined, { maximumFractionDigits: 8 })} · You can edit it manually.`;
+
   return (
     <FormModal
       visible={visible}
@@ -395,121 +366,40 @@ export function TransferModal({
             onChange={handleModeChange}
           />
 
-          {sourceAccounts.length === 0 ? (
-            <AppText color="textSecondary">
-              No eligible source accounts are available.
-            </AppText>
-          ) : (
-            <ChipSelect<string>
-              label="FROM ACCOUNT"
-              options={sourceAccounts.map((account) => ({
-                value: account.id,
-                label: `${account.name} · ${getCurrencyLabel(account.currencyCode)}`,
-                color: moduleColors.finance,
-              }))}
-              value={fromAccountId}
-              onChange={(value) => {
-                setFromAccountId(value);
-                setError(undefined);
-              }}
-            />
-          )}
+          <View style={{ flexDirection: stackFields ? 'column' : 'row', gap: spacing.sm }}>
+            <AccountDropdown label="From account" options={sourceAccounts} value={fromAccountId}
+              onChange={value => { setFromAccountId(value); setError(undefined); }} emptyMessage="No eligible source accounts" />
+            <AccountDropdown label="To account" options={destinationAccounts} value={toAccountId}
+              onChange={value => { setToAccountId(value); setError(undefined); }}
+              emptyMessage={mode === 'credit_card_payment' ? 'Add a credit card account' : 'Choose another non-card account'} />
+          </View>
 
-          {destinationAccounts.length === 0 ? (
-            <AppText color="textSecondary">
-              {mode === 'credit_card_payment'
-                ? 'Add an active credit card account first.'
-                : 'Choose another active non-card account as the destination.'}
-            </AppText>
-          ) : (
-            <ChipSelect<string>
-              label="TO ACCOUNT"
-              options={destinationAccounts.map((account) => ({
-                value: account.id,
-                label: `${account.name} · ${getCurrencyLabel(account.currencyCode)}`,
-                color: moduleColors.finance,
-              }))}
-              value={toAccountId}
-              onChange={(value) => {
-                setToAccountId(value);
-                setError(undefined);
-              }}
-            />
-          )}
-
-          {selectedSource && selectedDestination ? (
-            <AppText variant="caption" color="textSecondary">
-              {selectedSource.name} ({selectedSource.currencyCode}) →{' '}
-              {selectedDestination.name} ({selectedDestination.currencyCode})
-            </AppText>
-          ) : null}
-
-          <AppInput
-            label="Amount to transfer"
-            value={fromAmount}
-            onChangeText={(value) => {
-              setFromAmount(value);
-              setError(undefined);
-            }}
-            keyboardType="decimal-pad"
-            placeholder="0"
-            leftElement={
-              <AppText color="textSecondary">
-                {selectedSource
-                  ? getCurrencyLabel(selectedSource.currencyCode)
-                  : ''}
-              </AppText>
-            }
-          />
-
-          {selectedSource && selectedDestination ? (
-            <>
-              <AppInput
-                label="Exchange rate"
-                value={exchangeRate}
-                onChangeText={(value) => {
-                  setExchangeRate(value);
-                  setError(undefined);
-                }}
-                keyboardType="decimal-pad"
-                editable={!sameCurrency && mode !== 'credit_card_payment'}
-                placeholder="1"
-                hint={
-                  sameCurrency || mode === 'credit_card_payment'
-                    ? 'The exchange rate is fixed at 1 for this transfer.'
-                    : `Suggested rate: ${suggestedRate.toLocaleString(undefined, {
-                        maximumFractionDigits: 8,
-                      })} · You can edit it manually.`
-                }
-              />
-
-              <View
-                style={{
-                  padding: spacing.md,
-                  borderRadius: 12,
-                  backgroundColor: colors.surfaceAlt,
-                  gap: spacing.xs,
-                }}
-              >
-                <AppText color="textSecondary" variant="caption">
-                  AMOUNT TO RECEIVE
-                </AppText>
-
-                <AppText variant="h2">
-                  {calculatedToAmount === null
-                    ? '—'
-                    : calculatedToAmount.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                </AppText>
-
-                <AppText color="textSecondary" variant="caption">
-                  {getCurrencyLabel(selectedDestination.currencyCode)}
-                </AppText>
+          <View testID="transfer-amounts-row" style={[styles.amountsRow, stackFields && styles.stacked]}>
+            <View style={[styles.field, !stackFields && { flex: 38 }]}>
+              <AppText variant="label" color={colors.finance.neutral.accent} style={[styles.label, !stackFields && styles.rowLabel]}>Amount to transfer</AppText>
+              <AppInput accessibilityLabel="Amount to transfer" accessibilityHint={selectedSource ? 'Amount in ' + selectedSource.currencyCode : 'Choose the source account currency'}
+                value={fromAmount} onChangeText={value => { setFromAmount(value); setError(undefined); }}
+                keyboardType="decimal-pad" placeholder="0" style={styles.input}
+                fieldStyle={[styles.inputField, { borderColor: colors.finance.neutral.border }]} />
+              <AppText variant="label" color={colors.finance.neutral.accent}>{selectedSource ? getCurrencyLabel(selectedSource.currencyCode) : '—'}</AppText>
+            </View>
+            <View style={[styles.field, !stackFields && { flex: 24 }]}>
+              <AppText variant="label" color={colors.finance.neutral.accent} style={[styles.label, !stackFields && styles.rowLabel]}>Rate</AppText>
+              <AppInput accessibilityLabel="Rate" accessibilityHint={accountsSelected ? rateHint : 'Choose both accounts to view the rate'}
+                value={accountsSelected ? exchangeRate : ''} onChangeText={value => { setExchangeRate(value); setError(undefined); }}
+                keyboardType="decimal-pad" editable={accountsSelected && !sameCurrency && mode !== 'credit_card_payment'}
+                placeholder={accountsSelected ? '1' : '—'} style={styles.input}
+                fieldStyle={[styles.inputField, { borderColor: colors.finance.neutral.border }]} />
+            </View>
+            <View style={[styles.field, !stackFields && { flex: 38 }]}>
+              <AppText variant="label" color={colors.finance.neutral.accent} style={[styles.label, !stackFields && styles.rowLabel]}>Amount to receive</AppText>
+              <View style={[styles.result, { backgroundColor: colors.finance.balance.surface, borderColor: colors.finance.balance.border }]}>
+                <AppText variant="bodyStrong" accessibilityLabel={'Amount to receive: ' + receivedText + (selectedDestination ? ' ' + selectedDestination.currencyCode : '')}
+                  style={styles.resultText} textBreakStrategy="simple">{receivedText}</AppText>
               </View>
-            </>
-          ) : null}
+              <AppText variant="label" color={colors.finance.neutral.accent}>{selectedDestination ? getCurrencyLabel(selectedDestination.currencyCode) : '—'}</AppText>
+            </View>
+          </View>
 
           <DateField value={date} onChange={setDate} />
 
@@ -519,6 +409,8 @@ export function TransferModal({
             onChangeText={setNote}
             placeholder="e.g. Monthly savings transfer"
           />
+
+          {accountsSelected && <AppText variant="caption" color={colors.finance.neutral.accent}>{rateHint}</AppText>}
 
           {error ? (
             <AppText variant="caption" color="danger">
@@ -548,3 +440,14 @@ export function TransferModal({
     </FormModal>
   );
 }
+const styles = StyleSheet.create({
+  amountsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  stacked: { flexDirection: 'column', alignItems: 'stretch', gap: 8 },
+  field: { minWidth: 0, gap: 4 },
+  label: { fontWeight: '700', fontSize: 11, lineHeight: 14 },
+  rowLabel: { minHeight: 28 },
+  inputField: { minHeight: 48, paddingHorizontal: 6, borderRadius: 10 },
+  input: { fontSize: 14, paddingVertical: 8, fontVariant: ['tabular-nums'] },
+  result: { minHeight: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 8, justifyContent: 'center' },
+  resultText: { fontSize: 14, fontVariant: ['tabular-nums'], flexShrink: 1 },
+});

@@ -1,5 +1,10 @@
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
+import { FinanceDisclosure } from '@/features/finance/components/FinanceDisclosure';
+import { canEditLoanPayment, canReverseLoanPayment } from '@/features/finance/utils/loanPaymentPolicy';
+import { LoanDetails } from '@/features/finance/components/LoanDetails';
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,12 +22,15 @@ import {
 import { AppButton, AppText, Card, DateField, Screen } from '@/components/ui';
 import { AddAccountModal, type AddAccountFormData } from '@/features/finance/components/AddAccountModal';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
+import { confirmLoanReceipt, editLinkedPayment, postLinkedPayment, reverseLinkedPayment } from '@/features/finance/store/paymentOperations';
 import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Loan, NewLoanInput } from '@/features/finance/types/finance';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { parseAmount } from '@/features/finance/utils/money';
-import { getLoanPaidAmount, getLoanRemainingAmount, getLoanTotal, roundMoney } from '@/features/finance/utils/finance';
+import { getLoanPaidAmount, getLoanRemainingAmount, getLoanRemainingPrincipal, getLoanTotal, roundMoney } from '@/features/finance/utils/finance';
+import { resolvePayment } from '@/features/finance/utils/paymentTransactionOwnership';
+import { focusLinkedRecords } from '@/features/finance/utils/transactionNavigation';
 import { moduleColors, useTheme } from '@/theme';
 
 const today = () => {
@@ -36,25 +44,24 @@ const money = (value: string) => {
 const remaining = getLoanRemainingAmount;
 export default function LoansScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ loanId?: string }>();
   const { colors } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
   const financeReady = useFinanceHydrated();
   const ledgerReady = useLedgerHydrated();
   const ready = financeReady && ledgerReady;
   const loans = useFinanceStore(s => s.loans);
+  const visibleLoans = focusLinkedRecords(loans, params.loanId);
   const addLoan = useFinanceStore(s => s.addLoan);
   const baseCurrency = useCurrencyStore(s => s.baseCurrency);
   const addAccount = useLedgerStore(s => s.addAccount);
   const updateLoan = useFinanceStore(s => s.updateLoan);
-  const addLoanPayment = useFinanceStore(s => s.addLoanPayment);
-  const updateLoanPayment = useFinanceStore(s => s.updateLoanPayment);
-  const deleteLoanPayment = useFinanceStore(s => s.deleteLoanPayment);
   const accounts = useLedgerStore(s => s.accounts);
-  const categories = useLedgerStore(s => s.categories);
-  const addTransaction = useLedgerStore(s => s.addTransaction);
-  const updateTransaction = useLedgerStore(s => s.updateTransaction);
-  const removeTransaction = useLedgerStore(s => s.removeTransaction);
   const transactions = useLedgerStore(s => s.transactions);
+  const categories = useLedgerStore(s => s.categories);
 
+  const [detailLoanId, setDetailLoanId] = useState<string | null>(null);
+  const detailLoan = loans.filter(l => l.id === detailLoanId).length === 1 ? loans.find(l => l.id === detailLoanId) : undefined;
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [loanName, setLoanName] = useState('');
   const [lender, setLender] = useState('');
@@ -133,11 +140,15 @@ export default function LoansScreen() {
           ? { depositMethodLabel: customDepositMethod.trim() }
           : {}),
     };
-    addLoan(input);
+    if (!addLoan(input)) {
+      Alert.alert('Cannot add loan', 'The loan was not saved. Check the details and try again.');
+      return;
+    }
     resetLoanForm();
   };
 
   const openPayment = (loan: Loan, early = false) => {
+    if (loan.status === 'settled' || loan.status === 'closed' || loan.status === 'completed') return;
     const matching = activeAccounts.filter(a => a.currencyCode === loan.currencyCode && a.type !== 'credit_card');
     setSelectedLoan(loan);
     setSettlementMode(early);
@@ -194,39 +205,9 @@ export default function LoansScreen() {
       Alert.alert('Income category required', 'Add or restore an income category before confirming receipt. No account transaction has been created.');
       return;
     }
-    let transactionId: string | undefined;
-    if (account) {
-      transactionId = addTransaction({
-        type: 'income',
-        amount,
-        accountId: account.id,
-        categoryId: incomeCategory!.id,
-        linkedEntityType: 'loan',
-        linkedEntityId: receivingLoan.id,
-        date: receivedDate,
-        note: `Loan received: ${receivingLoan.name}`,
-      }) ?? undefined;
-      if (!transactionId) {
-        Alert.alert('Receipt not posted', 'The income transaction could not be created. The loan remains unconfirmed.');
-        return;
-      }
-    }
-    updateLoan(receivingLoan.id, {
-      receivedAt: receivedDate,
-      receivedAmount: amount,
-      ...(account ? { receiptTransactionId: transactionId } : { depositMethodLabel: label, depositAccountId: undefined }),
-    });
-    const saved = useFinanceStore.getState().loans.find(l => l.id === receivingLoan.id);
-    if (
-      !saved?.receivedAt ||
-      (saved.receivedAmount ?? 0) !== amount ||
-      (account && saved.receiptTransactionId !== transactionId) ||
-      (!account && saved.depositMethodLabel !== label)
-    ) {
-      if (transactionId) removeTransaction(transactionId);
-      Alert.alert('Receipt confirmation failed', 'The transaction was rolled back because the loan confirmation could not be saved.');
-      return;
-    }
+    const result = confirmLoanReceipt({ loanId: receivingLoan.id, amount, date: receivedDate,
+      accountId: account?.id, categoryId: incomeCategory?.id, methodLabel: label });
+    if (!result.ok) { Alert.alert('Receipt confirmation failed', result.reason); return; }
     setReceivingLoan(null);
   };
 
@@ -235,14 +216,11 @@ export default function LoansScreen() {
       Alert.alert('Reason required', 'Enter a reason for closing this loan without a payment.');
       return;
     }
-    Alert.alert('Close loan without payment?', 'This will remove the outstanding loan from net worth without creating an account transaction. The loan and its payment history will remain saved.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Close loan', style: 'destructive', onPress: () => {
+    confirm('Close loan without payment?', 'This will remove the outstanding loan from net worth without creating an account transaction. The loan and its payment history will remain saved.', () => {
         updateLoan(closingLoan.id, { status: 'closed', closureDate: today(), closureReason: closureReason.trim() });
         setClosingLoan(null);
         setClosureReason('');
-      } },
-    ]);
+      }, 'Close loan');
   };
 
   const confirmPayment = () => {
@@ -269,114 +247,21 @@ export default function LoansScreen() {
       Alert.alert('Invalid payment', 'Check the installment amount, late fee, date and payment method. The installment cannot exceed the remaining contract balance.');
       return;
     }
-    if (editingPayment) {
-      const txId = editingPayment.ledgerTransactionId;
-      if (txId && !account) { Alert.alert('Payment method locked', 'This payment is linked to an account. Keep a registered account selected.'); return; }
-      if (!txId && account) { Alert.alert('Payment method locked', 'This payment was recorded with a custom method. Keep the custom method selected when editing it.'); return; }
-      const previous = txId ? transactions.find(t => t.id === txId) : undefined;
-      if (txId && !previous) { Alert.alert('Update failed', 'The linked account transaction could not be found. No changes were made.'); return; }
-      if (txId && account) {
-        const ok = updateTransaction(txId, { amount: cashAmount, accountId: account.id, date: paymentDate, note: note.trim() || `Loan payment: ${selectedLoan.name}` });
-        if (!ok) { Alert.alert('Update failed', 'The linked account transaction could not be updated.'); return; }
-      }
-
-      updateLoanPayment(selectedLoan.id, editingPayment.id, {
-        amount,
-        latePaymentFee: fee,
-        paymentMode: 'simple',
-        date: paymentDate,
-        note: note.trim() || undefined,
-        accountId: account?.id,
-        paymentMethodLabel: account ? undefined : customLabel,
-      });
-      const saved = useFinanceStore.getState().loans
-        .find(l => l.id === selectedLoan.id)?.payments
-        .find(p => p.id === editingPayment.id);
-      const paymentSaved = !!saved &&
-        saved.amount === amount &&
-        (saved.latePaymentFee ?? 0) === fee &&
-        saved.paymentMode === 'simple' &&
-        saved.date === paymentDate;
-      if (!paymentSaved) {
-        if (txId && previous) {
-          updateTransaction(txId, {
-            amount: previous.amount,
-            accountId: previous.accountId,
-            date: previous.date,
-            note: previous.note,
-          });
-        }
-        Alert.alert('Update rejected', txId ? 'The account transaction was restored because the payment details were rejected.' : 'The payment details were rejected; the previous payment was kept.');
-        return;
-      }
-
-      if (selectedLoan.settlementPaymentId === editingPayment.id) {
-        updateLoan(selectedLoan.id, {
-          status: 'settled',
-          settlementAmount: amount,
-          settlementDate: paymentDate,
-          settlementAccountId: account?.id,
-          settlementNote: note.trim() || undefined,
-        });
-      } else {
-        const paid = getLoanPaidAmount({
-          ...selectedLoan,
-          payments: selectedLoan.payments.map((payment) =>
-            payment.id === editingPayment.id
-              ? { ...payment, amount }
-              : payment
-          ),
-        });
-        updateLoan(selectedLoan.id, {
-          status: scheduledTotal - paid <= 0 ? 'completed' : 'active',
-        });
-      }
-      closePayment(); return;
-    }
-
-    const paymentId = addLoanPayment(selectedLoan.id, {
-      amount,
-      latePaymentFee: fee,
-      paymentMode: 'simple',
-      date: paymentDate,
-      note: note.trim() || (settlementMode ? 'Early settlement' : undefined),
-      ...(account ? { accountId: account.id } : { paymentMethodLabel: customLabel }),
-    });
-    if (!paymentId) { Alert.alert('Payment not saved', 'The loan store rejected this payment.'); return; }
-    if (account) {
-      const txId = addTransaction({
-        type: 'expense',
-        amount: cashAmount,
-        accountId: account.id,
-        categoryId: expenseCategory!.id,
-        purpose: 'loan_payment',
-        linkedEntityType: 'loan',
-        linkedEntityId: selectedLoan.id,
-        linkedPaymentId: paymentId,
-        date: paymentDate,
-        note: note.trim() || `Loan payment: ${selectedLoan.name}`,
-      });
-      if (!txId) {
-        deleteLoanPayment(selectedLoan.id, paymentId);
-        Alert.alert('Payment not posted', 'The account transaction failed; payment was rolled back.');
-        return;
-      }
-      updateLoanPayment(selectedLoan.id, paymentId, { ledgerTransactionId: txId });
-      const linked = useFinanceStore.getState().loans
-        .find(l => l.id === selectedLoan.id)?.payments
-        .find(p => p.id === paymentId)?.ledgerTransactionId === txId;
-      if (!linked) {
-        removeTransaction(txId);
-        deleteLoanPayment(selectedLoan.id, paymentId);
-        Alert.alert('Payment not posted', 'The account link could not be saved; both records were rolled back.');
-        return;
-      }
-    }
-    if (settlementMode) updateLoan(selectedLoan.id, { status: 'settled', settlementAmount: amount, settlementDate: paymentDate, settlementAccountId: account?.id, settlementPaymentId: paymentId, settlementNote: note.trim() || undefined });
-    else if (outstanding - amount <= 0) updateLoan(selectedLoan.id, { status: 'completed' });
+    const ref = { entityType: 'loan' as const, entityId: selectedLoan.id, paymentId: editingPayment?.id ?? '' };
+    const details = { amount, latePaymentFee: fee, date: paymentDate, accountId: account?.id,
+      paymentMethodLabel: account ? undefined : customLabel, note: note.trim() || undefined };
+    const result = editingPayment
+      ? editLinkedPayment(ref, details)
+      : postLinkedPayment({ ...details, entityType: 'loan', entityId: selectedLoan.id,
+          categoryId: expenseCategory?.id, settlement: settlementMode });
+    if (!result.ok) { Alert.alert('Payment not saved', result.reason); return; }
     closePayment();
   };
   const openEditPayment = (loan: Loan, payment: Loan['payments'][number]) => {
+    const current = useFinanceStore.getState().loans.filter(l => l.id === loan.id);
+    if (current.length !== 1 || !canEditLoanPayment(current[0])) { Alert.alert('Payment is read-only', 'Historical payments on settled or closed loans cannot be edited.'); return; }
+    const linked = resolvePayment({ entityType: 'loan', entityId: loan.id, paymentId: payment.id },
+      useFinanceStore.getState(), useLedgerStore.getState());
     const matching = activeAccounts.filter(a => a.currencyCode === loan.currencyCode && a.type !== 'credit_card');
     if (payment.ledgerTransactionId && !matching.length) { Alert.alert('Cannot edit payment', 'No active account in the payment currency is available.'); return; }
     setSelectedLoan(loan); setEditingPayment(payment); setSettlementMode(false);
@@ -384,68 +269,66 @@ export default function LoansScreen() {
     setLatePaymentFee(String(payment.latePaymentFee ?? 0));
     setPaymentDate(payment.date);
     setAccountId(payment.accountId && matching.some(a => a.id === payment.accountId) ? payment.accountId : matching.find(a => a.type === 'bank')?.id ?? matching[0]?.id ?? '');
-    setPaymentMethod(payment.ledgerTransactionId ? 'account' : 'custom'); setCustomPaymentMethod(payment.paymentMethodLabel ?? ''); setNote(payment.note ?? '');
+    setPaymentMethod(payment.ledgerTransactionId || linked ? 'account' : 'custom'); setCustomPaymentMethod(payment.paymentMethodLabel ?? ''); setNote(payment.note ?? '');
   };
   const confirmDeletePayment = (loan: Loan, payment: Loan['payments'][number]) => {
-    Alert.alert('Delete payment?', 'The linked account transaction will also be removed. This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => {
-        if (payment.ledgerTransactionId) {
-          try {
-            removeTransaction(payment.ledgerTransactionId);
-            if (useLedgerStore.getState().transactions.some(t => t.id === payment.ledgerTransactionId)) {
-              Alert.alert('Cannot delete', 'The linked account transaction is protected or could not be removed. The loan payment was kept.');
-              return;
-            }
-          } catch { Alert.alert('Cannot delete', 'The linked transaction could not be removed.'); return; }
-        }
-        deleteLoanPayment(loan.id, payment.id);
-        if (loan.status === 'completed') {
-          updateLoan(loan.id, { status: 'active' });
-        } else if (loan.status === 'settled' && loan.settlementPaymentId === payment.id) {
-          updateLoan(loan.id, {
-            status: 'active', settlementAmount: undefined, settlementDate: undefined,
-            settlementAccountId: undefined, settlementPaymentId: undefined, settlementNote: undefined,
-          });
-        }
-      }},
-    ]);
+    if (!canReverseLoanPayment(loan, payment.id)) return;
+    const reversal = loan.status === 'settled';
+    confirm(reversal ? 'Reverse settlement?' : 'Delete payment?', reversal ? 'This explicitly reopens the loan, restores its outstanding principal and removes the linked settlement transaction. Review the loan balance afterward.' : 'The linked account transaction will also be removed. This cannot be undone.', () => {
+        const result = reverseLinkedPayment({ entityType: 'loan', entityId: loan.id, paymentId: payment.id });
+        if (!result.ok) Alert.alert('Cannot delete payment', result.reason);
+      }, reversal ? 'Reverse settlement' : 'Delete');
   };
 
   if (!ready) return <Screen><View style={styles.center}><ActivityIndicator color={moduleColors.finance} /></View></Screen>;
 
   return (
     <Screen scroll>
+      {confirmation}
+      <LoanDetails loanId={detailLoanId} loan={detailLoan} onClose={() => setDetailLoanId(null)} />
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.back}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
         <View style={{ flex: 1 }}><AppText variant="h1">Loans</AppText><AppText variant="caption" color="textSecondary">{loans.length} loans</AppText></View>
       </View>
+      {params.loanId !== undefined && (
+        <Card variant="filled">
+          <AppText>{visibleLoans.length ? 'Showing the loan linked to your transaction.' : 'The linked loan is unavailable. No other loan has been selected.'}</AppText>
+          <AppButton title="View all loans" variant="ghost" onPress={() => router.replace('/finance/loans')} />
+        </Card>
+      )}
       <AppText color="textSecondary" style={{ marginBottom: 16 }}>
         Track money borrowed, confirm received funds, record repayments, and monitor your outstanding loan balance.
       </AppText>
       <AppButton title="Add loan" accentColor={moduleColors.finance} leftIcon={<Ionicons name="add" size={18} color={colors.onPrimary} />} onPress={() => setShowLoanForm(true)} />
-      {loans.length === 0 ? <Card variant="filled"><AppText align="center" color="textSecondary">No loans recorded yet. Add your first loan.</AppText></Card> :
-        loans.map(loan => {
+      {visibleLoans.length === 0 ? <Card variant="filled"><AppText align="center" color="textSecondary">{params.loanId !== undefined ? 'Return to transactions or view all loans.' : 'No loans recorded yet. Add your first loan.'}</AppText></Card> :
+        visibleLoans.map(loan => {
           const paid = getLoanPaidAmount(loan);
           const due = remaining(loan);
-          return <Card key={loan.id} style={styles.loanCard}>
-            <View style={styles.row}><View style={{ flex: 1 }}><AppText variant="h2">{loan.name}</AppText><AppText color="textSecondary" variant="caption">{loan.lenderName} · {loan.currencyCode}</AppText></View>
-              <AppText style={{ color: loan.status === 'active' || !loan.status ? colors.warning : colors.success }}>{loan.status === 'settled' ? 'Settled' : loan.status === 'completed' ? 'Completed' : loan.status === 'closed' ? 'Closed without payment' : 'Active'}</AppText>
+          return <Card key={loan.id} variant="outlined" style={[styles.loanCard, { backgroundColor: colors.finance.liability.surface, borderColor: colors.finance.liability.border }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + loan.name} onPress={() => setDetailLoanId(loan.id)} style={{ minHeight: 48, gap: 8 }}>
+            <View style={styles.row}><View style={{ flex: 1 }}><AppText variant="bodyStrong">{loan.name}</AppText><AppText color="textSecondary" variant="caption">{loan.lenderName} · {loan.currencyCode}</AppText></View>
+              <AppText style={{ color: loan.status === 'active' || !loan.status ? colors.finance.liability.accent : colors.finance.income.accent }}>{loan.status === 'settled' ? 'Settled' : loan.status === 'completed' ? 'Completed' : loan.status === 'closed' ? 'Closed without payment' : 'Active'}</AppText>
             </View>
-            <View style={styles.metrics}>
-              <View><AppText variant="caption" color="textSecondary">Original principal</AppText><AppText>{formatAmount(loan.principalAmount ?? 0, loan.currencyCode)} {loan.currencyCode}</AppText></View>
-              <View><AppText variant="caption" color="textSecondary">Contract total</AppText><AppText>{formatAmount(getLoanTotal(loan), loan.currencyCode)} {loan.currencyCode}</AppText></View>
-              <View><AppText variant="caption" color="textSecondary">Remaining</AppText><AppText style={styles.remaining}>{formatAmount(due, loan.currencyCode)} {loan.currencyCode}</AppText></View>
+            <View style={[styles.metrics, { backgroundColor: colors.surface, borderRadius: 12, padding: 8 }]}>
+              <View style={styles.metric}><AppText variant="caption" color="textSecondary">Original principal</AppText><AppText>{(loan.receivedAmount ?? loan.principalAmount) === undefined ? 'Unknown' : formatAmount((loan.receivedAmount ?? loan.principalAmount)!, loan.currencyCode) + ' ' + loan.currencyCode}</AppText></View>
+              <View style={styles.metric}><AppText variant="caption" color="textSecondary">Contractual total</AppText><AppText>{formatAmount(getLoanTotal(loan), loan.currencyCode)} {loan.currencyCode}</AppText></View>
+              <View style={styles.metric}><AppText variant="caption" color="textSecondary">Remaining contractual</AppText><AppText style={styles.remaining}>{formatAmount(due, loan.currencyCode)} {loan.currencyCode}</AppText></View>
+              <View style={styles.metric}><AppText variant="caption" color="textSecondary">Total paid</AppText><AppText>{formatAmount(paid, loan.currencyCode)} {loan.currencyCode}</AppText></View>
+              <View style={styles.metric}><AppText variant="caption" color="textSecondary">Installment</AppText><AppText>{formatAmount(loan.monthlyInstallment, loan.currencyCode)}</AppText></View>
+              <View style={styles.metric}><AppText variant="caption" color="textSecondary">Currency</AppText><AppText>{loan.currencyCode}</AppText></View>
             </View>
-            <AppText variant="caption" color="textSecondary">Paid: {formatAmount(paid, loan.currencyCode)} {loan.currencyCode} · Installment: {formatAmount(loan.monthlyInstallment, loan.currencyCode)} {loan.currencyCode}</AppText>
-            <AppText variant="caption" color="textSecondary">Payments recorded: {loan.payments.length} · Scheduled installments remaining: {loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed' ? 0 : Math.max(0, loan.numberOfInstallments - loan.payments.length)} · First due {loan.firstDueDate}</AppText>
-            {loan.receivedAt
-              ? <AppText color="success" variant="caption">Received: {formatAmount(loan.receivedAmount ?? loan.principalAmount ?? 0, loan.currencyCode)} {loan.currencyCode} on {loan.receivedAt}{loan.receiptTransactionId ? ' · Posted to account' : ' · Custom method'}</AppText>
-              : <View style={styles.actions}><AppButton title="Confirm loan received" fullWidth={false} variant="outline" onPress={() => openReceiveLoan(loan)} /></View>}
+            <AppText variant="caption" color="textSecondary">Payments recorded: {loan.payments.length} · Remaining installment count (equivalent): {loan.status === 'settled' || loan.status === 'completed' || loan.status === 'closed' ? 0 : loan.monthlyInstallment > 0 ? Math.ceil(due / loan.monthlyInstallment) : 'Unknown'} · First due {loan.firstDueDate}</AppText>
+            <AppText variant="caption">Remaining principal: {getLoanRemainingPrincipal(loan) === null ? 'Unknown — allocation required' : formatAmount(getLoanRemainingPrincipal(loan)!, loan.currencyCode) + ' ' + loan.currencyCode}</AppText>
+            </Pressable>
+            <FinanceDisclosure title="Deposit distribution">
+              <AppText variant="caption" color="textSecondary">{loan.receivedAt ? 'Received: ' + formatAmount(loan.receivedAmount ?? loan.principalAmount ?? 0, loan.currencyCode) + ' ' + loan.currencyCode + ' on ' + loan.receivedAt : 'Receipt not confirmed'}</AppText>
+              <AppText variant="caption">{loan.receiptTransactionId ? 'Posted to: ' + (accounts.find(a => a.id === (transactions.find(t => t.id === loan.receiptTransactionId)?.accountId ?? loan.depositAccountId))?.name ?? 'See linked receipt transaction') : loan.depositMethodLabel ?? 'No confirmed destination'}</AppText>
+              {!loan.receivedAt && loan.status !== 'settled' && loan.status !== 'closed' && loan.status !== 'completed' && <AppButton title="Confirm loan received" variant="outline" onPress={() => openReceiveLoan(loan)} />}
+            </FinanceDisclosure>
             {loan.status !== 'settled' && loan.status !== 'completed' && loan.status !== 'closed' && <View style={styles.actions}>
-              <AppButton title="Record payment" fullWidth={false} onPress={() => openPayment(loan)} />
-              <AppButton title="Early settlement" fullWidth={false} variant="outline" onPress={() => openPayment(loan, true)} />
-              <AppButton title="Close without payment" fullWidth={false} variant="danger" onPress={() => { setClosingLoan(loan); setClosureReason(''); }} />
+              <AppButton leftIcon={<Ionicons name="card-outline" size={18} color={colors.onPrimary} />} title="Record payment" fullWidth={false} onPress={() => openPayment(loan)} />
+              <AppButton leftIcon={<Ionicons name="checkmark-done-outline" size={18} color={colors.primary} />} title="Early settlement" fullWidth={false} variant="outline" onPress={() => openPayment(loan, true)} />
+              <AppButton leftIcon={<Ionicons name="alert-circle-outline" size={18} color={colors.onPrimary} />} title="Close without payment" fullWidth={false} variant="danger" onPress={() => { setClosingLoan(loan); setClosureReason(''); }} />
             </View>}
             {loan.status === 'closed' && <AppText color="warning">Closed without payment on {loan.closureDate}: {loan.closureReason}</AppText>}
             {loan.status === 'settled' && (() => {
@@ -458,16 +341,20 @@ export default function LoansScreen() {
               });
               const saved = Math.max(0, scheduled - paidBeforeSettlement - (loan.settlementAmount ?? 0));
               return <View style={{ gap: 4 }}>
-                <AppText color="success">Settlement: {formatAmount(loan.settlementAmount ?? 0, loan.currencyCode)} {loan.currencyCode} on {loan.settlementDate}</AppText>
-                {saved > 0.001 && <AppText color="success" variant="caption">Early settlement saving: {formatAmount(saved, loan.currencyCode)} {loan.currencyCode}</AppText>}
+                <AppText color={colors.finance.income.accent}>Settlement: {formatAmount(loan.settlementAmount ?? 0, loan.currencyCode)} {loan.currencyCode} on {loan.settlementDate}</AppText>
+                {saved > 0.001 && <AppText color={colors.finance.income.accent} variant="caption">Early settlement saving: {formatAmount(saved, loan.currencyCode)} {loan.currencyCode}</AppText>}
               </View>;
             })()}
-            {loan.payments.length > 0 && <View style={styles.history}><AppText style={{ fontWeight: '600' }}>Payment history</AppText>
+            <FinanceDisclosure title="Payment history" count={loan.payments.length}>
+              {loan.payments.length === 0 && <AppText variant="caption" color="textSecondary">No payments recorded.</AppText>}
               {loan.payments.map(payment => <View key={payment.id} style={styles.paymentRow}>
                 <View style={{ flex: 1 }}><AppText>{formatAmount(payment.amount, loan.currencyCode)} {loan.currencyCode}{(payment.latePaymentFee ?? 0) > 0 ? ` · Fee: ${formatAmount(payment.latePaymentFee!, loan.currencyCode)} ${loan.currencyCode}` : ''}</AppText><AppText variant="caption" color="textSecondary">{payment.date} · {payment.note || 'Installment'}</AppText></View>
-                <View style={styles.row}><Pressable onPress={() => openEditPayment(loan, payment)} hitSlop={8}><Ionicons name="create-outline" size={16} color={moduleColors.finance} /></Pressable><Pressable onPress={() => confirmDeletePayment(loan, payment)} hitSlop={8}><Ionicons name="trash-outline" size={16} color={colors.danger} /></Pressable></View>
+                {(canEditLoanPayment(loan) || canReverseLoanPayment(loan, payment.id)) && <FinanceActionButtons label={'payment dated ' + payment.date}
+                  onEdit={canEditLoanPayment(loan) ? () => openEditPayment(loan, payment) : undefined}
+                  onDelete={canReverseLoanPayment(loan, payment.id) ? () => confirmDeletePayment(loan, payment) : undefined}
+                  deleteTitle={loan.status === 'settled' ? 'Reverse settlement' : 'Delete'} />}
               </View>)}
-            </View>}
+            </FinanceDisclosure>
           </Card>;
         })}
       <AddAccountModal visible={showAddBank} initialType="Bank" onClose={() => setShowAddBank(false)} onSave={(data: AddAccountFormData) => {
@@ -640,8 +527,9 @@ export default function LoansScreen() {
             <ScrollView style={styles.paymentScroll} contentContainerStyle={styles.paymentScrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator>
               <Card style={styles.modal}>
                 <AppText variant="h2">{editingPayment ? 'Edit payment' : settlementMode ? 'Early settlement' : 'Record installment'}</AppText>
-                <AppText color="textSecondary">Outstanding: {selectedLoan ? formatAmount(remaining(selectedLoan), selectedLoan.currencyCode) + ' ' + selectedLoan.currencyCode : ''}</AppText>
-                <Field label={`Total payment (${selectedLoan?.currencyCode ?? ''})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" />
+                <AppText color="textSecondary">Remaining contractual payments: {selectedLoan ? formatAmount(remaining(selectedLoan), selectedLoan.currencyCode) + ' ' + selectedLoan.currencyCode : ''}</AppText>
+                {settlementMode && <AppText variant="caption" color="warning">Default: remaining contractual balance, not a lender settlement quote. Enter your agreed amount; fees are separate.</AppText>}
+                <Field label={`Repayment amount, excluding fee (${selectedLoan?.currencyCode ?? ''})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" />
                 <Field label={`Late payment fee (${selectedLoan?.currencyCode ?? ''}) — optional`} value={latePaymentFee} onChangeText={setLatePaymentFee} keyboardType="decimal-pad" />
                 <AppText variant="caption" color="textSecondary">The late fee is added to the amount deducted from your account, but does not reduce the remaining loan balance.</AppText>
                 <DateField label="Payment date" value={paymentDate} onChange={setPaymentDate} />
@@ -670,14 +558,15 @@ function Field({ label, value, onChangeText, keyboardType = 'default' }: { label
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 12 },
-  back: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  loanCard: { marginTop: 9, gap: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  metrics: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  back: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  loanCard: { marginTop: 8, padding: 12, gap: 6 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  metric: { flexBasis: '47%', flexGrow: 1, minWidth: 120, gap: 2 },
   remaining: { fontWeight: '700' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 7 },
   history: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#9995', paddingTop: 10, gap: 8 },
-  paymentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
+  paymentRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', paddingVertical: 4, gap: 4 },
   overlay: { flex: 1, backgroundColor: '#0008', justifyContent: 'center', alignItems: 'center', padding: 12 },
   formScroll: { flexShrink: 1, minHeight: 0 },
   formFields: { gap: 8, paddingVertical: 6 },

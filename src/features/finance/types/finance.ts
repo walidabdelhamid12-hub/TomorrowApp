@@ -11,6 +11,8 @@
 /* Common types                                                               */
 /* -------------------------------------------------------------------------- */
 
+import type { PaymentJournalMarker } from './paymentJournalInstallation';
+
 export type EntityId = string;
 export type ISODate = string;
 export type ISODateTime = string;
@@ -267,6 +269,10 @@ export type ChequePatch = Partial<
 /* -------------------------------------------------------------------------- */
 
 export interface FinanceData {
+  /** Retained creation evidence only; never a posting or acknowledgement certificate. */
+  creationProvenance?: import('./creationProvenance').CreationProvenanceMetadataV1;
+  paymentAccounting?: import('./paymentRecovery').PaymentAccountingMetadata;
+  paymentJournal?: PaymentJournalMarker;
   assets: Asset[];
   debts: Debt[];
   loans: Loan[];

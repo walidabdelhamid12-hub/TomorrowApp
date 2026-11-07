@@ -1,3 +1,6 @@
+import { AccountCard } from '@/features/finance/components/AccountCard';
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
+import { AccountDetails } from '@/features/finance/components/AccountDetails';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -5,7 +8,6 @@ import { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Platform,
     Pressable,
     StyleSheet,
     View,
@@ -21,21 +23,14 @@ import {
     useLedgerStore,
 } from '@/features/finance/store/useLedgerStore';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
-import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
 import { moduleColors, useTheme } from '@/theme';
 
-const TYPE_LABELS: Record<AccountType, string> = {
-  cash: 'Cash',
-  bank: 'Bank',
-  wallet: 'Wallet',
-  savings: 'Savings',
-  credit_card: 'Credit card',
-};
-
 export default function AccountsScreen() {
   const router = useRouter();
-  const { colors, spacing } = useTheme();
+  const { colors } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
+  const [detailAccountId, setDetailAccountId] = useState<string | null>(null);
   const ready = useLedgerHydrated();
 
   const accounts = useLedgerStore((state) => state.accounts);
@@ -108,23 +103,12 @@ export default function AccountsScreen() {
 
   const confirmDelete = (account: Account) => {
     const message =
-      'Deleting this account may also delete its linked transactions and transfers.';
+      'Ordinary transactions will be deleted. Accounts with transfers or loan/debt history cannot be deleted.';
+    const performDelete = () => {
+      if (!deleteAccount(account.id)) Alert.alert('Cannot delete account', 'This account has transfers or loan/debt dependencies. Keep it to preserve its accounting history.');
+    };
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Delete "${account.name}"?\n\n${message}`)) {
-        deleteAccount(account.id);
-      }
-      return;
-    }
-
-    Alert.alert(`Delete "${account.name}"?`, message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => deleteAccount(account.id),
-      },
-    ]);
+    confirm(`Delete "${account.name}"?`, message, performDelete, 'Delete');
   };
 
   if (!ready) {
@@ -139,6 +123,7 @@ export default function AccountsScreen() {
 
   return (
     <Screen scroll>
+      {confirmation}
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -175,76 +160,21 @@ export default function AccountsScreen() {
           </AppText>
         </Card>
       ) : (
-        <Card padded={false}>
-          {accounts.map((account, index) => {
+        <View style={{ gap: 8 }}>
+          {accounts.map((account) => {
             const balance = getAccountBalance(
               account,
               transactions,
               transfers,
             );
 
-            return (
-              <View
-                key={account.id}
-                style={[
-                  styles.accountRow,
-                  { padding: spacing.md },
-                  index > 0 && {
-                    borderTopWidth: StyleSheet.hairlineWidth,
-                    borderTopColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.accountInfo}>
-                  <View style={styles.accountTitleRow}>
-                    <AppText style={styles.accountName}>
-                      {account.name}
-                    </AppText>
-                  </View>
-
-                  <AppText variant="caption" color="textSecondary">
-                    {TYPE_LABELS[account.type]} · {account.currencyCode}
-                  </AppText>
-
-                  <AppText
-                    style={[
-                      styles.balance,
-                      balance < 0 && { color: colors.danger },
-                    ]}
-                  >
-                    {formatAmount(balance, account.currencyCode)} {account.currencyCode}
-                  </AppText>
-                </View>
-
-                <View style={styles.actions}>
-                  <Pressable
-                    onPress={() => openEdit(account)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit ${account.name}`}
-                    hitSlop={8}
-                    style={[styles.actionButton, styles.editAction]}
-                  >
-                    <Ionicons name="create-outline" size={17} color="#27845B" />
-                    <AppText style={styles.actionLabel}>Edit</AppText>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => confirmDelete(account)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete ${account.name}`}
-                    hitSlop={8}
-                    style={[styles.actionButton, styles.deleteAction]}
-                  >
-                    <Ionicons name="trash-outline" size={17} color="#D94B4B" />
-                    <AppText style={styles.actionLabel}>Delete</AppText>
-                  </Pressable>
-                </View>
-              </View>
-            );
+            return <AccountCard key={account.id} account={account} balance={balance}
+              onPress={() => setDetailAccountId(account.id)} onEdit={() => openEdit(account)} onDelete={() => confirmDelete(account)} />;
           })}
-        </Card>
+        </View>
       )}
 
+      <AccountDetails accountId={detailAccountId} onClose={() => setDetailAccountId(null)} />
       <AddAccountModal
         visible={modalVisible}
         account={editingAccount}
@@ -279,9 +209,9 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   accountRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 0,
   },
   accountInfo: {
     flex: 1,
@@ -293,36 +223,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   accountName: {
+    flexShrink: 1,
     fontWeight: '600',
   },
   balance: {
     fontWeight: '700',
     marginTop: 3,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionButton: {
-    minHeight: 34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 9,
-  },
-  editAction: {
-    backgroundColor: '#E8F5EE',
-  },
-  deleteAction: {
-    backgroundColor: '#FCEEEE',
-  },
-  actionLabel: {
-    color: '#4B5563',
-    fontSize: 12,
-    fontWeight: '600',
   },
 });

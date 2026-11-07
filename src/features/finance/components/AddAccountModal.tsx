@@ -2,6 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import {
 } from 'react-native';
 
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
+import { parseAmount } from '@/features/finance/utils/money';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
 
 export type AccountTypeLabel =
@@ -321,6 +323,16 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
             <TouchableOpacity
               style={styles.saveButton}
               onPress={() => {
+                const parsed = parseAmount(amount);
+                if (parsed === null || parsed < 0 || !Number.isSafeInteger(Math.round(parsed * 1000))
+                  || Math.abs(parsed * 1000 - Math.round(parsed * 1000)) > 1e-6) {
+                  Alert.alert('Invalid starting balance', 'Enter a valid non-negative amount with up to three decimal places.');
+                  return;
+                }
+                if (!accountName.trim()) {
+                  Alert.alert('Account name required', 'Enter a name for this account.');
+                  return;
+                }
                 onSave({
                   accountName: accountName.trim(),
                   amount,

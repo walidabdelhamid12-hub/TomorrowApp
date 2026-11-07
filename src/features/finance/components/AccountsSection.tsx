@@ -1,3 +1,5 @@
+import { AccountCard } from '@/features/finance/components/AccountCard';
+import { AccountDetails } from '@/features/finance/components/AccountDetails';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
@@ -5,20 +7,11 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppButton, AppText, Card } from '@/components/ui';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
-import type { Account, AccountType } from '@/features/finance/types/ledger';
-import { formatAmount } from '@/features/finance/utils/amountFormat';
+import type { Account } from '@/features/finance/types/ledger';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
-import { moduleColors, useTheme } from '@/theme';
+import { useTheme } from '@/theme';
 
 const PREVIEW_COUNT = 1;
-
-const TYPE_LABELS: Record<AccountType, string> = {
-  cash: 'Cash',
-  bank: 'Bank',
-  wallet: 'Wallet',
-  savings: 'Savings',
-  credit_card: 'Credit card',
-};
 
 interface AccountsSectionProps {
   accounts: readonly Account[];
@@ -36,6 +29,7 @@ export function AccountsSection({
   amountsVisible,
 }: AccountsSectionProps) {
   const { colors, spacing } = useTheme();
+  const [detailAccountId, setDetailAccountId] = useState<string | null>(null);
 
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -62,6 +56,7 @@ export function AccountsSection({
 
   return (
     <View style={{ marginTop: spacing.xl }}>
+      <AccountDetails accountId={detailAccountId} onClose={() => setDetailAccountId(null)} amountsVisible={amountsVisible} />
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
@@ -73,11 +68,11 @@ export function AccountsSection({
         style={styles.sectionHeader}
       >
         <View style={styles.headerTitle}>
-          <View style={styles.headerIcon}>
+          <View style={[styles.headerIcon, { backgroundColor: colors.surfaceAlt }]}>
             <Ionicons
               name="wallet-outline"
               size={21}
-              color="#60A5FA"
+              color={colors.info}
             />
           </View>
 
@@ -104,77 +99,15 @@ export function AccountsSection({
           </Card>
         ) : (
           <>
-            <Card padded={false}>
-              {visibleAccounts.map((account, index) => {
+            <View style={{ gap: 8 }}>
+              {visibleAccounts.map((account) => {
                 const balance =
                   balances.get(account.id) ?? account.initialBalance;
-                const negative = balance < 0;
 
-                return (
-                  <View
-                    key={account.id}
-                    style={[
-                      styles.row,
-                      { padding: spacing.md },
-                      index > 0 && {
-                        borderTopWidth: StyleSheet.hairlineWidth,
-                        borderTopColor: colors.border,
-                      },
-                    ]}
-                  >
-                    <View style={styles.flex}>
-                      <AppText style={styles.name}>
-                        {account.name}
-                      </AppText>
-
-                      <AppText variant="caption" color="textSecondary">
-                        {`${TYPE_LABELS[account.type]} · ${account.currencyCode}`}
-                      </AppText>
-                    </View>
-
-                    <AppText
-                      {...(negative ? ({ color: 'danger' } as const) : {})}
-                      style={styles.balance}
-                      numberOfLines={1}
-                    >
-                      {amountsVisible
-                        ? `${formatAmount(balance)} ${account.currencyCode}`
-                        : '••••••'}
-                    </AppText>
-
-                    <View style={[styles.actions, { marginStart: spacing.sm }]}>
-                      <Pressable
-                        onPress={() => onEdit(account)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Edit ${account.name}`}
-                        style={styles.actionButton}
-                      >
-                        <Ionicons
-                          name="create-outline"
-                          size={17}
-                          color={moduleColors.finance}
-                        />
-                      </Pressable>
-
-                      <Pressable
-                        onPress={() => onDelete(account)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Delete ${account.name}`}
-                        style={styles.actionButton}
-                      >
-                        <Ionicons
-                          name="trash-outline"
-                          size={15}
-                          color={colors.textSecondary}
-                        />
-                      </Pressable>
-                    </View>
-                  </View>
-                );
+                return <AccountCard key={account.id} account={account} balance={balance} amountsVisible={amountsVisible}
+              onPress={() => setDetailAccountId(account.id)} onEdit={() => onEdit(account)} onDelete={() => onDelete(account)} />;
               })}
-            </Card>
+        </View>
 
             {accounts.length > PREVIEW_COUNT ? (
               <AppButton
@@ -219,8 +152,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'stretch',
   },
   name: {
     fontWeight: '600',
@@ -228,13 +161,5 @@ const styles = StyleSheet.create({
   balance: {
     fontWeight: '600',
     flexShrink: 1,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  actionButton: {
-    padding: 2,
   },
 });

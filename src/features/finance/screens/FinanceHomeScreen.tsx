@@ -1,3 +1,6 @@
+import { useFinanceDate } from '@/features/finance/hooks/useFinanceDate';
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
+import { useFinancePreferences } from '@/features/finance/store/useFinancePreferences';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -7,7 +10,6 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +22,7 @@ import { AddAccountModal } from '@/features/finance/components/AddAccountModal';
 import type { AddAssetFormData } from '@/features/finance/components/AddAssetModal';
 import { AddAssetModal } from '@/features/finance/components/AddAssetModal';
 import { AddTransactionModal } from '@/features/finance/components/AddTransactionModal';
+import { AssetCard } from '@/features/finance/components/AssetCard';
 import { AssetEntriesModal } from '@/features/finance/components/AssetEntriesModal';
 import { RatesModal } from '@/features/finance/components/RatesModal';
 import {
@@ -30,6 +33,7 @@ import { TransactionsSection } from '@/features/finance/components/TransactionsS
 import { TransferModal } from '@/features/finance/components/TransferModal';
 import { useRatesAutoRefresh } from '@/features/finance/providers/RatesAutoRefreshProvider';
 import { useFinanceSummary } from '@/features/finance/hooks/useFinanceSummary';
+import { getTransactionDestination } from '@/features/finance/utils/transactionNavigation';
 import {
   useCurrencyHydrated,
   useCurrencyStore,
@@ -71,12 +75,11 @@ const NETWORK_ITEMS: {
 }[] = [
   { key: 'accounts', title: 'Accounts' },
   { key: 'assets', title: 'Assets' },
-  { key: 'receivable', title: 'Receivable' },
-  { key: 'payable', title: 'Payable' },
+  { key: 'debts', title: 'Debts' },
   { key: 'income', title: 'Income' },
   { key: 'expenses', title: 'Expenses' },
   { key: 'loans', title: 'Loans' },
-  { key: 'cheques', title: 'Cheques' },
+  { key: 'cheques', title: 'Installments' },
   { key: 'categories', title: 'Categories' },
   { key: 'transfers', title: 'Transfers' },
 ];
@@ -84,9 +87,11 @@ const NETWORK_ITEMS: {
 export default function FinanceHomeScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
   const accent = moduleColors.finance;
 
-  const [amountsVisible, setAmountsVisible] = useState(false);
+  const amountsVisible = useFinancePreferences(state => state.amountsVisible);
+  const toggleAmounts = useFinancePreferences(state => state.toggleAmounts);
 
   const ledgerReady = useLedgerHydrated();
   const currencyReady = useCurrencyHydrated();
@@ -150,10 +155,7 @@ export default function FinanceHomeScreen() {
   const [ratesOpen, setRatesOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
 
-  const monthLabel = new Date().toLocaleDateString('en-US', {
-    month: 'long',
-    year: 'numeric',
-  });
+  const dateLabel = useFinanceDate();
 
   const openTransaction = (transaction: Transaction | null) => {
     setEditingTx(transaction);
@@ -227,6 +229,10 @@ export default function FinanceHomeScreen() {
         router.push('/finance/accounts');
         break;
 
+      case 'debts':
+        router.push('/finance/debts');
+        break;
+
       case 'receivable':
         router.push({
           pathname: '/finance/debts',
@@ -243,6 +249,10 @@ export default function FinanceHomeScreen() {
 
       case 'transfers':
         openTransfer(null);
+        break;
+
+      case 'cheques':
+        router.push('/finance/installments');
         break;
 
       case 'loans':
@@ -268,7 +278,7 @@ export default function FinanceHomeScreen() {
 
         Alert.alert(
           'Coming soon',
-          `${item?.title ?? 'This'} page is being prepared.`,
+          key === 'cheques' ? 'Installments is not implemented yet. Property contracts and postdated checks will be added in a separate phase; this shortcut does not record payments or balances.' : `${item?.title ?? 'This'} page is being prepared.`,
         );
       }
     }
@@ -297,68 +307,39 @@ export default function FinanceHomeScreen() {
     const message =
       'This will permanently delete the asset and all of its recorded movements.';
 
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(
-        `Delete "${asset.name}" and all its movements?\\n\\n${message}`,
-      );
-
-      if (confirmed) deleteAsset(asset.id);
-      return;
-    }
-
-    Alert.alert(`Delete "${asset.name}"?`, message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => deleteAsset(asset.id),
-      },
-    ]);
+    confirm(`Delete "${asset.name}"?`, message, () => deleteAsset(asset.id), 'Delete');
   };
 
   const confirmDeleteAccount = (account: Account) => {
     const message =
-      'Deleting this account may also delete its linked transactions and transfers.';
+      'Ordinary transactions will be deleted. Accounts with transfers or loan/debt history cannot be deleted.';
+    const performDelete = () => {
+      if (!deleteAccount(account.id)) Alert.alert('Cannot delete account', 'This account has transfers or loan/debt dependencies. Keep it to preserve its accounting history.');
+    };
 
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(
-        `Delete "${account.name}"?\n\n${message}`,
-      );
-
-      if (confirmed) deleteAccount(account.id);
-      return;
-    }
-
-    Alert.alert(`Delete "${account.name}"?`, message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => deleteAccount(account.id),
-      },
-    ]);
+    confirm(`Delete "${account.name}"?`, message, performDelete, 'Delete');
   };
 
   const confirmDeleteTransaction = (transaction: Transaction) => {
     const message = 'This transaction will be permanently deleted.';
+    const performDelete = () => {
+      if (!removeTransaction(transaction.id)) {
+        Alert.alert('Cannot delete transaction', 'Linked loan/debt transactions must be managed from their payment screen. Transactions with refunds are also protected.');
+      }
+    };
 
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(
-        `Delete this transaction?\n\n${message}`,
-      );
+    confirm('Delete transaction?', message, performDelete, 'Delete');
+  };
 
-      if (confirmed) removeTransaction(transaction.id);
+  const openLinkedTransaction = (transaction: Transaction) => {
+    const matches = useLedgerStore.getState().transactions.filter(item => item.id === transaction.id);
+    const current = matches.length === 1 ? matches[0] : undefined;
+    const destination = current && getTransactionDestination(current, useFinanceStore.getState());
+    if (!destination) {
+      Alert.alert('Linked record unavailable', 'A unique existing loan or debt could not be determined from this transaction’s explicit links. No records were changed.');
       return;
     }
-
-    Alert.alert('Delete transaction?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => removeTransaction(transaction.id),
-      },
-    ]);
+    router.push(destination.href);
   };
 
   const confirmDeleteTransfer = (transfer: Transfer) => {
@@ -370,21 +351,7 @@ export default function FinanceHomeScreen() {
     const message =
       'This transfer and its linked balance changes will be permanently deleted.';
 
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(`${title}\n\n${message}`);
-
-      if (confirmed) removeTransfer(transfer.id);
-      return;
-    }
-
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => removeTransfer(transfer.id),
-      },
-    ]);
+    confirm(title, message, () => removeTransfer(transfer.id), 'Delete');
   };
 
   const handleSaveAsset = (data: AddAssetFormData) => {
@@ -528,10 +495,11 @@ export default function FinanceHomeScreen() {
 
   return (
     <Screen scroll>
+      {confirmation}
       <AppText variant="h1">Finance</AppText>
 
-      <AppText color="textSecondary" style={{ marginTop: spacing.xs }}>
-        {monthLabel}
+      <AppText color={colors.finance.neutral.accent} style={{ marginTop: spacing.xs, fontWeight: '600' }}>
+        {dateLabel}
       </AppText>
 
       <TotalCard
@@ -539,6 +507,8 @@ export default function FinanceHomeScreen() {
         accountsTotal={summary.accountsTotal}
         assetsTotal={summary.assetsTotal}
         loansRemainingTotal={summary.loansRemainingTotal}
+        netWorth={summary.netWorth}
+        loansInstallmentsRemainingTotal={summary.loansInstallmentsRemainingTotal}
         receivablesTotal={summary.receivablesTotal}
         payablesTotal={summary.payablesTotal}
         chequesTotal={summary.chequesTotal}
@@ -546,9 +516,7 @@ export default function FinanceHomeScreen() {
         income={summary.income}
         expense={summary.expense}
         amountsVisible={amountsVisible}
-        onToggleAmounts={() =>
-          setAmountsVisible((current) => !current)
-        }
+        onToggleAmounts={toggleAmounts}
         onNetworkPress={handleNetworkPress}
       />
 
@@ -617,31 +585,15 @@ export default function FinanceHomeScreen() {
           />
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open exchange rates"
-          onPress={() => setRatesOpen(true)}
-          style={({ pressed }) => [
-            styles.ratesButton,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              opacity: pressed ? 0.75 : 1,
-            },
-          ]}
-        >
-          <Ionicons
-            name="trending-up-outline"
-            size={20}
-            color={accent}
-          />
-          <AppText style={[styles.ratesButtonText, { color: accent }]}>
-            Rates
-          </AppText>
-        </Pressable>
+        <View style={styles.transactionButton}>
+          <AppButton title="Rates" accessibilityLabel="Open exchange rates" variant="outline" accentColor={accent}
+            leftIcon={<Ionicons name="trending-up-outline" size={20} color={accent} />}
+            onPress={() => setRatesOpen(true)} />
+        </View>
       </View>
 
       <TransactionsSection
+        onManage={openLinkedTransaction}
         amountsVisible={amountsVisible}
         onEdit={openTransaction}
         onDelete={confirmDeleteTransaction}
@@ -826,106 +778,10 @@ export default function FinanceHomeScreen() {
                           : 'Silver';
 
                   return (
-                    <View
-                      key={asset.id}
-                      style={[
-                        styles.assetListCard,
-                        { borderColor: colors.border },
-                      ]}
-                    >
-                      <Pressable
-                        onPress={() => openAssetEntries(asset)}
-                        style={({ pressed }) => ({
-                          opacity: pressed ? 0.7 : 1,
-                        })}
-                      >
-                        <View style={styles.assetListTop}>
-                          <View style={{ flex: 1 }}>
-                            <AppText variant="bodyStrong">
-                              {asset.name}
-                            </AppText>
-
-                            <AppText
-                              color="textSecondary"
-                              style={{ marginTop: 3 }}
-                            >
-                              {categoryLabel}
-                            </AppText>
-                          </View>
-
-                          <Ionicons
-                            name="chevron-forward"
-                            size={20}
-                            color={colors.textSecondary}
-                          />
-                        </View>
-
-                        <View style={styles.assetListValues}>
-                          <View style={{ flex: 1 }}>
-                            <AppText color="textSecondary">
-                              Original balance
-                            </AppText>
-
-                            <AppText variant="bodyStrong">
-                              {originalBalance}
-                            </AppText>
-                          </View>
-
-                          <View style={{ flex: 1 }}>
-                            <AppText color="textSecondary">
-                              Value in {baseCurrency}
-                            </AppText>
-
-                            <AppText
-                              variant="bodyStrong"
-                              style={{
-                                color:
-                                  valuation === null
-                                    ? colors.textSecondary
-                                    : accent,
-                              }}
-                            >
-                              {convertedValue}
-                            </AppText>
-                          </View>
-                        </View>
-                      </Pressable>
-
-                      <View
-                        style={[
-                          styles.assetListActions,
-                          { borderTopColor: colors.border },
-                        ]}
-                      >
-                        <Pressable
-                          onPress={() => openAssetEntries(asset)}
-                          style={[styles.assetListAction, styles.movementAction]}
-                          accessibilityRole="button"
-                        >
-                          <Ionicons name="list-outline" size={17} color="#3978C5" />
-                          <AppText style={styles.assetActionLabel}>Movements</AppText>
-                        </Pressable>
-
-                        <Pressable
-                          onPress={() => openAssetForEditing(asset)}
-                          style={[styles.assetListAction, styles.editAction]}
-                          accessibilityRole="button"
-                        >
-                          <Ionicons name="create-outline" size={17} color="#27845B" />
-                          <AppText style={styles.assetActionLabel}>Edit</AppText>
-                        </Pressable>
-
-                        <Pressable
-                          onPress={() => confirmDeleteAsset(asset)}
-                          style={[styles.assetListAction, styles.deleteAction]}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Delete ${asset.name}`}
-                        >
-                          <Ionicons name="trash-outline" size={17} color="#D94B4B" />
-                          <AppText style={styles.assetActionLabel}>Delete</AppText>
-                        </Pressable>
-                      </View>
-                    </View>
+                    <AssetCard key={asset.id} asset={asset} categoryLabel={categoryLabel}
+                      balanceText={amountsVisible ? originalBalance : '••••••'} valuationText={amountsVisible ? convertedValue : '••••••'} baseCurrency={baseCurrency}
+                      onViewEntries={() => openAssetEntries(asset)} onEdit={() => openAssetForEditing(asset)}
+                      onDelete={() => confirmDeleteAsset(asset)} />
                   );
                 })
               )}
@@ -1085,7 +941,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   transactionButton: {
-    flex: 3,
+    flex: 1,
     minWidth: 0,
   },
   ratesButton: {
@@ -1185,50 +1041,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 35,
     gap: 12,
-  },
-  assetListCard: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 14,
-    padding: 12,
-    gap: 12,
-  },
-  assetListTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  assetListValues: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
-  },
-  assetListActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 10,
-  },
-  assetListAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    borderRadius: 9,
-  },
-  movementAction: {
-    backgroundColor: '#EAF1FC',
-  },
-  editAction: {
-    backgroundColor: '#E8F5EE',
-  },
-  deleteAction: {
-    backgroundColor: '#FCEEEE',
-  },
-  assetActionLabel: {
-    color: '#4B5563',
-    fontSize: 12,
-    fontWeight: '600',
   },
 });
