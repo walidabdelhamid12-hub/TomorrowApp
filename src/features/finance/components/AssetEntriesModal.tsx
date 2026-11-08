@@ -17,7 +17,9 @@ import {
 
 import { AppButton, AppText } from '@/components/ui';
 import type { Asset, AssetEntry } from '@/features/finance/types/finance';
-import { formatMoney, formatNumber } from '@/features/finance/utils/money';
+import { formatMoney, formatNumber, parseAmount } from '@/features/finance/utils/money';
+import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { moduleColors, useTheme } from '@/theme';
 
 interface AssetEntriesModalProps {
@@ -78,9 +80,9 @@ export function AssetEntriesModal({
   };
 
   const saveEditing = (entryId: string) => {
-    const parsedAmount = Number(amount);
+    const parsedAmount = parseAmount(amount);
 
-    if (!amount.trim() || !Number.isFinite(parsedAmount)) {
+    if (!amount.trim() || parsedAmount === null) {
       Alert.alert('Invalid amount', 'Enter a valid amount.');
       return;
     }
@@ -90,6 +92,10 @@ export function AssetEntriesModal({
       return;
     }
 
+    if (!isMetal && !hasValidCurrencyPrecision(amount, asset.currencyCode)) {
+      Alert.alert('Invalid amount precision', `${asset.currencyCode} allows up to ${getCurrencyDecimals(asset.currencyCode)} decimal places. Please correct the amount before saving.`);
+      return;
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
       Alert.alert('Invalid date', 'Use YYYY-MM-DD format.');
       return;

@@ -38,6 +38,8 @@ import type {
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { getDebtPaid, getDebtRemaining, roundMoney } from '@/features/finance/utils/finance';
 import { parseAmount } from '@/features/finance/utils/money';
+import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { focusLinkedRecords } from '@/features/finance/utils/transactionNavigation';
 import { moduleColors, useTheme } from '@/theme';
 
@@ -314,6 +316,10 @@ export default function DebtsScreen() {
   const handleConfirmPayment = () => {
     if (!paymentDebt) return;
 
+    if (!hasValidCurrencyPrecision(paymentAmount, paymentDebt.currencyCode)) {
+      Alert.alert('Invalid amount precision', paymentDebt.currencyCode + ' allows up to ' + getCurrencyDecimals(paymentDebt.currencyCode) + ' decimal places. Please correct the amount before saving.');
+      return;
+    }
     const parsedAmount = parseAmount(paymentAmount);
     const amount = parsedAmount === null ? null : roundMoney(parsedAmount);
 
@@ -436,6 +442,10 @@ export default function DebtsScreen() {
     if (!editingPayment) return;
 
     const { debt, payment } = editingPayment;
+    if (!hasValidCurrencyPrecision(amountText, debt.currencyCode)) {
+      Alert.alert('Invalid amount precision', debt.currencyCode + ' allows up to ' + getCurrencyDecimals(debt.currencyCode) + ' decimal places. Please correct the amount before saving.');
+      return;
+    }
     const parsedAmount = parseAmount(amountText);
     const amount = parsedAmount === null ? null : roundMoney(parsedAmount);
     const cleanDate = date.trim();

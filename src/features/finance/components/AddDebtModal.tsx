@@ -14,6 +14,8 @@ import {
 
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { parseAmount } from '@/features/finance/utils/money';
+import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { roundMoney } from '@/features/finance/utils/finance';
 import type {
     CurrencyCode,
@@ -269,6 +271,10 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
       return;
     }
 
+    if (!hasValidCurrencyPrecision(amount, selectedCurrency)) {
+      Alert.alert('Invalid amount precision', `${selectedCurrency} allows up to ${getCurrencyDecimals(selectedCurrency)} decimal places. Please correct the amount before saving.`);
+      return;
+    }
     if (!isValidDate(cleanDate)) {
       Alert.alert(
         'Invalid date',

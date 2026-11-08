@@ -28,6 +28,8 @@ import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useL
 import type { Loan, NewLoanInput } from '@/features/finance/types/finance';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { parseAmount } from '@/features/finance/utils/money';
+import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { getLoanPaidAmount, getLoanRemainingAmount, getLoanRemainingPrincipal, getLoanTotal, roundMoney } from '@/features/finance/utils/finance';
 import { resolvePayment } from '@/features/finance/utils/paymentTransactionOwnership';
 import { focusLinkedRecords } from '@/features/finance/utils/transactionNavigation';
@@ -119,6 +121,10 @@ export default function LoansScreen() {
   };
 
   const saveLoan = () => {
+    if (![principal, installment, total].every(value => !value.trim() || hasValidCurrencyPrecision(value, currency))) {
+      Alert.alert('Invalid amount precision', currency + ' allows up to ' + getCurrencyDecimals(currency) + ' decimal places. Please correct the amount before saving.');
+      return;
+    }
     const p = money(principal);
     const m = money(installment);
     const n = Number(count);
@@ -187,6 +193,10 @@ export default function LoansScreen() {
       setReceivingLoan(null);
       return;
     }
+    if (!hasValidCurrencyPrecision(receivedAmount, receivingLoan.currencyCode)) {
+      Alert.alert('Invalid amount precision', receivingLoan.currencyCode + ' allows up to ' + getCurrencyDecimals(receivingLoan.currencyCode) + ' decimal places. Please correct the amount before saving.');
+      return;
+    }
     const amount = money(receivedAmount);
     const account = receiptMethod === 'account'
       ? activeAccounts.find(a => a.id === receiptAccountId && a.currencyCode === receivingLoan.currencyCode && !a.archived && a.type !== 'credit_card')
@@ -225,6 +235,10 @@ export default function LoansScreen() {
 
   const confirmPayment = () => {
     if (!selectedLoan) return;
+    if (!hasValidCurrencyPrecision(paymentAmount, selectedLoan.currencyCode) || !hasValidCurrencyPrecision(latePaymentFee, selectedLoan.currencyCode)) {
+      Alert.alert('Invalid amount precision', selectedLoan.currencyCode + ' allows up to ' + getCurrencyDecimals(selectedLoan.currencyCode) + ' decimal places. Please correct the amount before saving.');
+      return;
+    }
     const amount = money(paymentAmount);
     const fee = latePaymentFee.trim() ? money(latePaymentFee) : 0;
     const cashAmount = amount !== null && fee !== null ? roundMoney(amount + fee) : null;

@@ -16,6 +16,8 @@ import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Transfer, TransferType } from '@/features/finance/types/ledger';
 import { todayISO } from '@/features/finance/utils/finance';
 import { parseAmount } from '@/features/finance/utils/money';
+import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { moduleColors, useTheme } from '@/theme';
 import { isValidISODate } from '@/utils/input';
 
@@ -222,6 +224,11 @@ export function TransferModal({
 
     if (amount === null || amount <= 0) {
       setError('Enter an amount greater than zero.');
+      return;
+    }
+
+    if (!hasValidCurrencyPrecision(fromAmount, source.currencyCode)) {
+      setError(`Invalid amount precision: ${source.currencyCode} allows up to ${getCurrencyDecimals(source.currencyCode)} decimal places. Please correct the amount before saving.`);
       return;
     }
 

@@ -7,6 +7,8 @@ import type {
 } from '@/features/finance/types/finance';
 import { getAssetBalance } from '@/features/finance/utils/finance';
 import { parseAmount } from '@/features/finance/utils/money';
+import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
@@ -202,6 +204,13 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
         'Invalid amount',
         'Enter a valid non-negative amount.',
       );
+      return;
+    }
+
+    const isCurrencyAsset = selectedType === 'local_currency' || selectedType === 'foreign_currency';
+    const assetCurrency = selectedType === 'local_currency' ? baseCurrency : selectedCurrency;
+    if (isCurrencyAsset && !hasValidCurrencyPrecision(amount, assetCurrency)) {
+      Alert.alert('Invalid amount precision', `${assetCurrency} allows up to ${getCurrencyDecimals(assetCurrency)} decimal places. Please correct the amount before saving.`);
       return;
     }
 
