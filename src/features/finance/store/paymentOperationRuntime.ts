@@ -6,7 +6,7 @@ import { createPaymentOperationStore, PAYMENT_OPERATION_STORAGE_KEY } from './us
 import { freezeEvidence, object, sameEvidence, text, type EntityRef, type RevisionHead } from '../types/paymentRecovery';
 import { CoordinatorLeaseInterrupted, copyCoordinatorData, type CoordinatorCapability, type CoordinatorWriteLease, type StageBinding } from './paymentRuntimeAuthorization';
 import { readRecoveryJournalDocument, verifyPersistedPaymentAccounting } from './paymentAccountingVerification';
-import { readCreationAttestationV1, type CreationAttestationV1 } from '../types/creationProvenance';
+import { readCreationAttestationV1, readCreationProvenanceMetadataV1, type CreationAttestationV1 } from '../types/creationProvenance';
 
 export const PAYMENT_PERSISTENCE_KEYS = Object.freeze([
   'tomorrow:finance', 'tomorrow:ledger', PAYMENT_OPERATION_STORAGE_KEY,
@@ -566,9 +566,23 @@ export function paymentRuntimePersist<T, P = T>(
       hydrated: controls.hasHydrated,
       write: async (binding, data) => {
         const arrays = key === 'tomorrow:finance' ? ['assets', 'debts', 'loans', 'cheques'] : ['accounts', 'categories', 'transactions', 'transfers'];
-        if (!object(data) || Object.keys(data).some(k => ![...arrays, 'paymentJournal', 'paymentAccounting'].includes(k))
+        const allowed = [...arrays, 'paymentJournal', 'paymentAccounting', ...(key === 'tomorrow:finance' ? ['creationProvenance'] : [])];
+        if (!object(data) || Object.keys(data).some(k => !allowed.includes(k))
           || arrays.some(k => !Array.isArray(data[k]))) throw new Error('Private stage requires a complete persisted accounting document.');
         const current = get() as Record<string, unknown>;
+        if (key === 'tomorrow:finance') {
+          const existing = Object.hasOwn(current, 'creationProvenance');
+          if (Object.hasOwn(data, 'creationProvenance') !== existing) {
+            throw new Error('Private stages cannot add or remove creation provenance.');
+          }
+          if (existing) {
+            readCreationProvenanceMetadataV1(current.creationProvenance);
+            readCreationProvenanceMetadataV1(data.creationProvenance);
+            if (!sameEvidence(data.creationProvenance, current.creationProvenance)) {
+              throw new Error('Private stages cannot change creation provenance.');
+            }
+          }
+        }
         if (!sameEvidence(data.paymentJournal, current.paymentJournal)) throw new Error('Private stages cannot change the installation generation marker.');
         const metadata = current.paymentAccounting;
         const heads = object(metadata) && Array.isArray(metadata.entityHeads) ? metadata.entityHeads.filter(h => object(h)

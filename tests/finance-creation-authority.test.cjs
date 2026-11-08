@@ -274,28 +274,101 @@ test('creation authority denies requests after runtime close', async () => {
   assert.equal(s.runtime.getStatus().postingAllowed, false);
 });
 
-// Characterizes the dormant stage boundary; no production posting or V3 activation.
-test('finance stage whitelist rejects creationProvenance retained by actual persistence', async () => {
+// Dormant private-stage tests only; never enable production posting.
+for (const [name, initial, change, expected] of [
+  [
+    'addition',
+    false,
+    state => { state.creationProvenance = { schemaVersion: 1, entries: [] }; },
+    /Private stages cannot add or remove creation provenance\./
+  ],
+  [
+    'removal',
+    true,
+    state => { delete state.creationProvenance; },
+    /Private stages cannot add or remove creation provenance\./
+  ],
+  [
+    'valid metadata change',
+    true,
+    state => {
+      state.creationProvenance.entries.push({
+        attestation: creationRequest(),
+        disposition: 'candidate'
+      });
+    },
+    /Private stages cannot change creation provenance\./
+  ],
+  [
+    'malformed metadata',
+    true,
+    state => { state.creationProvenance.schemaVersion = 2; },
+    /Invalid creation provenance evidence\./
+  ]
+]) {
+  test(`finance private stage rejects creation provenance ${name}`, async () => {
+    const data = fixture();
+    if (initial) {
+      const document = JSON.parse(data.get(F));
+      document.state.creationProvenance = { schemaVersion: 1, entries: [] };
+      data.set(F, JSON.stringify(document));
+    }
+
+    const s = await setup(data);
+    const before = new Map(s.native.data);
+    const stateBefore = s.finance.getState();
+    const persisted = JSON.parse(s.native.data.get(F)).state;
+    change(persisted);
+
+    const request = {
+      operationId: `stage-provenance-${name}`,
+      entity: creationRequest().entity,
+      predecessor: null
+    };
+    const binding = { ...request, key: F, stage: 'finance-insert' };
+
+    await assert.rejects(
+      s.access.withWriteLease(request, async lease => {
+        await lease.write(lease.issue(binding), binding, persisted);
+      }),
+      expected
+    );
+
+    assert.equal(s.finance.getState(), stateBefore);
+    assert.deepEqual(s.native.data, before);
+    assert.equal(
+      s.native.events.filter(e => e[0] === 'set' || e[0] === 'remove').length,
+      0
+    );
+    assert.equal(s.runtime.getStatus().postingAllowed, false);
+    assert.equal(s.runtime.getStatus().readiness, 'blocked');
+    assert.match(s.runtime.getStatus().writeFence, /authorized stage failed/);
+  });
+}
+
+// Positive preservation regression in the dormant test harness only.
+test('finance private stage accepts unchanged valid creation provenance', async () => {
   const data = fixture();
   const document = JSON.parse(data.get(F));
   document.state.creationProvenance = { schemaVersion: 1, entries: [] };
   data.set(F, JSON.stringify(document));
+
   const s = await setup(data);
-  const before = new Map(s.native.data);
-  const stateBefore = s.finance.getState();
   const persisted = JSON.parse(s.native.data.get(F)).state;
-  assert.deepEqual(stateBefore.creationProvenance, persisted.creationProvenance);
-  const request = { operationId: 'stage-regression', entity: creationRequest().entity, predecessor: null };
+  const request = {
+    operationId: 'stage-provenance-unchanged',
+    entity: creationRequest().entity,
+    predecessor: null
+  };
   const binding = { ...request, key: F, stage: 'finance-insert' };
 
-  await assert.rejects(s.access.withWriteLease(request, async lease => {
-    await lease.write(lease.issue(binding), binding, persisted);
-  }), /^Error: Private stage requires a complete persisted accounting document\.$/);
+  assert.deepEqual(s.finance.getState().creationProvenance, persisted.creationProvenance);
 
-  assert.equal(s.finance.getState(), stateBefore);
-  assert.deepEqual(s.native.data, before);
-  assert.equal(s.native.events.filter(e => e[0] === 'set' || e[0] === 'remove').length, 0);
+  await s.access.withWriteLease(request, async lease => {
+    await lease.write(lease.issue(binding), binding, persisted);
+  });
+
+  assert.deepEqual(s.finance.getState().creationProvenance, persisted.creationProvenance);
   assert.equal(s.runtime.getStatus().postingAllowed, false);
   assert.equal(s.runtime.getStatus().readiness, 'blocked');
-  assert.match(s.runtime.getStatus().writeFence, /authorized stage failed/);
 });
