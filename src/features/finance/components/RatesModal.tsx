@@ -75,7 +75,7 @@ function hasDisplayValueChanged(
     return current !== original;
   }
 
-  return Math.abs(currentNumber - originalNumber) > 0.0000001;
+  return currentNumber !== originalNumber;
 }
 
 function formatLocalDate(value: string | null): string {
@@ -138,6 +138,8 @@ export function RatesModal({
   );
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const editedRateCodes = useRef<Record<string, boolean>>({});
+  const draftBaseCurrency = useRef<string | null>(null);
   const [gold, setGold] = useState('');
   const [silver, setSilver] = useState('');
   const [goldEdited, setGoldEdited] = useState(false);
@@ -213,7 +215,12 @@ export function RatesModal({
   }, [lastResult]);
 
   useEffect(() => {
-    if (!visible || !isValidRate(baseRate)) return;
+    if (!visible) {
+      draftBaseCurrency.current = null;
+      editedRateCodes.current = {};
+      return;
+    }
+    if (!isValidRate(baseRate)) return;
 
     const initial: Record<string, string> = {};
 
@@ -222,21 +229,50 @@ export function RatesModal({
       initial[currency.code] = showRate(storedRate / baseRate);
     });
 
-    setDrafts(initial);
-    setGoldEdited(false);
-    setSilverEdited(false);
+    const resetDrafts = draftBaseCurrency.current !== baseCurrency;
+    draftBaseCurrency.current = baseCurrency;
 
-    setGold(
-      metals.gold24PerGram === null
-        ? ''
-        : showMetal(metals.gold24PerGram / baseRate),
-    );
+    if (resetDrafts) {
+      editedRateCodes.current = {};
+      setDrafts(initial);
+      setGoldEdited(false);
+      setSilverEdited(false);
+      setGold(
+        metals.gold24PerGram === null
+          ? ''
+          : showMetal(metals.gold24PerGram / baseRate),
+      );
+      setSilver(
+        metals.silverPerGram === null
+          ? ''
+          : showMetal(metals.silverPerGram / baseRate),
+      );
+    } else {
+      setDrafts((previous) => {
+        const next = { ...initial };
+        for (const code of Object.keys(editedRateCodes.current)) {
+          if (editedRateCodes.current[code] && code in previous) {
+            next[code] = previous[code];
+          }
+        }
+        return next;
+      });
 
-    setSilver(
-      metals.silverPerGram === null
-        ? ''
-        : showMetal(metals.silverPerGram / baseRate),
-    );
+      if (!goldEdited) {
+        setGold(
+          metals.gold24PerGram === null
+            ? ''
+            : showMetal(metals.gold24PerGram / baseRate),
+        );
+      }
+      if (!silverEdited) {
+        setSilver(
+          metals.silverPerGram === null
+            ? ''
+            : showMetal(metals.silverPerGram / baseRate),
+        );
+      }
+    }
   }, [
     visible,
     updatedAt,
@@ -474,6 +510,38 @@ export function RatesModal({
       }
     }
 
+    // Only after every requested write succeeds, release saved currency drafts.
+    // Preserve full numeric precision in storage; normalize display only.
+    if (Object.keys(changedRates).length > 0) {
+      for (const code of Object.keys(changedRates)) {
+        delete editedRateCodes.current[code];
+      }
+
+      setDrafts((previous) => {
+        const next = { ...previous };
+        for (const [code, storedValue] of Object.entries(changedRates)) {
+          next[code] = showRate(storedValue / baseRate);
+        }
+        return next;
+      });
+    }
+
+    // Successful saves may return edited metals to their formatted display.
+    // The stored numeric value retains its full precision.
+    if (goldChanged) {
+      setGold(
+        goldStored === null ? '' : showMetal(goldStored / baseRate),
+      );
+      setGoldEdited(false);
+    }
+
+    if (silverChanged) {
+      setSilver(
+        silverStored === null ? '' : showMetal(silverStored / baseRate),
+      );
+      setSilverEdited(false);
+    }
+
     console.log('[RatesModal] SAVE FINISHED');
     console.log('[RatesModal] No onClose call was made by save');
     console.log('[RatesModal] Visible after save:', visible);
@@ -656,12 +724,13 @@ export function RatesModal({
                   <AppInput
                     value={drafts[currency.code] ?? ''}
                     editable={!isAnchor}
-                    onChangeText={(text) =>
+                    onChangeText={(text) => {
+                      editedRateCodes.current[currency.code] = true;
                       setDrafts((prev) => ({
                         ...prev,
                         [currency.code]: text,
-                      }))
-                    }
+                      }));
+                    }}
                     keyboardType="decimal-pad"
                     style={{
                       textAlign: 'center',

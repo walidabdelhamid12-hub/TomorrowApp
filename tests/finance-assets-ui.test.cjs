@@ -914,3 +914,171 @@ test('same-currency transfer keeps Rate fixed at one in the compact row', () => 
   assert.equal(rate.props.value, '1'); assert.equal(rate.props.editable, false);
   assert.ok(rate.props.accessibilityHint.includes('fixed at 1'));
 });
+
+// Phase 7.1E-5: Rates regression tests
+function prepareRatesPrecisionTest() {
+  currency.baseCurrency = 'USD';
+  currency.rates = Object.fromEntries(CURRENCIES.map(c => [c.code, c.code === 'USD' ? 2 : 1]));
+  currency.metals = {
+    gold24PerGram: 7002.58,
+    silverPerGram: 88.925
+  };
+  currency.rateSources = {};
+  currency.setManualRates = (rates) => {
+    calls.push(['rates', rates]);
+    return true;
+  };
+  currency.setMetalPrice = (...args) => {
+    calls.push(['metal', ...args]);
+    return true;
+  };
+  theme.spacing = { ...theme.spacing, lg: 16 };
+  theme.sizes = { inputHeight: 48 };
+  return {
+    visible: true,
+    onClose: () => calls.push('close'),
+    refreshRates: async () => null,
+    isRefreshing: false
+  };
+}
+
+test('Rates tiny edit enables Save and warns on close', () => {
+  const props = prepareRatesPrecisionTest();
+  render(RatesModal, props);
+  flushEffects();
+  render(RatesModal, props);
+
+  const rate = nodes('AppInput').find(
+    n => n.props.value === '0.5' && n.props.editable
+  );
+  assert.ok(rate, 'Expected editable currency rate');
+
+  rate.props.onChangeText('0.50000001');
+  render(RatesModal, props);
+
+  const save = nodes('AppButton').find(
+    n => n.props.title === 'Save rates'
+  );
+  assert.equal(save.props.disabled, false);
+
+  nodes('FormModal')[0].props.onClose();
+  assert.equal(alerts.at(-1)?.[0], 'Unsaved changes');
+
+  save.props.onPress();
+  assert.deepEqual(calls, [
+    ['rates', { OMR: 1.00000002 }]
+  ]);
+});
+
+test('Rates refresh does not erase edited drafts', () => {
+  const props = prepareRatesPrecisionTest();
+  render(RatesModal, props);
+  flushEffects();
+  render(RatesModal, props);
+
+  const rate = nodes('AppInput').find(
+    n => n.props.value === '0.5' && n.props.editable
+  );
+  assert.ok(rate);
+  rate.props.onChangeText('0.7');
+
+  const goldInput = nodes('AppInput').find(
+    n => n.props.accessibilityLabel === 'Gold price'
+  );
+  assert.ok(goldInput);
+  goldInput.props.onChangeText('7010');
+
+  render(RatesModal, props);
+
+  currency.rates = { ...currency.rates, EUR: 1.5 };
+  currency.updatedAt = '2026-11-08T12:00:00.000Z';
+
+  render(RatesModal, props);
+  flushEffects();
+  render(RatesModal, props);
+
+  assert.ok(
+    nodes('AppInput').some(n => n.props.value === '0.7'),
+    'Currency draft was overwritten'
+  );
+
+  assert.equal(
+    nodes('AppInput').find(
+      n => n.props.accessibilityLabel === 'Gold price'
+    ).props.value,
+    '7010',
+    'Gold draft was overwritten'
+  );
+});
+
+// Phase 7.1E-5: Save after refresh must preserve user authority.
+test('Rates refresh then Save persists edited currency once', () => {
+  const props = preparePreciseRates();
+
+  currency.setManualRates = (values) => {
+    calls.push(['rates', values]);
+    currency.rates = { ...currency.rates, ...values };
+    return true;
+  };
+
+  render(RatesModal, props);
+  flushEffects();
+  render(RatesModal, props);
+
+  const displayed = CURRENCIES.filter(
+    c => c.code !== currency.baseCurrency
+  );
+  const usdIndex = displayed.findIndex(c => c.code === 'USD');
+  assert.ok(usdIndex >= 0, 'USD must be displayed');
+
+  const usdInput = () => nodes('AppInput')[usdIndex];
+  assert.equal(usdInput().props.value, '0.5');
+
+  usdInput().props.onChangeText('0.70000001');
+  render(RatesModal, props);
+
+  // A live refresh changes EUR, not the user's USD draft.
+  currency.rates = { ...currency.rates, EUR: 1.5 };
+  currency.updatedAt = '2026-11-08T12:30:00.000Z';
+
+  render(RatesModal, props);
+  flushEffects();
+  render(RatesModal, props);
+
+  assert.equal(
+    usdInput().props.value,
+    '0.70000001',
+    'Refresh must preserve the exact USD draft'
+  );
+
+  const save = () => nodes('AppButton').find(
+    n => n.props.title === 'Save rates'
+  );
+
+  assert.equal(save().props.disabled, false);
+  save().props.onPress();
+
+  assert.deepEqual(calls, [
+    ['rates', { USD: 0.70000001 * 2 }]
+  ]);
+
+  assert.equal(currency.rates.USD, 0.70000001 * 2);
+  assert.equal(currency.rates.EUR, 1.5);
+
+  render(RatesModal, props);
+  flushEffects();
+  render(RatesModal, props);
+
+  assert.equal(
+    save().props.disabled,
+    true,
+    'Saved draft must become clean'
+  );
+
+  save().props.onPress();
+  assert.equal(
+    calls.length,
+    1,
+    'Second Save must not repeat the same write'
+  );
+});
