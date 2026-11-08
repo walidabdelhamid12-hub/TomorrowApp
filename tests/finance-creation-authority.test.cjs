@@ -102,14 +102,13 @@ function creationRequest(kind = 'debt') {
   };
 }
 
-async function setup() {
+async function setup(data = fixture()) {
   for (const file of Object.keys(require.cache)) {
     if (file.startsWith(path.join(root, 'src', 'features', 'finance'))) {
       delete require.cache[file];
     }
   }
 
-  const data = fixture();
   const events = [];
 
   native = {
@@ -183,12 +182,12 @@ for (const kind of ['debt', 'loan']) {
   });
 }
 
-for (const [name, change] of [
+for (const [name, change, reason = /^Error: Invalid creation provenance evidence\.$/] of [
   ['wrong schema version', x => { x.schemaVersion = 2; }],
   ['entity ID mismatch', x => { x.entity.entityId = 'different'; }],
   ['entity type mismatch', x => { x.entity.entityType = 'loan'; }],
   ['empty creation ID', x => { x.creationId = ''; }],
-  ['wrong generation', x => { x.generationId = 'other'; }],
+  ['wrong generation', x => { x.generationId = 'other'; }, /Creation authority installation or generation is unverified or stale\./],
   ['unexpected authority flag', x => { x.authorized = true; }],
   ['nonempty payment history', x => { x.image.payments.push({ id: 'payment' }); }],
 ]) {
@@ -199,7 +198,8 @@ for (const [name, change] of [
     change(input);
 
     await assert.rejects(
-      s.access.checkCreationAuthority(input)
+      s.access.checkCreationAuthority(input),
+      reason
     );
 
     assert.deepEqual(s.native.data, before);
@@ -212,17 +212,18 @@ for (const [name, change] of [
   });
 }
 
-for (const [name, modify] of [
-  ['missing V3 journal', data => data.delete(J)],
+for (const [name, modify, reason] of [
+  ['missing V3 journal', data => data.delete(J), /Coordinator leases require an existing V3 journal; no promotion is performed\./],
   ['legacy V2 journal', data => {
     data.set(J, JSON.stringify({ version: 2, state: {} }));
-  }],
-  ['malformed journal JSON', data => data.set(J, '{invalid')],
+  }, /Coordinator leases require an existing V3 journal; no promotion is performed\./],
+  ['malformed journal JSON', data => data.set(J, '{invalid'), { name: 'SyntaxError', message: /JSON/ }],
   ['existing debt identity', data => {
     const document = JSON.parse(data.get(F));
-    document.state.debts.push({ id: 'entity' });
+    const { entityType, ...debt } = creationRequest().image;
+    document.state.debts.push(debt);
     data.set(F, JSON.stringify(document));
-  }],
+  }, /Existing or retained identity cannot receive new creation authority\./],
 ]) {
   test(`creation authority denies ${name}`, async () => {
     const s = await setup();
@@ -233,7 +234,8 @@ for (const [name, modify] of [
     ).length;
 
     await assert.rejects(
-      s.access.checkCreationAuthority(creationRequest())
+      s.access.checkCreationAuthority(creationRequest()),
+      reason
     );
 
     assert.deepEqual(s.native.data, before);
@@ -270,4 +272,30 @@ test('creation authority denies requests after runtime close', async () => {
     writesBefore
   );
   assert.equal(s.runtime.getStatus().postingAllowed, false);
+});
+
+// Characterizes the dormant stage boundary; no production posting or V3 activation.
+test('finance stage whitelist rejects creationProvenance retained by actual persistence', async () => {
+  const data = fixture();
+  const document = JSON.parse(data.get(F));
+  document.state.creationProvenance = { schemaVersion: 1, entries: [] };
+  data.set(F, JSON.stringify(document));
+  const s = await setup(data);
+  const before = new Map(s.native.data);
+  const stateBefore = s.finance.getState();
+  const persisted = JSON.parse(s.native.data.get(F)).state;
+  assert.deepEqual(stateBefore.creationProvenance, persisted.creationProvenance);
+  const request = { operationId: 'stage-regression', entity: creationRequest().entity, predecessor: null };
+  const binding = { ...request, key: F, stage: 'finance-insert' };
+
+  await assert.rejects(s.access.withWriteLease(request, async lease => {
+    await lease.write(lease.issue(binding), binding, persisted);
+  }), /^Error: Private stage requires a complete persisted accounting document\.$/);
+
+  assert.equal(s.finance.getState(), stateBefore);
+  assert.deepEqual(s.native.data, before);
+  assert.equal(s.native.events.filter(e => e[0] === 'set' || e[0] === 'remove').length, 0);
+  assert.equal(s.runtime.getStatus().postingAllowed, false);
+  assert.equal(s.runtime.getStatus().readiness, 'blocked');
+  assert.match(s.runtime.getStatus().writeFence, /authorized stage failed/);
 });
