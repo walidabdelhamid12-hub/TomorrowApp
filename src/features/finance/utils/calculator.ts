@@ -34,57 +34,68 @@ export function applyKey(expr: string, key: string): string {
   return expr + key;
 }
 
-/** بيحسب التعبير مع أولوية × ÷ على + -. بيرجّع null لو غير صالح */
+/** Safe arithmetic evaluator with precedence and nested parentheses. */
 export function evaluateExpression(expression: string): number | null {
-  // تجاهل عامل معلّق في الآخر (مثلاً "5+")
   const clean = isOperator(expression.slice(-1))
     ? expression.slice(0, -1)
     : expression;
-  if (clean === '') return null;
+  if (!clean || clean.length > 256) return null;
 
-  // Validate the complete expression before converting operands to Number.
-  // The trailing operator was removed above for live preview.
-  const validExpression =
-    /^(?:\d+(?:\.\d*)?|\.\d+)(?:[+\-×÷](?:\d+(?:\.\d*)?|\.\d+))*$/.test(clean);
+  const MAX_PAREN_DEPTH = 32;
+  let depth = 0;
+  let pos = 0;
+  const invalid = () => Number.NaN;
 
-  if (!validExpression) return null;
-
-  const operands = clean.split(OPERATOR_SPLIT);
-
-  // Reject integer literals outside JavaScript's safe integer range.
-  if (operands.some((part) =>
-    /^\d+$/.test(part) && !Number.isSafeInteger(Number(part))
-  )) {
-    return null;
-  }
-
-  const numbers = clean.split(OPERATOR_SPLIT).map(Number);
-  const operators = Array.from(clean).filter(isOperator);
-  if (numbers.some((value) => !Number.isFinite(value)) || numbers.length !== operators.length + 1) {
-    return null;
-  }
-
-  // المرحلة 1: × و ÷
-  const values: number[] = [numbers[0]];
-  const addSub: Operator[] = [];
-  for (let i = 0; i < operators.length; i++) {
-    const op = operators[i];
-    const n = numbers[i + 1];
-    if (op === '×' || op === '÷') {
-      if (op === '÷' && n === 0) return null;
-      const prev = values.pop() as number;
-      values.push(op === '×' ? prev * n : prev / n);
-    } else {
-      addSub.push(op);
-      values.push(n);
+  const number = (): number => {
+    const rest = clean.slice(pos);
+    const match = /^(?:\d+(?:\.\d*)?|\.\d+)/.exec(rest);
+    if (!match) return invalid();
+    pos += match[0].length;
+    const value = Number(match[0]);
+    if (!Number.isFinite(value)) return invalid();
+    if (/^\d+$/.test(match[0]) && !Number.isSafeInteger(value)) {
+      return invalid();
     }
-  }
+    return value;
+  };
 
-  // المرحلة 2: + و -
-  let result = values[0];
-  addSub.forEach((op, i) => {
-    result = op === '+' ? result + values[i + 1] : result - values[i + 1];
-  });
+  const primary = (): number => {
+    if (clean[pos] !== '(') return number();
+    if (depth >= MAX_PAREN_DEPTH) return invalid();
+    depth++;
+    pos++;
+    const value = addition();
+    depth--;
+    if (!Number.isFinite(value) || clean[pos] !== ')') return invalid();
+    pos++;
+    return value;
+  };
 
-  return Number.isFinite(result) ? result : null; // يشيل أخطاء الـ floating point
+  const multiplication = (): number => {
+    let value = primary();
+    while (clean[pos] === '×' || clean[pos] === '÷') {
+      const operator = clean[pos++];
+      const right = primary();
+      if (!Number.isFinite(value) || !Number.isFinite(right)) return invalid();
+      if (operator === '÷' && right === 0) return invalid();
+      value = operator === '×' ? value * right : value / right;
+      if (!Number.isFinite(value)) return invalid();
+    }
+    return value;
+  };
+
+  const addition = (): number => {
+    let value = multiplication();
+    while (clean[pos] === '+' || clean[pos] === '-') {
+      const operator = clean[pos++];
+      const right = multiplication();
+      if (!Number.isFinite(value) || !Number.isFinite(right)) return invalid();
+      value = operator === '+' ? value + right : value - right;
+      if (!Number.isFinite(value)) return invalid();
+    }
+    return value;
+  };
+
+  const result = addition();
+  return pos === clean.length && Number.isFinite(result) ? result : null;
 }
