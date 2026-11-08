@@ -372,3 +372,78 @@ test('finance private stage accepts unchanged valid creation provenance', async 
   assert.equal(s.runtime.getStatus().postingAllowed, false);
   assert.equal(s.runtime.getStatus().readiness, 'blocked');
 });
+
+// Task 6.3B: nonempty provenance preservation in dormant private-stage harness.
+test('finance private stage preserves nonempty creation provenance', async () => {
+  const data = fixture();
+  const document = JSON.parse(data.get(F));
+  const attestation = creationRequest('debt');
+  const { entityType, ...debt } = attestation.image;
+  document.state.debts.push(debt);
+  document.state.creationProvenance = {
+    schemaVersion: 1,
+    entries: [{ attestation, disposition: 'candidate' }]
+  };
+  data.set(F, JSON.stringify(document));
+
+  const s = await setup(data);
+  const original = JSON.parse(s.native.data.get(F)).state;
+  const request = {
+    operationId: 'stage-nonempty-preservation',
+    entity: { entityType: 'debt', entityId: 'entity' },
+    predecessor: null
+  };
+  const binding = { ...request, key: F, stage: 'finance-insert' };
+
+  await s.access.withWriteLease(request, async lease => {
+    await lease.write(lease.issue(binding), binding, original);
+  });
+
+  assert.deepEqual(s.finance.getState().creationProvenance, original.creationProvenance);
+  assert.deepEqual(JSON.parse(s.native.data.get(F)).state.creationProvenance, original.creationProvenance);
+  assert.equal(s.runtime.getStatus().postingAllowed, false);
+  assert.equal(s.runtime.getStatus().readiness, 'blocked');
+});
+
+// Task 6.3B-2: reject mutations to retained nonempty provenance.
+for (const [name, mutate] of [
+  ['disposition', state => { state.creationProvenance.entries[0].disposition = 'blocked'; }],
+  ['attestation', state => { state.creationProvenance.entries[0].attestation.creationId = 'forged-creation'; }]
+]) {
+  test(`finance private stage rejects nonempty provenance ${name} mutation`, async () => {
+    const data = fixture();
+    const document = JSON.parse(data.get(F));
+    const attestation = creationRequest('debt');
+    const { entityType, ...debt } = attestation.image;
+    document.state.debts.push(debt);
+    document.state.creationProvenance = {
+      schemaVersion: 1,
+      entries: [{ attestation, disposition: 'candidate' }]
+    };
+    data.set(F, JSON.stringify(document));
+
+    const s = await setup(data);
+    const before = new Map(s.native.data);
+    const stateBefore = s.finance.getState();
+    const writesBefore = s.native.events.filter(e => e[0] === 'set' || e[0] === 'remove').length;
+    const persisted = JSON.parse(s.native.data.get(F)).state;
+    mutate(persisted);
+    const request = {
+      operationId: `stage-nonempty-${name}`,
+      entity: { entityType: 'debt', entityId: 'entity' },
+      predecessor: null
+    };
+    const binding = { ...request, key: F, stage: 'finance-insert' };
+
+    await assert.rejects(s.access.withWriteLease(request, async lease => {
+      await lease.write(lease.issue(binding), binding, persisted);
+    }), /Private stages cannot change creation provenance\./);
+
+    assert.equal(s.finance.getState(), stateBefore);
+    assert.deepEqual(s.native.data, before);
+    assert.equal(s.native.events.filter(e => e[0] === 'set' || e[0] === 'remove').length, writesBefore);
+    assert.equal(s.runtime.getStatus().postingAllowed, false);
+    assert.equal(s.runtime.getStatus().readiness, 'blocked');
+    assert.match(s.runtime.getStatus().writeFence, /authorized stage failed/);
+  });
+}
