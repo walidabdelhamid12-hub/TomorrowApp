@@ -74,7 +74,22 @@ export type TransactionPurpose =
   | 'loan_interest_payment'
   | 'property_installment_payment';
 
+/**
+ * Historical FX evidence captured for a transaction.
+ * Rate direction: reference currency units per one transaction currency unit.
+ * The rate must correspond to the transaction date.
+ */
+export interface HistoricalFxSnapshot {
+  sourceCurrencyCode: CurrencyCode;
+  referenceCurrencyCode: CurrencyCode;
+  rate: number;
+  rateDate: ISODate;
+  /** Actual published rate date, when earlier than the transaction date. */
+  effectiveRateDate?: ISODate;
+  source: 'historical_api' | 'manual';
+}
 export interface Transaction extends Timestamps {
+  historicalFx?: HistoricalFxSnapshot;
   id: EntityId;
   type: TransactionType;
 

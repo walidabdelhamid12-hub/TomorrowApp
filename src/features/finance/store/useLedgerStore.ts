@@ -1,3 +1,4 @@
+import { isValidHistoricalFx } from '@/features/finance/utils/historicalFx';
 import { isPaymentOperationReceipt, type PaymentOperationReceipt } from '@/features/finance/types/paymentOperations';
 import { reservedPaymentMatches } from '@/features/finance/utils/reservedPayments';
 
@@ -703,6 +704,10 @@ export const useLedgerStore = create<LedgerStore>()(
       addTransaction: (input) => {
         if (['linkedEntityType', 'linkedEntityId', 'linkedPaymentId'].some(key => key in input)
           || ('purpose' in input && input.purpose !== undefined && input.purpose !== 'normal')) return null;
+        if (input.historicalFx !== undefined) {
+          const account = get().accounts.find(item => item.id === input.accountId);
+          if (!account || !isValidHistoricalFx(input.historicalFx, account.currencyCode, input.date)) return null;
+        }
         return createTransaction(input);
       },
 
@@ -760,7 +765,7 @@ export const useLedgerStore = create<LedgerStore>()(
         }
 
         const editableFields = ['type', 'amount', 'accountId', 'categoryId', 'entryType',
-          'relatedTransactionId', 'date', 'note'];
+          'relatedTransactionId', 'date', 'note', 'historicalFx'];
         if (isProtectedTransaction(current, useFinanceStore.getState()) ||
           Object.keys(patch).some(key => !editableFields.includes(key))) return false;
 
@@ -776,6 +781,13 @@ export const useLedgerStore = create<LedgerStore>()(
         const category = categories.find(
           (item) => item.id === next.categoryId
         );
+
+        if (next.historicalFx !== undefined &&
+          (!account || !isValidHistoricalFx(
+            next.historicalFx,
+            account.currencyCode,
+            next.date
+          ))) return false;
 
         const amount = roundMoney(next.amount);
 

@@ -1,7 +1,7 @@
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -20,6 +20,10 @@ import {
   DateField,
 } from '@/components/ui';
 import { FormModal } from '@/features/finance/components/FormModal';
+import { HistoricalFxField } from '@/features/finance/components/HistoricalFxField';
+import { getHistoricalRate, createManualHistoricalRate } from '@/services/historicalRates';
+import { isValidHistoricalFx } from '@/features/finance/utils/historicalFx';
+import type { HistoricalFxSnapshot } from '@/features/finance/types/ledger';
 import { ScanDocumentButton } from '@/features/finance/components/ScanDocumentButton';
 import { getCurrencyLabel } from '@/features/finance/constants/currencies';
 import type { ScanResult } from '@/features/finance/scanner/types';
@@ -35,9 +39,24 @@ import type {
 import { roundMoney, todayISO } from '@/features/finance/utils/finance';
 import { formatMoney } from '@/features/finance/utils/money';
 import { resolveAmountExpression } from '@/features/finance/utils/amountExpression';
+import { evaluateExpression } from '@/features/finance/utils/calculator';
 import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { moduleColors, useTheme } from '@/theme';
 import { isValidISODate } from '@/utils/input';
+
+function resolveHistoricalRateExpression(input: string): number | null {
+  const text = input.trim();
+  if (!text || /[+\-×÷*/]$/.test(text)) return null;
+  if (!/^[0-9.+\-×÷*/()]+$/.test(text)) return null;
+
+  const value = evaluateExpression(
+    text.replace(/\*/g, '×').replace(/\//g, '÷'),
+  );
+
+  return value !== null && Number.isFinite(value) && value > 0
+    ? value
+    : null;
+}
 
 type EntryMode = 'normal' | 'refund';
 
@@ -107,6 +126,18 @@ export function AddTransactionModal({
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | undefined>();
 
+  const fxRequestId = useRef(0);
+  const [fxReadyFor, setFxReadyFor] = useState<string | null>(null);
+  const [fxRecord, setFxRecord] = useState<{
+    key: string;
+    snapshot: HistoricalFxSnapshot;
+  } | null>(null);
+  const [fxLoading, setFxLoading] = useState(false);
+  const [fxManualMode, setFxManualMode] = useState(false);
+  const [fxManualRate, setFxManualRate] = useState('');
+  const [fxManualRateKey, setFxManualRateKey] = useState<string | null>(null);
+  const [fxError, setFxError] = useState<string | undefined>();
+
   const [categoryManagerVisible, setCategoryManagerVisible] = useState(false);
   const [categoryFormVisible, setCategoryFormVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -124,7 +155,10 @@ export function AddTransactionModal({
   const isEditingRefund = transaction?.entryType === 'refund';
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      setFxReadyFor(null);
+      return;
+    }
 
     setError(undefined);
     setCategoryManagerVisible(false);
@@ -152,6 +186,7 @@ export function AddTransactionModal({
       setDate(todayISO());
       setNote('');
     }
+    setFxReadyFor(transaction?.id ?? 'new');
   }, [visible, transaction]);
 
   const selectableAccounts = useMemo(
@@ -235,6 +270,128 @@ export function AddTransactionModal({
     entryMode === 'refund'
       ? originalAccount
       : selectableAccounts.find((account) => account.id === activeAccountId);
+
+  const fxCurrency = entryMode === 'refund'
+    ? selectedOriginal?.transaction.currencyCode
+    : activeAccount?.currencyCode;
+  const fxKey = `${fxCurrency ?? ''}|${date}`;
+
+  const fxInitializationMatches =
+    fxReadyFor === (transaction?.id ?? 'new');
+  const fxSnapshot =
+    fxRecord?.key === fxKey &&
+    fxCurrency &&
+    isValidHistoricalFx(fxRecord.snapshot, fxCurrency, date)
+      ? fxRecord.snapshot
+      : undefined;
+
+  const manualFxValue = resolveHistoricalRateExpression(fxManualRate);
+  const manualFxResult =
+    fxManualMode && fxManualRateKey === fxKey && fxCurrency && manualFxValue !== null
+      ? createManualHistoricalRate(fxCurrency, date, manualFxValue)
+      : null;
+
+  const selectedFx =
+    fxManualMode
+      ? (manualFxResult?.ok ? manualFxResult.snapshot : undefined)
+      : fxSnapshot;
+
+  useEffect(() => {
+    if (!visible || !fxInitializationMatches) {
+      fxRequestId.current += 1;
+      return;
+    }
+
+    const requestId = ++fxRequestId.current;
+    setFxRecord(null);
+    setFxError(undefined);
+    setFxManualMode(false);
+    setFxManualRate('');
+    setFxManualRateKey(null);
+    setFxLoading(false);
+
+    if (!fxCurrency || !isValidISODate(date) || isEditingRefund) return;
+
+    const existing = transaction?.historicalFx;
+    if (
+      transaction?.date === date &&
+      transaction.currencyCode === fxCurrency &&
+      existing &&
+      isValidHistoricalFx(existing, fxCurrency, date)
+    ) {
+      setFxRecord({ key: fxKey, snapshot: existing });
+      if (existing.source === 'manual') {
+        setFxManualMode(true);
+        setFxManualRate(String(existing.rate));
+        setFxManualRateKey(fxKey);
+      }
+      return;
+    }
+
+    setFxLoading(true);
+    void getHistoricalRate(fxCurrency, date).then((result) => {
+      if (fxRequestId.current !== requestId) return;
+      setFxLoading(false);
+      if (
+        result.ok &&
+        isValidHistoricalFx(result.snapshot, fxCurrency, date)
+      ) {
+        setFxRecord({ key: fxKey, snapshot: result.snapshot });
+        setFxError(undefined);
+      } else {
+        setFxRecord(null);
+        setFxError(result.ok
+          ? 'Historical rate does not match the selected date or currency.'
+          : result.reason);
+      }
+    });
+    return () => {
+      fxRequestId.current += 1;
+    };
+  }, [visible, fxInitializationMatches, fxKey, fxCurrency, date, transaction, isEditingRefund]);
+
+  const fetchFx = () => {
+    if (!fxCurrency || !isValidISODate(date)) {
+      setFxError('Select a valid currency and transaction date.');
+      return;
+    }
+    const requestId = ++fxRequestId.current;
+    setFxManualMode(false);
+    setFxRecord(null);
+    setFxError(undefined);
+    setFxLoading(true);
+    void getHistoricalRate(fxCurrency, date).then((result) => {
+      if (fxRequestId.current !== requestId) return;
+      setFxLoading(false);
+      if (
+        result.ok &&
+        isValidHistoricalFx(result.snapshot, fxCurrency, date)
+      ) {
+        setFxRecord({ key: fxKey, snapshot: result.snapshot });
+        setFxError(undefined);
+      } else {
+        setFxRecord(null);
+        setFxError(result.ok
+          ? 'Historical rate does not match the selected date or currency.'
+          : result.reason);
+      }
+    });
+  };
+
+  const toggleManualFx = () => {
+    fxRequestId.current += 1;
+    setFxLoading(false);
+    setFxError(undefined);
+    if (fxManualMode) {
+      setFxManualMode(false);
+      fetchFx();
+    } else {
+      setFxManualMode(true);
+      setFxManualRate('');
+      setFxManualRateKey(null);
+      setFxRecord(null);
+    }
+  };
 
   const replacementCategories = useMemo(
     () =>
@@ -446,6 +603,22 @@ export function AddTransactionModal({
       return;
     }
 
+    const legacyUnchanged =
+      !!transaction &&
+      !transaction.historicalFx &&
+      transaction.date === date &&
+      transaction.currencyCode === amountCurrency;
+
+    if (
+      !isEditingRefund &&
+      !legacyUnchanged &&
+      (!fxInitializationMatches || fxLoading || !selectedFx ||
+        !isValidHistoricalFx(selectedFx, amountCurrency, date))
+    ) {
+      setError('A valid historical exchange rate is required. Retry the API or enter a manual rate.');
+      return;
+    }
+
     if (entryMode === 'refund') {
       if (!selectedOriginal || !originalAccount || !originalCategory) {
         setError('Choose an original purchase to refund.');
@@ -463,6 +636,7 @@ export function AddTransactionModal({
         type: 'expense',
         entryType: 'refund',
         relatedTransactionId: selectedOriginal.transaction.id,
+        historicalFx: selectedFx,
         amount: value,
         accountId: selectedOriginal.transaction.accountId,
         categoryId: selectedOriginal.transaction.categoryId,
@@ -492,6 +666,7 @@ export function AddTransactionModal({
     if (transaction) {
       const ok = updateTransaction(transaction.id, {
         type,
+        historicalFx: selectedFx,
         amount: value,
         accountId: activeAccount.id,
         categoryId: activeCategoryId,
@@ -506,6 +681,7 @@ export function AddTransactionModal({
     } else {
       const id = addTransaction({
         type,
+        historicalFx: selectedFx,
         amount: value,
         accountId: activeAccount.id,
         categoryId: activeCategoryId,
@@ -709,6 +885,25 @@ export function AddTransactionModal({
 
             <DateField value={date} onChange={setDate} />
 
+            {!isEditingRefund && fxCurrency ? (
+              <HistoricalFxField
+                currencyCode={fxCurrency}
+                transactionDate={date}
+                snapshot={selectedFx}
+                loading={fxLoading}
+                manualMode={fxManualMode}
+                manualRate={fxManualRate}
+                error={fxError}
+                onFetch={fetchFx}
+                onManualMode={toggleManualFx}
+                onManualRateChange={(value) => {
+                  setFxManualRate(value);
+                  setFxManualRateKey(fxKey);
+                  setFxError(undefined);
+                }}
+              />
+            ) : null}
+
             <AppInput
               label="Note (optional)"
               value={note}
@@ -731,6 +926,7 @@ export function AddTransactionModal({
                     : 'Add transaction'
               }
               accentColor={moduleColors.finance}
+              disabled={fxLoading && !isEditingRefund}
               onPress={submit}
               style={{ marginTop: spacing.xs }}
             />
