@@ -33,7 +33,9 @@ import type {
   TransactionType,
 } from '@/features/finance/types/ledger';
 import { roundMoney, todayISO } from '@/features/finance/utils/finance';
-import { formatMoney, parseAmount } from '@/features/finance/utils/money';
+import { formatMoney } from '@/features/finance/utils/money';
+import { resolveAmountExpression } from '@/features/finance/utils/amountExpression';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { moduleColors, useTheme } from '@/theme';
 import { isValidISODate } from '@/utils/input';
 
@@ -423,10 +425,19 @@ export function AddTransactionModal({
       setError('This transaction belongs to a loan or debt. Manage its payment from Loans or Debts.');
       return;
     }
-    const value = parseAmount(amount);
+    const amountCurrency = entryMode === 'refund'
+      ? selectedOriginal?.transaction.currencyCode
+      : activeAccount?.currencyCode;
 
-    if (value === null || value <= 0) {
-      setError('Enter an amount greater than zero.');
+    if (!amountCurrency) {
+      setError('Select a valid account and currency.');
+      return;
+    }
+
+    const value = resolveAmountExpression(amount, amountCurrency);
+
+    if (value === null) {
+      setError(`Enter a valid positive amount. ${amountCurrency} allows up to ${getCurrencyDecimals(amountCurrency)} decimal places.`);
       return;
     }
 
@@ -651,7 +662,40 @@ export function AddTransactionModal({
             <AppInput
               label="Amount"
               value={amount}
-              onChangeText={setAmount}
+              onChangeText={(text) => {
+                setAmount(text);
+                setError(undefined);
+              }}
+              onBlur={() => {
+                const currencyCode = entryMode === 'refund'
+                  ? selectedOriginal?.transaction.currencyCode
+                  : activeAccount?.currencyCode;
+
+                if (!currencyCode || !amount.trim()) return;
+
+                const result = resolveAmountExpression(amount, currencyCode);
+
+                if (result !== null) {
+                  setAmount(String(result));
+                } else {
+                  setError('Invalid amount or calculation. Please correct it.');
+                }
+              }}
+              onSubmitEditing={() => {
+                const currencyCode = entryMode === 'refund'
+                  ? selectedOriginal?.transaction.currencyCode
+                  : activeAccount?.currencyCode;
+
+                if (!currencyCode || !amount.trim()) return;
+
+                const result = resolveAmountExpression(amount, currencyCode);
+
+                if (result !== null) {
+                  setAmount(String(result));
+                } else {
+                  setError('Invalid amount or calculation. Please correct it.');
+                }
+              }}
               keyboardType="decimal-pad"
               placeholder="0"
               leftElement={

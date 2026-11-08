@@ -42,9 +42,25 @@ export function evaluateExpression(expression: string): number | null {
     : expression;
   if (clean === '') return null;
 
+  // Validate the complete expression before converting operands to Number.
+  // The trailing operator was removed above for live preview.
+  const validExpression =
+    /^(?:\d+(?:\.\d*)?|\.\d+)(?:[+\-×÷](?:\d+(?:\.\d*)?|\.\d+))*$/.test(clean);
+
+  if (!validExpression) return null;
+
+  const operands = clean.split(OPERATOR_SPLIT);
+
+  // Reject integer literals outside JavaScript's safe integer range.
+  if (operands.some((part) =>
+    /^\d+$/.test(part) && !Number.isSafeInteger(Number(part))
+  )) {
+    return null;
+  }
+
   const numbers = clean.split(OPERATOR_SPLIT).map(Number);
   const operators = Array.from(clean).filter(isOperator);
-  if (numbers.some(Number.isNaN) || numbers.length !== operators.length + 1) {
+  if (numbers.some((value) => !Number.isFinite(value)) || numbers.length !== operators.length + 1) {
     return null;
   }
 
@@ -70,5 +86,5 @@ export function evaluateExpression(expression: string): number | null {
     result = op === '+' ? result + values[i + 1] : result - values[i + 1];
   });
 
-  return Math.round(result * 1000) / 1000; // يشيل أخطاء الـ floating point
+  return Number.isFinite(result) ? result : null; // يشيل أخطاء الـ floating point
 }
