@@ -1,3 +1,4 @@
+import { AccountDropdown } from '@/features/finance/components/AccountDropdown';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -139,6 +140,12 @@ export function AddTransactionModal({
   const [fxError, setFxError] = useState<string | undefined>();
 
   const [categoryManagerVisible, setCategoryManagerVisible] = useState(false);
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [attachPickerOpen, setAttachPickerOpen] = useState(false);
+  const [scanSource, setScanSource] = useState<'camera' | 'gallery' | 'file' | null>(null);
+  const [confirmUnusedDeleteCategory, setConfirmUnusedDeleteCategory] = useState<Category | null>(null);
+  const [selectedManagerCategoryId, setSelectedManagerCategoryId] = useState('');
   const [categoryFormVisible, setCategoryFormVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
@@ -162,6 +169,11 @@ export function AddTransactionModal({
 
     setError(undefined);
     setCategoryManagerVisible(false);
+    setTypePickerOpen(false);
+    setCategoryPickerOpen(false);
+    setAttachPickerOpen(false);
+    setScanSource(null);
+    setConfirmUnusedDeleteCategory(null);
     setCategoryFormVisible(false);
     setEditingCategory(null);
     setPendingDeleteCategory(null);
@@ -406,6 +418,7 @@ export function AddTransactionModal({
   );
 
   const openCategoryManager = () => {
+    setSelectedManagerCategoryId(activeCategoryId);
     setCategoryManagerVisible(true);
   };
 
@@ -488,32 +501,7 @@ export function AddTransactionModal({
       return;
     }
 
-    Alert.alert(
-      'Delete category?',
-      `Are you sure you want to delete "${category.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            const deleted = deleteCategory(category.id);
-
-            if (!deleted) {
-              Alert.alert(
-                'Could not delete category',
-                'Please try again.',
-              );
-              return;
-            }
-
-            if (categoryId === category.id) {
-              setCategoryId('');
-            }
-          },
-        },
-      ],
-    );
+    setConfirmUnusedDeleteCategory(category);
   };
 
   const confirmDeleteWithReplacement = () => {
@@ -723,23 +711,28 @@ export function AddTransactionModal({
           </AppText>
         ) : (
           <>
-            {entryMode === 'normal' ? (
-              <ScanDocumentButton onResult={applyScan} />
-            ) : null}
-
-            {!transaction ? (
-              <ChipSelect<string>
-                options={[
-                  { value: 'expense', label: 'Expense', color: colors.expense },
-                  { value: 'income', label: 'Income', color: colors.income },
-                  { value: 'refund', label: 'Refund', color: moduleColors.finance },
-                ]}
-                value={entryMode === 'refund' ? 'refund' : type}
-                onChange={handleEntryModeChange}
-              />
-            ) : null}
-
-            {entryMode === 'refund' ? (
+                         <View style={{ flexDirection: 'row', gap: 10 }}>
+               <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                 <AppText variant="label" color="textSecondary">TYPE</AppText>
+                 <Pressable accessibilityRole="button" accessibilityLabel="Transaction type" onPress={() => !transaction && setTypePickerOpen(true)}
+                   style={[styles.dropdownButton, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
+                   <Ionicons name={entryMode === 'refund' ? 'return-down-back-outline' : type === 'income' ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'} size={19} color={entryMode === 'refund' ? '#3B82F6' : type === 'income' ? '#10B981' : '#EF4444'} />
+                   <AppText style={{ flex: 1 }}>{entryMode === 'refund' ? 'Refund' : type === 'income' ? 'Income' : 'Expense'}</AppText>
+                   <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                 </Pressable>
+               </View>
+               <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                 <AppText variant="label" color="textSecondary">ATTACH (OPTIONAL)</AppText>
+                 <Pressable accessibilityRole="button" accessibilityLabel="Scan from camera, gallery or PDF" onPress={() => setAttachPickerOpen(true)}
+                   style={[styles.dropdownButton, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
+                   <Ionicons name="attach-outline" size={19} color={colors.textSecondary} />
+                   <AppText style={{ flex: 1 }}>— None</AppText>
+                   <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                 </Pressable>
+               </View>
+             </View>
+             {scanSource ? <ScanDocumentButton onResult={applyScan} initialSource={scanSource} onFinished={() => setScanSource(null)} /> : null}
+{entryMode === 'refund' ? (
               <>
                 <AppText variant="caption" color="textSecondary">
                   Select the original purchase. The refund will return to the
@@ -788,51 +781,20 @@ export function AddTransactionModal({
               </>
             ) : (
               <>
-                <ChipSelect<string>
-                  label="ACCOUNT"
-                  options={selectableAccounts.map((account) => ({
-                    value: account.id,
-                    label: `${account.name} · ${getCurrencyLabel(account.currencyCode)}`,
-                    color: moduleColors.finance,
-                  }))}
-                  value={activeAccountId}
-                  onChange={setAccountId}
-                />
-
-                <View style={styles.categoryHeader}>
-                  <AppText variant="label" color="textSecondary">
-                    CATEGORY
-                  </AppText>
-
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={openCategoryManager}
-                    style={[
-                      styles.addCategoryButton,
-                      { borderColor: colors.primary },
-                    ]}
-                  >
-                    <Ionicons
-                      name="create-outline"
-                      size={17}
-                      color={colors.primary}
-                    />
-                    <AppText variant="label" color={colors.primary}>
-                      Edit Categories
-                    </AppText>
-                  </Pressable>
-                </View>
-
-                <ChipSelect<string>
-                  options={kindCategories.map((category) => ({
-                    value: category.id,
-                    label: category.name,
-                    color: category.color,
-                  }))}
-                  value={activeCategoryId}
-                  onChange={setCategoryId}
-                />
-              </>
+                                 <View style={{ flexDirection: 'row', gap: 10 }}>
+                   <AccountDropdown label="ACCOUNT" options={selectableAccounts} value={activeAccountId}
+                     onChange={setAccountId} emptyMessage="No accounts" />
+                   <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                     <AppText variant="label" color="textSecondary">CATEGORY</AppText>
+                     <Pressable accessibilityRole="button" accessibilityLabel="Choose or manage category" onPress={() => setCategoryPickerOpen(true)}
+                       style={[styles.dropdownButton, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
+                       {kindCategories.find(item => item.id === activeCategoryId) ? <Ionicons name={kindCategories.find(item => item.id === activeCategoryId)!.icon as keyof typeof Ionicons.glyphMap} size={19} color={kindCategories.find(item => item.id === activeCategoryId)!.color} /> : <Ionicons name="pricetag-outline" size={19} color={colors.textSecondary} />}
+                       <AppText style={{ flex: 1 }}>{kindCategories.find(item => item.id === activeCategoryId)?.name ?? 'Choose category'}</AppText>
+                       <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                     </Pressable>
+                   </View>
+                 </View>
+</>
             )}
 
             <AppInput
@@ -984,44 +946,56 @@ export function AddTransactionModal({
                 </AppText>
               ) : (
                 kindCategories.map((category) => {
-                  const isUsed = transactions.some(
-                    (item) => item.categoryId === category.id,
-                  );
+                  const selected = selectedManagerCategoryId === category.id;
 
                   return (
-                    <View
+                    <Pressable
                       key={category.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={category.name}
+                      accessibilityState={{ selected }}
+                      onPress={() => setSelectedManagerCategoryId(category.id)}
                       style={[
-                        styles.categoryManagerRow,
-                        { borderColor: colors.border },
+                        styles.compactGridTile,
+                        {
+                          backgroundColor: selected
+                            ? colors.surfaceAlt
+                            : colors.surface,
+                          borderColor: selected
+                            ? category.color
+                            : colors.border,
+                          borderWidth: selected ? 2 : 1,
+                        },
                       ]}
                     >
-                      <View
-                        style={[
-                          styles.categoryManagerIcon,
-                          { backgroundColor: category.color },
-                        ]}
+                      <Ionicons
+                        name={category.icon as keyof typeof Ionicons.glyphMap}
+                        size={23}
+                        color={category.color}
+                      />
+                      <AppText
+                        variant="label"
+                        color={selected ? category.color : colors.text}
                       >
-                        <Ionicons
-                          name={category.icon as keyof typeof Ionicons.glyphMap}
-                          size={20}
-                          color="#FFFFFF"
-                        />
-                      </View>
-
-                      <View style={styles.categoryManagerInfo}>
-                        <AppText>{category.name}</AppText>
-                        <AppText variant="caption" color="textSecondary">
-                          {isUsed ? 'Used in transactions' : 'Custom category'}
-                        </AppText>
-                      </View>
-
-                      <FinanceActionButtons label={category.name} onEdit={() => openEditCategoryForm(category)} onDelete={() => requestDeleteCategory(category)} />
-                    </View>
+                        {category.name}
+                      </AppText>
+                    </Pressable>
                   );
                 })
               )}
             </ScrollView>
+
+            {kindCategories
+              .filter((category) => category.id === selectedManagerCategoryId)
+              .map((category) => (
+                <View key={category.id} style={styles.sharedCategoryActions}>
+                  <FinanceActionButtons
+                    label={category.name}
+                    onEdit={() => openEditCategoryForm(category)}
+                    onDelete={() => requestDeleteCategory(category)}
+                  />
+                </View>
+              ))}
 
             <View style={styles.categoryManagerActions}>
               <Pressable
@@ -1195,6 +1169,61 @@ export function AddTransactionModal({
         </View>
       </Modal>
 
+      <FormModal visible={visible && typePickerOpen} title="TYPE" onClose={() => setTypePickerOpen(false)}>
+        {(['expense', 'income', 'refund'] as const).map(option => (
+          <Pressable key={option} onPress={() => { handleEntryModeChange(option); setTypePickerOpen(false); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+            <Ionicons name={option === 'expense' ? 'arrow-up-circle-outline' : option === 'income' ? 'arrow-down-circle-outline' : 'return-down-back-outline'} size={20} color={option === 'expense' ? '#EF4444' : option === 'income' ? '#10B981' : '#3B82F6'} />
+            <AppText>{option === 'expense' ? 'Expense' : option === 'income' ? 'Income' : 'Refund'}</AppText>
+          </Pressable>
+        ))}
+      </FormModal>
+      <FormModal visible={visible && categoryPickerOpen} title="CATEGORY" onClose={() => setCategoryPickerOpen(false)}>
+        <ScrollView style={{ maxHeight: 340 }} keyboardShouldPersistTaps="handled">
+          {kindCategories.map(category => (
+            <Pressable key={category.id} onPress={() => { setCategoryId(category.id); setCategoryPickerOpen(false); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+              <Ionicons name={category.icon as keyof typeof Ionicons.glyphMap} size={20} color={category.color} />
+              <AppText style={{ flex: 1 }}>{category.name}</AppText>
+              {activeCategoryId === category.id ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
+            </Pressable>
+          ))}
+          <Pressable onPress={() => { setCategoryPickerOpen(false); openNewCategoryForm(); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+            <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
+            <AppText color={colors.primary}>Add New Category</AppText>
+          </Pressable>
+          <Pressable onPress={() => { setCategoryPickerOpen(false); openCategoryManager(); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+            <Ionicons name="settings-outline" size={20} color={colors.primary} />
+            <AppText color={colors.primary}>Manage Categories</AppText>
+          </Pressable>
+        </ScrollView>
+      </FormModal>
+      <FormModal visible={visible && attachPickerOpen} title="ATTACH (OPTIONAL)" onClose={() => setAttachPickerOpen(false)}>
+        {([['camera', '📷 Camera'], ['gallery', '🖼 Gallery'], ['file', '📄 PDF']] as const).map(([source, label]) => (
+          <Pressable key={source} onPress={() => { setAttachPickerOpen(false); setScanSource(source); }} style={[styles.pickerRow, { borderColor: colors.border }]}>
+            <AppText>{label}</AppText>
+          </Pressable>
+        ))}
+        <Pressable onPress={() => { setScanSource(null); setAttachPickerOpen(false); }} style={[styles.pickerRow, { borderColor: colors.border }]}><AppText>— None</AppText></Pressable>
+      </FormModal>
+      <Modal visible={visible && !!confirmUnusedDeleteCategory} transparent animationType="fade" onRequestClose={() => setConfirmUnusedDeleteCategory(null)}>
+        <View style={styles.replacementBackdrop}>
+          <View style={[styles.replacementCard, { backgroundColor: colors.surface, borderRadius: radius.xl }]}>
+            <AppText variant="h2">Delete category?</AppText>
+            <AppText color="textSecondary">Are you sure you want to delete "{confirmUnusedDeleteCategory?.name}"?</AppText>
+            <View style={styles.categoryModalActions}>
+              <Pressable style={[styles.categoryActionButton, { backgroundColor: colors.surfaceAlt }]} onPress={() => setConfirmUnusedDeleteCategory(null)}><AppText>Cancel</AppText></Pressable>
+              <Pressable style={[styles.categoryActionButton, { backgroundColor: colors.danger }]} onPress={() => {
+                const target = confirmUnusedDeleteCategory;
+                if (!target) return;
+                const deleted = deleteCategory(target.id);
+                setConfirmUnusedDeleteCategory(null);
+                if (!deleted) { Alert.alert('Could not delete category', 'Please try again.'); return; }
+                if (categoryId === target.id) setCategoryId('');
+              }}><AppText color="onPrimary">Delete</AppText></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Replacement category picker */}
       <Modal
         visible={visible && !!pendingDeleteCategory}
@@ -1218,9 +1247,12 @@ export function AddTransactionModal({
             <AppText variant="h2">Choose replacement</AppText>
 
             <AppText color="textSecondary">
-              The category "{pendingDeleteCategory?.name}" is used by existing
-              transactions. Choose another category of the same type to move
-              those transactions before deleting it.
+              The category "{pendingDeleteCategory?.name}" is linked to{' '}
+              {transactions.filter(
+                (item) => item.categoryId === pendingDeleteCategory?.id,
+              ).length}{' '}
+              transaction(s). Choose another category of the same type to
+              move those transactions before deleting it.
             </AppText>
 
             {replacementCategories.length === 0 ? (
@@ -1332,6 +1364,23 @@ interface AddTransactionModalProps {
 }
 
 const styles = StyleSheet.create({
+  dropdownButton: { minHeight: 48, borderWidth: 1, borderRadius: 10, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pickerRow: { minHeight: 48, paddingVertical: 12, borderBottomWidth: 1 },
+  compactGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  compactGridTile: {
+    width: '31%',
+    minHeight: 72,
+    borderRadius: 12,
+    paddingHorizontal: 5,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
   categoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1367,8 +1416,15 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   categoryManagerList: {
-    gap: 9,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     paddingBottom: 8,
+  },
+  sharedCategoryActions: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
   },
   categoryManagerRow: {
     minHeight: 58,

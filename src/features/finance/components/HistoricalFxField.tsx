@@ -1,8 +1,8 @@
 import { View } from 'react-native';
 import { evaluateExpression } from '@/features/finance/utils/calculator';
-
 import { AppButton, AppInput, AppText } from '@/components/ui';
 import type { HistoricalFxSnapshot } from '@/features/finance/types/ledger';
+import { getCurrencyFlag } from '@/features/finance/constants/currencies';
 import { moduleColors, useTheme } from '@/theme';
 
 function resolveHistoricalRateExpression(input: string): number | null {
@@ -44,13 +44,15 @@ export function HistoricalFxField({
   onManualMode,
   onManualRateChange,
 }: HistoricalFxFieldProps) {
-  const { spacing } = useTheme();
+  const { spacing, colors } = useTheme();
   const trimmedRate = manualRate.trim();
   const calculatedRate = manualMode
     ? resolveHistoricalRateExpression(manualRate)
     : null;
   const incompleteRate = /[+\-×÷*/]$/.test(trimmedRate);
   const invalidRate = trimmedRate.length > 0 && calculatedRate === null;
+  const displayedRate =
+    snapshot?.rate ?? (currencyCode === 'EGP' ? 1 : null);
 
   const finalizeRate = () => {
     if (calculatedRate !== null) {
@@ -61,37 +63,107 @@ export function HistoricalFxField({
     }
   };
 
+  const sourceColor = snapshot?.source === 'manual' ? 'info' : 'success';
+
   return (
     <View style={{ gap: spacing.sm }}>
-      <AppText variant="caption" color="textSecondary">
-        HISTORICAL EXCHANGE RATE
-      </AppText>
-
-      <AppText>
-        {currencyCode} to EGP
-      </AppText>
-
-      <AppText variant="caption" color="textSecondary">
-        Transaction date: {transactionDate}
-      </AppText>
-
-      {snapshot ? (
-        <>
-          <AppText color={snapshot.source === 'manual' ? 'info' : 'success'}>
-            Rate: {snapshot.rate}
-          </AppText>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          gap: 6,
+        }}
+      >
+        <View style={{ flex: 38, minWidth: 0, gap: 4 }}>
           <AppText
             variant="caption"
-            color={snapshot.source === 'manual' ? 'info' : 'success'}
+            color={colors.finance.neutral.accent}
+            style={{ minHeight: 28 }}
           >
-            {snapshot.source === 'manual' ? 'Manual rate' : 'Historical API'}
-            {' | Rate date: '}
-            {snapshot.effectiveRateDate ?? snapshot.rateDate}
+            FROM
           </AppText>
-        </>
+          <View
+            style={{
+              minHeight: 48,
+              borderWidth: 1,
+              borderRadius: 10,
+              paddingHorizontal: 6,
+              justifyContent: 'center',
+              backgroundColor: colors.surfaceAlt,
+              borderColor: colors.finance.neutral.border,
+            }}
+          >
+            <AppText style={{ fontSize: 14 }}>
+              {getCurrencyFlag(currencyCode)} {currencyCode}
+            </AppText>
+          </View>
+        </View>
+
+        <View style={{ flex: 24, minWidth: 0, gap: 4 }}>
+          <AppText
+            variant="caption"
+            color={colors.finance.neutral.accent}
+            style={{ minHeight: 28 }}
+          >
+            RATE
+          </AppText>
+          <View
+            style={{
+              minHeight: 48,
+              borderWidth: 1,
+              borderRadius: 10,
+              paddingHorizontal: 6,
+              justifyContent: 'center',
+              backgroundColor: colors.surface,
+              borderColor: colors.finance.neutral.border,
+            }}
+          >
+            <AppText
+              color={snapshot ? sourceColor : 'text'}
+              style={{ fontSize: 14, fontVariant: ['tabular-nums'] }}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {displayedRate === null ? '—' : String(displayedRate)}
+            </AppText>
+          </View>
+        </View>
+
+        <View style={{ flex: 38, minWidth: 0, gap: 4 }}>
+          <AppText
+            variant="caption"
+            color={colors.finance.neutral.accent}
+            style={{ minHeight: 28 }}
+          >
+            TO
+          </AppText>
+          <View
+            style={{
+              minHeight: 48,
+              borderWidth: 1,
+              borderRadius: 10,
+              paddingHorizontal: 6,
+              justifyContent: 'center',
+              backgroundColor: colors.finance.balance.surface,
+              borderColor: colors.finance.balance.border,
+            }}
+          >
+            <AppText style={{ fontSize: 14 }}>
+              {getCurrencyFlag('EGP')} EGP
+            </AppText>
+          </View>
+        </View>
+      </View>
+      {snapshot ? (
+        <AppText variant="caption" color={sourceColor}>
+          {snapshot.source === 'manual' ? 'Manual rate' : 'Historical API'}
+
+        </AppText>
       ) : (
         <AppText variant="caption" color="textSecondary">
-          Historical rate not available yet.
+          {currencyCode === 'EGP'
+            ? 'Base currency · Identity rate'
+            : 'Historical rate not available yet.'}
         </AppText>
       )}
 
@@ -128,20 +200,26 @@ export function HistoricalFxField({
         </AppText>
       ) : null}
 
-      <AppButton
-        title="Get historical rate"
-        accentColor={moduleColors.finance}
-        loading={loading}
-        disabled={loading}
-        onPress={onFetch}
-      />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <AppButton
+            title="Get Rate"
+            accentColor={moduleColors.finance}
+            loading={loading}
+            disabled={loading}
+            onPress={onFetch}
+          />
+        </View>
 
-      <AppButton
-        title={manualMode ? 'Use API rate' : 'Enter manual rate'}
-        accentColor={moduleColors.finance}
-        disabled={loading}
-        onPress={onManualMode}
-      />
+        <View style={{ flex: 1 }}>
+          <AppButton
+            title={manualMode ? 'Use API Rate' : 'Enter Manual Rate'}
+            accentColor={moduleColors.finance}
+            disabled={loading}
+            onPress={onManualMode}
+          />
+        </View>
+      </View>
     </View>
   );
 }
