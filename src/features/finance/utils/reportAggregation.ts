@@ -12,6 +12,15 @@ export interface ReportCurrencyTotal {
   income: number;
   expenses: number;
   net: number;
+  /**
+   * Transient exact minor-unit totals for direct in-memory comparison.
+   * Not serialized or preserved by spread/structuredClone.
+   */
+  readonly minorUnits?: Readonly<{
+    income: number;
+    expenses: number;
+    net: number;
+  }>;
 }
 
 export interface ReportCategoryTotal {
@@ -45,17 +54,52 @@ function validDate(value: string): boolean {
 }
 
 function toUnits(amount: number, currencyCode: string): number | null {
-  if (!isSupportedCurrency(currencyCode)) return null;
-  const factor = 10 ** getCurrencyDecimals(currencyCode);
-  const scaled = amount * factor;
-  const units = Math.round(scaled);
+  if (!isSupportedCurrency(currencyCode) || !Number.isFinite(amount)) return null;
 
-  if (!Number.isFinite(amount) || !Number.isSafeInteger(units)
-    || Math.abs(scaled - units) > 0.000000001) {
-    return null;
+  const decimals = getCurrencyDecimals(currencyCode);
+  const factor = 10 ** decimals;
+
+  // Integers can be converted without fractional precision loss.
+  if (Number.isSafeInteger(amount)) {
+    const units = BigInt(amount) * BigInt(factor);
+    return units <= BigInt(Number.MAX_SAFE_INTEGER)
+      && units >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(units) : null;
   }
 
-  return units;
+  // Reject fractional values whose binary spacing cannot preserve
+  // the smallest currency unit reliably.
+  const magnitude = Math.abs(amount);
+  // Correct Math.log2 rounding near exact powers of two.
+  // Subnormal values use the fixed IEEE-754 minimum spacing.
+  const estimatedExponent = Math.floor(Math.log2(magnitude));
+  const binaryExponent =
+    magnitude < 2 ** estimatedExponent
+      ? estimatedExponent - 1
+      : estimatedExponent;
+  const ulp = binaryExponent < -1022
+    ? Number.MIN_VALUE
+    : 2 ** (binaryExponent - 52);
+
+  // A fractional value is ambiguous only when adjacent binary numbers
+  // are spaced wider than the smallest monetary unit.
+  if (ulp > 1 / factor) return null;
+
+  const [coefficient, exponent = '0'] = Math.abs(amount).toString().toLowerCase().split('e');
+  const fraction = coefficient.split('.')[1]?.length ?? 0;
+  const shift = Number(exponent) - fraction + decimals;
+  let units = BigInt(coefficient.replace('.', ''));
+
+  if (shift >= 0) {
+    units *= 10n ** BigInt(shift);
+  } else {
+    const divisor = 10n ** BigInt(-shift);
+    if (units % divisor !== 0n) return null;
+    units /= divisor;
+  }
+
+  if (amount < 0) units = -units;
+  return units <= BigInt(Number.MAX_SAFE_INTEGER)
+    && units >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(units) : null;
 }
 
 function addUnits(
@@ -206,12 +250,26 @@ export function aggregateOperatingReport(
   return {
     period: { ...period },
     currencies: [...currencyTotals.entries()]
-      .map(([currencyCode, totals]) => ({
-        currencyCode,
-        income: totals.income / (10 ** getCurrencyDecimals(currencyCode)),
-        expenses: totals.expenses / (10 ** getCurrencyDecimals(currencyCode)),
-        net: (totals.income - totals.expenses) / (10 ** getCurrencyDecimals(currencyCode)),
-      }))
+      .map(([currencyCode, totals]) => {
+        const factor = 10 ** getCurrencyDecimals(currencyCode);
+        const row: ReportCurrencyTotal = {
+          currencyCode,
+          income: totals.income / factor,
+          expenses: totals.expenses / factor,
+          net: (totals.income - totals.expenses) / factor,
+        };
+        Object.defineProperty(row, 'minorUnits', {
+          value: Object.freeze({
+            income: totals.income,
+            expenses: totals.expenses,
+            net: totals.income - totals.expenses,
+          }),
+          enumerable: false,
+          writable: false,
+          configurable: false,
+        });
+        return row;
+      })
       .sort((a, b) =>
         a.currencyCode.localeCompare(b.currencyCode)
       ),
