@@ -23,7 +23,8 @@ test('7.1E-1 income and expense distinguish transaction and account currencies',
   assert.ok(resolution >= 0 && guard > resolution);
   assert.ok(guard < body.indexOf('updateTransaction(current.id'));
   assert.ok(guard < body.indexOf('addTransaction({'));
-  assert.match(body, /crossCurrencyPreview!\.accountAmount/);
+  assert.match(modal, /const amountToRecord = manualDirectSelected \? manualAccountAmount : crossCurrencyPreview\?\.accountAmount/);
+  assert.match(body, /const accountAmount = isCross \? amountToRecord! : value/);
 });
 
 test('7.1E-1 refund uses original transaction currency', () => {
