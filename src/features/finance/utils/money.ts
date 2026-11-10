@@ -77,6 +77,7 @@ export function convertAmount(
   to: string,
   rates: RateMap,
   verifiedCurrencies: readonly string[] = ['EGP'],
+  roundResult: boolean = true,
 ): number | null {
   if (!Number.isFinite(amount)) return null;
 
@@ -107,5 +108,17 @@ export function convertAmount(
     return null;
   }
 
-  return roundMoney((amount * fromRate) / toRate);
+  const converted = (amount * fromRate) / toRate;
+  return roundResult ? roundMoney(converted) : converted;
+}
+
+/** Convert for aggregate summaries without per-item intermediate rounding. */
+export function convertAmountUnrounded(
+  amount: number,
+  from: string,
+  to: string,
+  rates: RateMap,
+  verifiedCurrencies: readonly string[] = ['EGP'],
+): number | null {
+  return convertAmount(amount, from, to, rates, verifiedCurrencies, false);
 }

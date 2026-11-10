@@ -63,9 +63,23 @@ export function TransactionsSection({
     'Sent: ' + money(detailRecord.fromAmount ?? detailRecord.amount, detailRecord.fromCurrencyCode ?? detailRecord.currencyCode),
     'Received: ' + money(detailRecord.toAmount ?? detailRecord.amount, detailRecord.toCurrencyCode ?? detailRecord.currencyCode),
     'Date: ' + detailRecord.date, detailRecord.note ?? '',
-  ] : [getTransactionDescription(detailRecord, categoryById.get(detailRecord.categoryId)?.name, null),
-    money(detailRecord.amount, detailRecord.currencyCode), detailRecord.date,
-    accountById.get(detailRecord.accountId)?.name ?? 'Unavailable account', detailRecord.note ?? ''];
+  ] : [
+    getTransactionDescription(detailRecord, categoryById.get(detailRecord.categoryId)?.name, null),
+    'Account amount: ' + money(detailRecord.amount, detailRecord.currencyCode),
+    ...(detailRecord.originalAmount !== undefined && detailRecord.originalCurrencyCode
+      ? [
+          'Original amount: ' + money(detailRecord.originalAmount, detailRecord.originalCurrencyCode),
+          ...(detailRecord.accountFxRate !== undefined
+            ? ['Effective rate: ' + (amountsVisible
+                ? detailRecord.accountFxRate.toPrecision(8) + ' ' + detailRecord.currencyCode + ' per ' + detailRecord.originalCurrencyCode
+                : '••••••')]
+            : []),
+        ]
+      : []),
+    'Date: ' + detailRecord.date,
+    accountById.get(detailRecord.accountId)?.name ?? 'Unavailable account',
+    detailRecord.note ?? '',
+  ];
   const performAction = (kind: 'transaction' | 'transfer', id: string, operation: 'edit' | 'delete') => {
     const latest = useLedgerStore.getState();
     if (kind === 'transfer') {

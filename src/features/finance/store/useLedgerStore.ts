@@ -1,4 +1,6 @@
 import { isValidHistoricalFx } from '@/features/finance/utils/historicalFx';
+import { isValidCrossCurrencyMetadata } from '@/features/finance/utils/crossCurrencyMetadata';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { isPaymentOperationReceipt, type PaymentOperationReceipt } from '@/features/finance/types/paymentOperations';
 import { reservedPaymentMatches } from '@/features/finance/utils/reservedPayments';
 
@@ -375,7 +377,13 @@ export const useLedgerStore = create<LedgerStore>()(
         // Reject runtime strings instead of coercing them through arithmetic.
         // A numeric-looking string can otherwise be rounded into a wrong value.
         if (!isFiniteMoneyInput(input.amount)) return null;
-        const amount = roundMoney(input.amount);
+        // Ordinary transactions use the account currency precision even without FX metadata.
+        // Preserve the existing two-decimal behavior for linked posting and refunds.
+        const usesAccountPrecision = !!account && input.entryType !== 'refund' &&
+          (input.originalAmount !== undefined ||
+            (!input.linkedEntityType && (input.purpose === undefined || input.purpose === 'normal')));
+        const amount = roundMoney(input.amount,
+          usesAccountPrecision ? getCurrencyDecimals(account.currencyCode) : 2);
 
         const valid =
           !!account &&
@@ -438,6 +446,8 @@ export const useLedgerStore = create<LedgerStore>()(
           createdAt: timestamp,
           updatedAt: timestamp,
         };
+
+        if (!isValidCrossCurrencyMetadata(transaction)) return null;
 
         set((state) => ({
           transactions: [transaction, ...state.transactions],
@@ -704,6 +714,10 @@ export const useLedgerStore = create<LedgerStore>()(
       addTransaction: (input) => {
         if (['linkedEntityType', 'linkedEntityId', 'linkedPaymentId'].some(key => key in input)
           || ('purpose' in input && input.purpose !== undefined && input.purpose !== 'normal')) return null;
+        const account = get().accounts.find(item => item.id === input.accountId);
+        if (!account || !isValidCrossCurrencyMetadata({
+          ...input, currencyCode: account.currencyCode,
+        })) return null;
         if (input.historicalFx !== undefined) {
           const account = get().accounts.find(item => item.id === input.accountId);
           if (!account || !isValidHistoricalFx(input.historicalFx, account.currencyCode, input.date)) return null;
@@ -765,7 +779,8 @@ export const useLedgerStore = create<LedgerStore>()(
         }
 
         const editableFields = ['type', 'amount', 'accountId', 'categoryId', 'entryType',
-          'relatedTransactionId', 'date', 'note', 'historicalFx'];
+          'relatedTransactionId', 'date', 'note', 'historicalFx',
+          'originalAmount', 'originalCurrencyCode', 'accountFxRate', 'accountFxSnapshot', 'directHistoricalFx'];
         if (isProtectedTransaction(current, useFinanceStore.getState()) ||
           Object.keys(patch).some(key => !editableFields.includes(key))) return false;
 
@@ -774,7 +789,64 @@ export const useLedgerStore = create<LedgerStore>()(
           ...definedOnly(patch),
         };
 
-        const account = accounts.find(
+        // Allow explicitly clearing all four cross-currency fields.
+        const crossCurrencyKeys = [
+          'originalAmount',
+          'originalCurrencyCode',
+          'accountFxRate',
+          'accountFxSnapshot',
+        ] as const;
+
+        const explicitlyClearedKeys = crossCurrencyKeys.filter(
+          key => Object.prototype.hasOwnProperty.call(patch, key) &&
+            patch[key] === undefined
+        );
+
+        const clearCrossCurrency =
+          explicitlyClearedKeys.length === crossCurrencyKeys.length;
+
+        const switchingToManual =
+          patch.directHistoricalFx?.source === 'manual' &&
+          Object.prototype.hasOwnProperty.call(patch, 'accountFxSnapshot') &&
+          patch.accountFxSnapshot === undefined &&
+          Object.prototype.hasOwnProperty.call(patch, 'historicalFx') &&
+          patch.historicalFx === undefined &&
+          current.accountFxSnapshot !== undefined;
+
+        const switchingToAnchors =
+          current.directHistoricalFx?.source === 'manual' &&
+          Object.prototype.hasOwnProperty.call(patch, 'directHistoricalFx') &&
+          patch.directHistoricalFx === undefined &&
+          patch.accountFxSnapshot !== undefined &&
+          patch.historicalFx !== undefined;
+
+        if (
+          explicitlyClearedKeys.length > 0 &&
+          !clearCrossCurrency &&
+          !switchingToManual
+        ) {
+          return false;
+        }
+
+        if (clearCrossCurrency) {
+          for (const key of crossCurrencyKeys) {
+            delete next[key];
+          }
+          delete next.directHistoricalFx;
+        } else if (switchingToManual) {
+          delete next.accountFxSnapshot;
+          delete next.historicalFx;
+        } else if (switchingToAnchors) {
+          delete next.directHistoricalFx;
+        } else if (
+          Object.prototype.hasOwnProperty.call(patch, 'directHistoricalFx') &&
+          patch.directHistoricalFx === undefined &&
+          current.directHistoricalFx !== undefined
+        ) {
+          return false;
+        }
+
+const account = accounts.find(
           (item) => item.id === next.accountId
         );
 
@@ -789,7 +861,15 @@ export const useLedgerStore = create<LedgerStore>()(
             next.date
           ))) return false;
 
-        const amount = roundMoney(next.amount);
+        if (!account || !isValidCrossCurrencyMetadata({
+          ...next, currencyCode: account.currencyCode,
+        })) return false;
+
+        // Keep ordinary and cross-currency edits consistent with creation precision.
+        const usesAccountPrecision = next.originalAmount !== undefined ||
+          (!next.linkedEntityType && (next.purpose === undefined || next.purpose === 'normal'));
+        const amount = roundMoney(next.amount,
+          usesAccountPrecision ? getCurrencyDecimals(account.currencyCode) : 2);
 
         const linkedRefunds = getRefundedAmount(
           transactions,

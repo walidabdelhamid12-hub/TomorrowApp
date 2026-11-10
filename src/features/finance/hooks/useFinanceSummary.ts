@@ -10,7 +10,7 @@ import { getDebtRemaining, getLoanRemainingAmount, getLoanRemainingPrincipal, ro
 import {
   getAccountBalance,
 } from '@/features/finance/utils/ledger';
-import { convertAmount } from '@/features/finance/utils/money';
+import { convertAmountUnrounded } from '@/features/finance/utils/money';
 import { getAssetValueInBase } from '@/features/finance/utils/valuation';
 
 /** All totals for the Finance screen, in the selected base currency. */
@@ -59,7 +59,7 @@ export function useFinanceSummary() {
         transfers
       );
 
-      const converted = convertAmount(
+      const converted = convertAmountUnrounded(
         balance,
         account.currencyCode,
         baseCurrency,
@@ -109,7 +109,7 @@ export function useFinanceSummary() {
         missing += 1;
         continue;
       }
-      const principalConverted = convertAmount(
+      const principalConverted = convertAmountUnrounded(
         remainingPrincipal ?? NaN,
         loan.currencyCode,
         baseCurrency,
@@ -122,7 +122,7 @@ export function useFinanceSummary() {
       } else {
         loansRemainingTotal += principalConverted;
       }
-      const contractualConverted = convertAmount(remainingContract, loan.currencyCode, baseCurrency, rates, verifiedCurrencies);
+      const contractualConverted = convertAmountUnrounded(remainingContract, loan.currencyCode, baseCurrency, rates, verifiedCurrencies);
       if (contractualConverted === null) missing += 1;
       else loansInstallmentsRemainingTotal += contractualConverted;
     }
@@ -138,7 +138,7 @@ export function useFinanceSummary() {
 
       const remainingAmount = getDebtRemaining(debt);
 
-      const converted = convertAmount(
+      const converted = convertAmountUnrounded(
         remainingAmount,
         debt.currencyCode,
         baseCurrency,
@@ -173,7 +173,7 @@ export function useFinanceSummary() {
         continue;
       }
 
-      const converted = convertAmount(
+      const converted = convertAmountUnrounded(
         cheque.amount,
         cheque.currencyCode,
         baseCurrency,

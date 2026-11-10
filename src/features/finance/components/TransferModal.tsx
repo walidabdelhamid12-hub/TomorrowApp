@@ -337,7 +337,7 @@ export function TransferModal({
 
   const accountsSelected = !!selectedSource && !!selectedDestination;
   const receivedText = accountsSelected && calculatedToAmount !== null
-    ? calculatedToAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? calculatedToAmount.toLocaleString(undefined, { minimumFractionDigits: getCurrencyDecimals(selectedDestination.currencyCode), maximumFractionDigits: getCurrencyDecimals(selectedDestination.currencyCode) })
     : '—';
   const rateHint = sameCurrency || mode === 'credit_card_payment'
     ? 'The exchange rate is fixed at 1 for this transfer.'

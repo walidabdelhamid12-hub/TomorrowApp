@@ -5,6 +5,7 @@ import {
 import type { HistoricalFxSnapshot } from '@/features/finance/types/ledger';
 import { isValidISODate } from '@/features/finance/utils/input';
 import { isValidHistoricalFx } from '@/features/finance/utils/historicalFx';
+import { todayISO } from '@/features/finance/utils/finance';
 
 const API_URL = 'https://api.frankfurter.dev/v2/rate';
 const TIMEOUT_MS = 8000;
@@ -25,7 +26,7 @@ function validRequest(
 ): boolean {
   return isSupportedCurrency(currency) &&
     isValidISODate(date) &&
-    date <= new Date().toISOString().slice(0, 10);
+    date <= todayISO();
 }
 
 /**

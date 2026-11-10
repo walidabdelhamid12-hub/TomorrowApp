@@ -1,7 +1,7 @@
 import type { Transaction } from '@/features/finance/types/ledger';
 import { roundMoney } from '@/features/finance/utils/finance';
 import { filterByMonth } from '@/features/finance/utils/ledger';
-import { convertAmount, type RateMap } from '@/features/finance/utils/money';
+import { convertAmountUnrounded, type RateMap } from '@/features/finance/utils/money';
 
 /** Shared Finance Home rules: verified FX, refunds reduce expenses, then round. */
 export function getMonthlyFinanceSummary(
@@ -16,7 +16,7 @@ export function getMonthlyFinanceSummary(
     let missing = 0;
 
     for (const transaction of filterByMonth(transactions, monthKey)) {
-      const converted = convertAmount(
+      const converted = convertAmountUnrounded(
         transaction.amount,
         transaction.currencyCode,
         baseCurrency,

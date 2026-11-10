@@ -53,8 +53,8 @@ test('refunds reduce expenses even when typed income, never income; expenses flo
   rows.push(tx('expense', 2, 'OMR', undefined, 'refund'));
   assert.deepEqual(summarize(rows), { income: 100, expense: 0, missing: 0 });
 });
-test('preserves per-conversion and final three-decimal rounding', () => {
-  assert.deepEqual(summarize([tx('income', 1, 'OMR'), tx('income', 1, 'OMR')], 'EGP', { EGP: 1, OMR: 1.23456 }), { income: 2.47, expense: 0, missing: 0 });
+test('preserves precision until final three-decimal rounding', () => {
+  assert.deepEqual(summarize([tx('income', 1, 'OMR'), tx('income', 1, 'OMR')], 'EGP', { EGP: 1, OMR: 1.23456 }), { income: 2.469, expense: 0, missing: 0 });
   assert.equal(summarize([tx('income', 1.23456), tx('income', 1.23456)]).income, 2.469);
 });
 test('missing, invalid and unverified rates flag incomplete totals including refunds', () => {

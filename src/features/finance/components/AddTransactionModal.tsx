@@ -1,4 +1,5 @@
 import { AccountDropdown } from '@/features/finance/components/AccountDropdown';
+import { CurrencyDropdown } from '@/features/finance/components/CurrencyDropdown';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -22,9 +23,10 @@ import {
 } from '@/components/ui';
 import { FormModal } from '@/features/finance/components/FormModal';
 import { HistoricalFxField } from '@/features/finance/components/HistoricalFxField';
+import { DirectHistoricalFxField } from '@/features/finance/components/DirectHistoricalFxField';
 import { getHistoricalRate, createManualHistoricalRate } from '@/services/historicalRates';
 import { isValidHistoricalFx } from '@/features/finance/utils/historicalFx';
-import type { HistoricalFxSnapshot } from '@/features/finance/types/ledger';
+import type { HistoricalFxSnapshot, DirectHistoricalFxSnapshot } from '@/features/finance/types/ledger';
 import { ScanDocumentButton } from '@/features/finance/components/ScanDocumentButton';
 import { getCurrencyLabel } from '@/features/finance/constants/currencies';
 import type { ScanResult } from '@/features/finance/scanner/types';
@@ -38,6 +40,7 @@ import type {
   TransactionType,
 } from '@/features/finance/types/ledger';
 import { roundMoney, todayISO } from '@/features/finance/utils/finance';
+import { calculateCrossCurrency, calculateDirectHistoricalRate } from '@/features/finance/utils/crossCurrency';
 import { formatMoney } from '@/features/finance/utils/money';
 import { resolveAmountExpression } from '@/features/finance/utils/amountExpression';
 import { evaluateExpression } from '@/features/finance/utils/calculator';
@@ -120,6 +123,8 @@ export function AddTransactionModal({
   const [type, setType] = useState<TransactionType>('expense');
   const [entryMode, setEntryMode] = useState<EntryMode>('normal');
   const [amount, setAmount] = useState('');
+  const [transactionCurrency, setTransactionCurrency] = useState('');
+  const [actualAccountDebit, setActualAccountDebit] = useState('');
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [originalTransactionId, setOriginalTransactionId] = useState('');
@@ -138,6 +143,19 @@ export function AddTransactionModal({
   const [fxManualRate, setFxManualRate] = useState('');
   const [fxManualRateKey, setFxManualRateKey] = useState<string | null>(null);
   const [fxError, setFxError] = useState<string | undefined>();
+  const originalFxRequestId = useRef(0);
+  const [originalFxRecord, setOriginalFxRecord] = useState<{
+    key: string;
+    snapshot: HistoricalFxSnapshot;
+  } | null>(null);
+  const [originalFxLoading, setOriginalFxLoading] = useState(false);
+  const [originalFxError, setOriginalFxError] = useState<string | undefined>();
+  const [originalFxManualMode, setOriginalFxManualMode] = useState(false);
+  const [originalFxManualRate, setOriginalFxManualRate] = useState('');
+  const [originalFxManualRateKey, setOriginalFxManualRateKey] = useState<string | null>(null);
+  const [directFxManualMode, setDirectFxManualMode] = useState(false);
+  const [directFxManualRate, setDirectFxManualRate] = useState('');
+  const [directFxManualKey, setDirectFxManualKey] = useState<string | null>(null);
 
   const [categoryManagerVisible, setCategoryManagerVisible] = useState(false);
   const [typePickerOpen, setTypePickerOpen] = useState(false);
@@ -182,7 +200,9 @@ export function AddTransactionModal({
     if (transaction) {
       setType(transaction.type);
       setEntryMode(transaction.entryType === 'refund' ? 'refund' : 'normal');
-      setAmount(String(transaction.amount));
+      setAmount(String(transaction.originalAmount ?? transaction.amount));
+      setTransactionCurrency(transaction.originalCurrencyCode ?? transaction.currencyCode);
+      setActualAccountDebit(transaction.originalCurrencyCode ? String(transaction.amount) : '');
       setAccountId(transaction.accountId);
       setCategoryId(transaction.categoryId);
       setOriginalTransactionId(transaction.relatedTransactionId ?? '');
@@ -192,6 +212,8 @@ export function AddTransactionModal({
       setType('expense');
       setEntryMode('normal');
       setAmount('');
+      setTransactionCurrency('');
+      setActualAccountDebit('');
       setAccountId('');
       setCategoryId('');
       setOriginalTransactionId('');
@@ -287,6 +309,12 @@ export function AddTransactionModal({
     ? selectedOriginal?.transaction.currencyCode
     : activeAccount?.currencyCode;
   const fxKey = `${fxCurrency ?? ''}|${date}`;
+  const amountCurrencyCode = entryMode === 'refund'
+    ? selectedOriginal?.transaction.currencyCode
+    : transactionCurrency || activeAccount?.currencyCode;
+  const crossCurrencySelected = entryMode !== 'refund' &&
+    !!activeAccount && !!amountCurrencyCode &&
+    amountCurrencyCode !== activeAccount.currencyCode;
 
   const fxInitializationMatches =
     fxReadyFor === (transaction?.id ?? 'new');
@@ -303,6 +331,96 @@ export function AddTransactionModal({
       ? createManualHistoricalRate(fxCurrency, date, manualFxValue)
       : null;
 
+  const directFxKey = `${activeAccount?.currencyCode ?? ''}|${amountCurrencyCode ?? ''}|${date}`;
+  const manualDirectRate = directFxManualMode && directFxManualKey === directFxKey
+    ? resolveHistoricalRateExpression(directFxManualRate) : null;
+  const manualDirectSelected = directFxManualMode && directFxManualKey === directFxKey;
+
+  const originalFxCurrency = crossCurrencySelected ? amountCurrencyCode : undefined;
+  const originalFxKey = `${originalFxCurrency ?? ''}|${date}`;
+  const originalFxSnapshot =
+    originalFxRecord?.key === originalFxKey &&
+    originalFxCurrency &&
+    isValidHistoricalFx(originalFxRecord.snapshot, originalFxCurrency, date)
+      ? originalFxRecord.snapshot
+      : undefined;
+
+  const originalManualValue = resolveHistoricalRateExpression(originalFxManualRate);
+  const originalManualResult =
+    originalFxManualMode &&
+    originalFxManualRateKey === originalFxKey &&
+    originalFxCurrency &&
+    originalManualValue !== null
+      ? createManualHistoricalRate(originalFxCurrency, date, originalManualValue)
+      : null;
+
+  useEffect(() => {
+    setDirectFxManualMode(false);
+    setDirectFxManualRate('');
+    setDirectFxManualKey(null);
+    if (visible && transaction?.directHistoricalFx &&
+        transaction.date === date &&
+        transaction.directHistoricalFx.accountCurrencyCode === activeAccount?.currencyCode &&
+        transaction.directHistoricalFx.transactionCurrencyCode === amountCurrencyCode &&
+        transaction.directHistoricalFx.source === 'manual') {
+      setDirectFxManualMode(true);
+      setDirectFxManualRate(String(transaction.directHistoricalFx.rate));
+      setDirectFxManualKey(directFxKey);
+    }
+  }, [visible, transaction, directFxKey]);
+
+  const selectedOriginalFx =
+    originalFxManualMode
+      ? (originalManualResult?.ok ? originalManualResult.snapshot : undefined)
+      : originalFxSnapshot;
+
+  useEffect(() => {
+    if (!visible || !fxInitializationMatches || !originalFxCurrency ||
+        !isValidISODate(date)) {
+      originalFxRequestId.current += 1;
+      setOriginalFxRecord(null);
+      setOriginalFxLoading(false);
+      return;
+    }
+
+    const requestId = ++originalFxRequestId.current;
+    setOriginalFxRecord(null);
+    setOriginalFxError(undefined);
+    setOriginalFxManualMode(false);
+    setOriginalFxManualRate('');
+    setOriginalFxManualRateKey(null);
+    setOriginalFxLoading(false);
+
+    const existing = transaction?.accountFxSnapshot;
+    if (transaction?.date === date &&
+        transaction.originalCurrencyCode === originalFxCurrency &&
+        existing &&
+        isValidHistoricalFx(existing, originalFxCurrency, date)) {
+      setOriginalFxRecord({ key: originalFxKey, snapshot: existing });
+      if (existing.source === 'manual') {
+        setOriginalFxManualMode(true);
+        setOriginalFxManualRate(String(existing.rate));
+        setOriginalFxManualRateKey(originalFxKey);
+      }
+      return;
+    }
+
+    setOriginalFxLoading(true);
+    void getHistoricalRate(originalFxCurrency, date).then((result) => {
+      if (originalFxRequestId.current !== requestId) return;
+      setOriginalFxLoading(false);
+      if (result.ok &&
+          isValidHistoricalFx(result.snapshot, originalFxCurrency, date)) {
+        setOriginalFxRecord({ key: originalFxKey, snapshot: result.snapshot });
+      } else {
+        setOriginalFxError(result.ok
+          ? 'Original currency historical rate is invalid.'
+          : result.reason);
+      }
+    });
+
+    return () => { originalFxRequestId.current += 1; };
+  }, [visible, fxInitializationMatches, originalFxKey, originalFxCurrency, date, transaction]);
   const selectedFx =
     fxManualMode
       ? (manualFxResult?.ok ? manualFxResult.snapshot : undefined)
@@ -404,6 +522,62 @@ export function AddTransactionModal({
       setFxRecord(null);
     }
   };
+
+  const originalValue = amountCurrencyCode
+    ? resolveAmountExpression(amount, amountCurrencyCode)
+    : null;
+
+  const actualDebitValue = activeAccount && actualAccountDebit.trim()
+    ? resolveAmountExpression(actualAccountDebit, activeAccount.currencyCode)
+    : null;
+
+  const directHistoricalRateFromApi =
+    crossCurrencySelected &&
+    activeAccount &&
+    amountCurrencyCode &&
+    selectedOriginalFx &&
+    selectedFx
+      ? calculateDirectHistoricalRate(
+          selectedOriginalFx,
+          selectedFx,
+          amountCurrencyCode,
+          activeAccount.currencyCode,
+          date,
+        )
+      : null;
+  const directHistoricalRate = manualDirectSelected ? manualDirectRate : directHistoricalRateFromApi;
+  const manualEstimatedAmount = manualDirectRate !== null && originalValue !== null && activeAccount
+    ? roundMoney(originalValue / manualDirectRate, getCurrencyDecimals(activeAccount.currencyCode))
+    : null;
+  const manualAccountAmount = manualEstimatedAmount !== null &&
+    (!actualAccountDebit.trim() || actualDebitValue !== null)
+    ? (actualAccountDebit.trim() ? actualDebitValue : manualEstimatedAmount)
+    : null;
+  const manualEffectiveRate = manualAccountAmount !== null && originalValue !== null && manualAccountAmount > 0
+    ? originalValue / manualAccountAmount : null;
+  const crossCurrencyPreview =
+    crossCurrencySelected &&
+    activeAccount &&
+    amountCurrencyCode &&
+    originalValue !== null &&
+    !manualDirectSelected &&
+    selectedOriginalFx &&
+    selectedFx &&
+    (!actualAccountDebit.trim() || actualDebitValue !== null)
+      ? calculateCrossCurrency({
+          originalAmount: originalValue,
+          originalCurrencyCode: amountCurrencyCode,
+          accountCurrencyCode: activeAccount.currencyCode,
+          transactionDate: date,
+          originalFx: selectedOriginalFx,
+          accountFx: selectedFx,
+          actualAccountAmount: actualAccountDebit.trim()
+            ? actualDebitValue!
+            : undefined,
+        })
+      : null;
+  const estimatedAccountAmount = manualDirectSelected ? manualEstimatedAmount : crossCurrencyPreview?.estimatedAccountAmount;
+  const amountToRecord = manualDirectSelected ? manualAccountAmount : crossCurrencyPreview?.accountAmount;
 
   const replacementCategories = useMemo(
     () =>
@@ -565,14 +739,17 @@ export function AddTransactionModal({
   };
 
   const submit = () => {
-    const current = transaction && useLedgerStore.getState().transactions.find(t => t.id === transaction.id);
+    const current = transaction &&
+      useLedgerStore.getState().transactions.find(t => t.id === transaction.id);
+
     if (current && isProtectedTransaction(current, useFinanceStore.getState())) {
       setError('This transaction belongs to a loan or debt. Manage its payment from Loans or Debts.');
       return;
     }
+
     const amountCurrency = entryMode === 'refund'
       ? selectedOriginal?.transaction.currencyCode
-      : activeAccount?.currencyCode;
+      : amountCurrencyCode;
 
     if (!amountCurrency) {
       setError('Select a valid account and currency.');
@@ -588,22 +765,6 @@ export function AddTransactionModal({
 
     if (!isValidISODate(date)) {
       setError('Date must be a real date in the format YYYY-MM-DD.');
-      return;
-    }
-
-    const legacyUnchanged =
-      !!transaction &&
-      !transaction.historicalFx &&
-      transaction.date === date &&
-      transaction.currencyCode === amountCurrency;
-
-    if (
-      !isEditingRefund &&
-      !legacyUnchanged &&
-      (!fxInitializationMatches || fxLoading || !selectedFx ||
-        !isValidHistoricalFx(selectedFx, amountCurrency, date))
-    ) {
-      setError('A valid historical exchange rate is required. Retry the API or enter a manual rate.');
       return;
     }
 
@@ -641,6 +802,7 @@ export function AddTransactionModal({
       return;
     }
 
+
     if (!activeAccount) {
       setError('Create an account first.');
       return;
@@ -651,15 +813,107 @@ export function AddTransactionModal({
       return;
     }
 
-    if (transaction) {
-      const ok = updateTransaction(transaction.id, {
+    const isCross = amountCurrency !== activeAccount.currencyCode;
+
+    const financialUnchanged = !isCross && !!current &&
+      current.accountId === activeAccount.id &&
+      current.date === date &&
+      (current.originalCurrencyCode ?? current.currencyCode) === amountCurrency &&
+      (current.originalAmount ?? current.amount) === value &&
+      (
+        current.originalCurrencyCode
+          ? actualAccountDebit.trim() !== '' &&
+            resolveAmountExpression(
+              actualAccountDebit,
+              activeAccount.currencyCode
+            ) === current.amount
+          : !isCross
+      );
+
+    if (financialUnchanged && current) {
+      const ok = updateTransaction(current.id, {
         type,
-        historicalFx: selectedFx,
-        amount: value,
+        categoryId: activeCategoryId,
+        note: note.trim(),
+      });
+
+      if (!ok) {
+        setError('Could not save the changes.');
+        return;
+      }
+
+      onClose();
+      return;
+    }
+
+    const legacyUnchanged = !!current &&
+      !current.historicalFx &&
+      !isCross &&
+      current.date === date &&
+      current.currencyCode === activeAccount.currencyCode;
+
+    if (
+      !legacyUnchanged && !(isCross && manualDirectSelected) &&
+      (!fxInitializationMatches || fxLoading || !selectedFx ||
+        !isValidHistoricalFx(
+          selectedFx, activeAccount.currencyCode, date
+        ))
+    ) {
+      setError('A valid account-currency historical rate is required.');
+      return;
+    }
+
+    if (isCross && !manualDirectSelected && (
+      !fxInitializationMatches ||
+      originalFxLoading ||
+      !selectedOriginalFx ||
+      !isValidHistoricalFx(selectedOriginalFx, amountCurrency, date) ||
+      !crossCurrencyPreview
+    )) {
+      setError('A valid original-currency rate and account amount are required.');
+      return;
+    }
+
+    if (isCross && manualDirectSelected && (
+      !fxInitializationMatches || manualDirectRate === null ||
+      manualAccountAmount === null || manualAccountAmount <= 0 ||
+      manualEffectiveRate === null
+    )) {
+      setError('Enter a valid manual rate and account amount.');
+      return;
+    }
+
+    const accountAmount = isCross ? amountToRecord! : value;
+    const directHistoricalFx: DirectHistoricalFxSnapshot | undefined =
+      isCross && manualDirectSelected && manualDirectRate !== null
+        ? { accountCurrencyCode: activeAccount.currencyCode,
+            transactionCurrencyCode: amountCurrency, rate: manualDirectRate,
+            rateDate: date, source: 'manual' }
+        : undefined;
+    const crossFields = isCross
+      ? { originalAmount: value, originalCurrencyCode: amountCurrency,
+          accountFxRate: manualDirectSelected ? manualEffectiveRate! : crossCurrencyPreview!.effectiveAccountRate,
+          accountFxSnapshot: manualDirectSelected ? undefined : selectedOriginalFx!,
+        }
+      : {};
+
+    if (current) {
+      const ok = updateTransaction(current.id, {
+        type,
+        historicalFx: manualDirectSelected ? undefined : selectedFx,
+        directHistoricalFx,
+        amount: accountAmount,
         accountId: activeAccount.id,
         categoryId: activeCategoryId,
         date,
         note: note.trim(),
+        ...crossFields,
+        ...(!isCross ? {
+          originalAmount: undefined,
+          originalCurrencyCode: undefined,
+          accountFxRate: undefined,
+          accountFxSnapshot: undefined,
+        } : {}),
       });
 
       if (!ok) {
@@ -669,12 +923,14 @@ export function AddTransactionModal({
     } else {
       const id = addTransaction({
         type,
-        historicalFx: selectedFx,
-        amount: value,
+        historicalFx: manualDirectSelected ? undefined : selectedFx,
+        directHistoricalFx,
+        amount: accountAmount,
         accountId: activeAccount.id,
         categoryId: activeCategoryId,
         date,
         note: note.trim() || undefined,
+        ...crossFields,
       });
 
       if (id === null) {
@@ -716,7 +972,7 @@ export function AddTransactionModal({
                  <AppText variant="label" color="textSecondary">TYPE</AppText>
                  <Pressable accessibilityRole="button" accessibilityLabel="Transaction type" onPress={() => !transaction && setTypePickerOpen(true)}
                    style={[styles.dropdownButton, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
-                   <Ionicons name={entryMode === 'refund' ? 'return-down-back-outline' : type === 'income' ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'} size={19} color={entryMode === 'refund' ? '#3B82F6' : type === 'income' ? '#10B981' : '#EF4444'} />
+                   <Ionicons name={entryMode === 'refund' ? 'return-down-back-outline' : type === 'income' ? 'arrow-up-circle-outline' : 'arrow-down-circle-outline'} size={19} color={entryMode === 'refund' ? '#3B82F6' : type === 'income' ? '#10B981' : '#EF4444'} />
                    <AppText style={{ flex: 1 }}>{entryMode === 'refund' ? 'Refund' : type === 'income' ? 'Income' : 'Expense'}</AppText>
                    <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
                  </Pressable>
@@ -796,18 +1052,20 @@ export function AddTransactionModal({
                  </View>
 </>
             )}
-
-            <AppInput
+            {entryMode === 'normal' && activeAccount ? (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                <AppInput
               label="Amount"
+              containerStyle={{ flex: 1, minWidth: 0 }}
+              fieldStyle={{ height: 48, minHeight: 48 }}
+              style={{ paddingVertical: 0 }}
               value={amount}
               onChangeText={(text) => {
                 setAmount(text);
                 setError(undefined);
               }}
               onBlur={() => {
-                const currencyCode = entryMode === 'refund'
-                  ? selectedOriginal?.transaction.currencyCode
-                  : activeAccount?.currencyCode;
+                const currencyCode = amountCurrencyCode;
 
                 if (!currencyCode || !amount.trim()) return;
 
@@ -820,9 +1078,53 @@ export function AddTransactionModal({
                 }
               }}
               onSubmitEditing={() => {
-                const currencyCode = entryMode === 'refund'
-                  ? selectedOriginal?.transaction.currencyCode
-                  : activeAccount?.currencyCode;
+                const currencyCode = amountCurrencyCode;
+
+                if (!currencyCode || !amount.trim()) return;
+
+                const result = resolveAmountExpression(amount, currencyCode);
+
+                if (result !== null) {
+                  setAmount(String(result));
+                } else {
+                  setError('Invalid amount or calculation. Please correct it.');
+                }
+              }}
+              keyboardType="decimal-pad"
+              placeholder="0"
+            />
+                <CurrencyDropdown
+                  label="CURRENCY"
+                  value={amountCurrencyCode ?? activeAccount.currencyCode}
+                  onChange={(value) => {
+                    setTransactionCurrency(value);
+                    setError(undefined);
+                  }}
+                />
+              </View>
+            ) : (
+              <AppInput
+              label="Amount"
+              value={amount}
+              onChangeText={(text) => {
+                setAmount(text);
+                setError(undefined);
+              }}
+              onBlur={() => {
+                const currencyCode = amountCurrencyCode;
+
+                if (!currencyCode || !amount.trim()) return;
+
+                const result = resolveAmountExpression(amount, currencyCode);
+
+                if (result !== null) {
+                  setAmount(String(result));
+                } else {
+                  setError('Invalid amount or calculation. Please correct it.');
+                }
+              }}
+              onSubmitEditing={() => {
+                const currencyCode = amountCurrencyCode;
 
                 if (!currencyCode || !amount.trim()) return;
 
@@ -838,16 +1140,17 @@ export function AddTransactionModal({
               placeholder="0"
               leftElement={
                 <AppText color="textSecondary">
-                  {activeAccount
-                    ? getCurrencyLabel(activeAccount.currencyCode)
+                  {amountCurrencyCode
+                    ? getCurrencyLabel(amountCurrencyCode)
                     : ''}
                 </AppText>
               }
             />
+            )}
 
             <DateField value={date} onChange={setDate} />
 
-            {!isEditingRefund && fxCurrency ? (
+            {!isEditingRefund && fxCurrency && !crossCurrencySelected ? (
               <HistoricalFxField
                 currencyCode={fxCurrency}
                 transactionDate={date}
@@ -866,6 +1169,122 @@ export function AddTransactionModal({
               />
             ) : null}
 
+            {crossCurrencySelected && activeAccount && amountCurrencyCode ? (
+              <DirectHistoricalFxField
+                accountCurrencyCode={activeAccount.currencyCode}
+                transactionCurrencyCode={amountCurrencyCode}
+                rate={directHistoricalRate}
+                loading={fxLoading || originalFxLoading}
+                manualMode={manualDirectSelected}
+                manualRate={directFxManualRate}
+                transactionDate={date}
+                error={manualDirectSelected ? undefined : (fxError || originalFxError)}
+                onFetch={() => {
+                  if (!activeAccount || !amountCurrencyCode || !isValidISODate(date)) {
+                    setError('Select valid currencies and date.');
+                    return;
+                  }
+
+                  setDirectFxManualMode(false);
+                  setDirectFxManualRate('');
+                  setDirectFxManualKey(null);
+                  const accountRequestId = ++fxRequestId.current;
+                  const originalRequestId = ++originalFxRequestId.current;
+
+                  setFxLoading(true);
+                  setOriginalFxLoading(true);
+                  setFxError(undefined);
+                  setOriginalFxError(undefined);
+                  setFxRecord(null);
+                  setOriginalFxRecord(null);
+                  setFxManualMode(false);
+                  setOriginalFxManualMode(false);
+
+                  void Promise.all([
+                    getHistoricalRate(activeAccount.currencyCode, date),
+                    getHistoricalRate(amountCurrencyCode, date),
+                  ]).then(([accountResult, originalResult]) => {
+                    if (
+                      fxRequestId.current !== accountRequestId ||
+                      originalFxRequestId.current !== originalRequestId
+                    ) return;
+
+                    setFxLoading(false);
+                    setOriginalFxLoading(false);
+
+                    if (accountResult.ok) {
+                      setFxRecord({ key: fxKey, snapshot: accountResult.snapshot });
+                    } else {
+                      setFxError(accountResult.reason);
+                    }
+
+                    if (originalResult.ok) {
+                      setOriginalFxRecord({
+                        key: originalFxKey,
+                        snapshot: originalResult.snapshot,
+                      });
+                    } else {
+                      setOriginalFxError(originalResult.reason);
+                    }
+                  });
+                }}
+                onManualMode={() => {
+                  if (manualDirectSelected) {
+                    setDirectFxManualMode(false);
+                    setDirectFxManualRate('');
+                    setDirectFxManualKey(null);
+                  } else {
+                    fxRequestId.current += 1;
+                    originalFxRequestId.current += 1;
+                    setFxLoading(false);
+                    setOriginalFxLoading(false);
+                    setDirectFxManualMode(true);
+                    setDirectFxManualRate('');
+                    setDirectFxManualKey(directFxKey);
+                    setError(undefined);
+                  }
+                }}
+                onManualRateChange={(value) => {
+                  setDirectFxManualRate(value);
+                  setDirectFxManualKey(directFxKey);
+                  setError(undefined);
+                }}
+              />
+            ) : null}
+            {crossCurrencySelected && activeAccount ? (
+              <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
+                <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+                  <AppText variant="caption" color="textSecondary">Estimated Amount</AppText>
+                  <AppText numberOfLines={1} adjustsFontSizeToFit>
+                    {estimatedAccountAmount != null ? formatMoney(estimatedAccountAmount, activeAccount.currencyCode) : '—'}
+                  </AppText>
+                  <AppText variant="caption" color="textSecondary">{activeAccount.currencyCode}</AppText>
+                </View>
+                <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+                  <AppText variant="caption" color="textSecondary">Actual Amount</AppText>
+                  <AppInput
+                    containerStyle={{ minWidth: 0 }}
+                    fieldStyle={{ minHeight: 42, height: 42 }}
+                    style={{ paddingVertical: 0 }}
+                    value={actualAccountDebit}
+                    onChangeText={(value) => {
+                      setActualAccountDebit(value);
+                      setError(undefined);
+                    }}
+                    keyboardType="decimal-pad"
+                    placeholder="Optional"
+                  />
+                  <AppText variant="caption" color="textSecondary">{activeAccount.currencyCode}</AppText>
+                </View>
+                <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+                  <AppText variant="caption" color="textSecondary">Amount to Record</AppText>
+                  <AppText numberOfLines={1} adjustsFontSizeToFit>
+                    {amountToRecord != null ? formatMoney(amountToRecord, activeAccount.currencyCode) : '—'}
+                  </AppText>
+                  <AppText variant="caption" color="textSecondary">{activeAccount.currencyCode}</AppText>
+                </View>
+              </View>
+            ) : null}
             <AppInput
               label="Note (optional)"
               value={note}
@@ -1172,7 +1591,7 @@ export function AddTransactionModal({
       <FormModal visible={visible && typePickerOpen} title="TYPE" onClose={() => setTypePickerOpen(false)}>
         {(['expense', 'income', 'refund'] as const).map(option => (
           <Pressable key={option} onPress={() => { handleEntryModeChange(option); setTypePickerOpen(false); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-            <Ionicons name={option === 'expense' ? 'arrow-up-circle-outline' : option === 'income' ? 'arrow-down-circle-outline' : 'return-down-back-outline'} size={20} color={option === 'expense' ? '#EF4444' : option === 'income' ? '#10B981' : '#3B82F6'} />
+            <Ionicons name={option === 'expense' ? 'arrow-down-circle-outline' : option === 'income' ? 'arrow-up-circle-outline' : 'return-down-back-outline'} size={20} color={option === 'expense' ? '#EF4444' : option === 'income' ? '#10B981' : '#3B82F6'} />
             <AppText>{option === 'expense' ? 'Expense' : option === 'income' ? 'Income' : 'Refund'}</AppText>
           </Pressable>
         ))}
@@ -1364,7 +1783,7 @@ interface AddTransactionModalProps {
 }
 
 const styles = StyleSheet.create({
-  dropdownButton: { minHeight: 48, borderWidth: 1, borderRadius: 10, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dropdownButton: { height: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4 },
   pickerRow: { minHeight: 48, paddingVertical: 12, borderBottomWidth: 1 },
   compactGrid: {
     flexDirection: 'row',

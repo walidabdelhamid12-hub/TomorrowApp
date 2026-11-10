@@ -88,8 +88,21 @@ export interface HistoricalFxSnapshot {
   effectiveRateDate?: ISODate;
   source: 'historical_api' | 'manual';
 }
+/**
+ * Direct historical conversion evidence.
+ * Rate direction: transaction-currency units per one account-currency unit.
+ * Manual evidence must never be represented as an API-derived EGP anchor.
+ */
+export interface DirectHistoricalFxSnapshot {
+  accountCurrencyCode: CurrencyCode;
+  transactionCurrencyCode: CurrencyCode;
+  rate: number;
+  rateDate: ISODate;
+  source: 'historical_api_derived' | 'manual';
+}
 export interface Transaction extends Timestamps {
   historicalFx?: HistoricalFxSnapshot;
+  directHistoricalFx?: DirectHistoricalFxSnapshot;
   id: EntityId;
   type: TransactionType;
 
@@ -105,6 +118,14 @@ export interface Transaction extends Timestamps {
   /** Always positive. The accounting effect depends on type and entryType. */
   amount: number;
 
+  /** Original user-entered amount; optional for legacy transactions. */
+  originalAmount?: number;
+  /** Currency of the original user-entered amount. */
+  originalCurrencyCode?: CurrencyCode;
+  /** Account-currency units per one original-currency unit. */
+  accountFxRate?: number;
+  /** Historical account-currency rate evidence, when conversion is needed. */
+  accountFxSnapshot?: HistoricalFxSnapshot;
   /** Copied from the account when saved. */
   currencyCode: CurrencyCode;
 

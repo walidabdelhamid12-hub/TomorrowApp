@@ -58,7 +58,9 @@ test('1.4 ledger uses shared runtime money guard before rounding', () => {
   assert.match(source, /!isFiniteMoneyInput\(input\.creditLimit\)/);
   assert.match(source, /!isFiniteMoneyInput\(clean\.initialBalance\)/);
   assert.match(source, /!isFiniteMoneyInput\(clean\.creditLimit\)/);
-  assert.ok(source.indexOf('!isFiniteMoneyInput(input.amount)') < source.indexOf('const amount = roundMoney(input.amount)'));
+  const rounding = source.indexOf('const amount = roundMoney(input.amount');
+  assert.ok(rounding >= 0);
+  assert.ok(source.indexOf('!isFiniteMoneyInput(input.amount)') < rounding);
 });
 
 test('1.4 runtime money guard rejects strings, nonfinite and nonnumeric values', () => {
