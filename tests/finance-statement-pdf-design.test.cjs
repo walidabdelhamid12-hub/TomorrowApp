@@ -57,6 +57,23 @@ test('Multiple currencies remain separate without mixed-currency total', () => {
   const html = buildStatementPrintHtml([...rows, { ...rows[0], currency: 'EGP' }],
     { ...period, title: 'Expenses Statement' });
   assert.match(html, /Currencies \(2\)/);
-  assert.match(html, /EGP · OMR/);
+  assert.match(html, /EGP<\/span>/);
+  assert.match(html, /OMR<\/span>/);
+  assert.match(html, /currency-separator/);
   assert.doesNotMatch(html, /Total Expenses/);
+});
+
+test('PDF summary order and inline flag and food icons', () => {
+  const html = buildStatementPrintHtml([
+    { ...rows[0], category: 'Food', currency: 'EGP' },
+    { ...rows[0], category: 'Food', currency: 'USD' },
+  ], { ...period, title: 'Expenses Statement' });
+  const reportType = html.indexOf('<div class="summary-label">Report Type</div>');
+  const transactions = html.indexOf('<div class="summary-label">Transactions</div>');
+  const currencies = html.indexOf('<div class="summary-label">Currencies (2)</div>');
+  assert.ok(reportType >= 0 && reportType < transactions && transactions < currencies);
+  assert.match(html, /<svg[^>]+class="inline-icon"/);
+  assert.match(html, /stroke-linecap="round"/);
+  assert.match(html, /#ce1126/);
+  assert.match(html, /#3c3b6e/);
 });
