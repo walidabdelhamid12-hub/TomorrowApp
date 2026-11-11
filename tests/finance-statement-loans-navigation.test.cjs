@@ -15,3 +15,10 @@ test('Loans statement separates late fees and only reads payments in period', ()
   assert.match(screen, /Late fee:/);
   assert.doesNotMatch(screen, /addLoanPayment|updateLoan|deleteLoan|setState/);
 });
+
+test('Unverified historical rows cannot be presented as complete statements', () => {
+  const screen = read('app/finance/statement-loans.tsx');
+  assert.match(screen, /row\.status === 'available'/);
+  assert.match(screen, /rows\.some\(row => row\.status !== 'available'\)/);
+  assert.match(screen, /Payment details are withheld to avoid misleading totals/);
+});
