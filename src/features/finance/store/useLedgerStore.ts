@@ -490,6 +490,9 @@ export const useLedgerStore = create<LedgerStore>()(
       /* ------------------------------ Accounts ----------------------------- */
 
       addAccount: (input) => {
+        // Reject runtime attempts to bypass the dedicated historical-date verification.
+        // TypeScript's Omit is not a runtime guard against persisted metadata injection.
+        if (Object.prototype.hasOwnProperty.call(input, 'openingBalanceDate')) return '';
         if (!isFiniteMoneyInput(input.initialBalance)
           || (input.creditLimit !== undefined && (!isFiniteMoneyInput(input.creditLimit)))) return '';
         const initialBalance = roundMoney(input.initialBalance);
