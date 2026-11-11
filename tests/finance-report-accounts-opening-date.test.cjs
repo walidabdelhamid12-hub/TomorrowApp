@@ -213,3 +213,25 @@ test('opening-date field uses theme text and border colors', () => {
   assert.match(source, /borderColor: colors\.border/);
   assert.match(source, /placeholderTextColor=\{colors\.textSecondary\}/);
 });
+
+test('Zustand persistence keeps account metadata in v2 without a new migration', () => {
+  const source = fs.readFileSync(path.join(__dirname,
+    '../src/features/finance/store/useLedgerStore.ts'), 'utf8');
+  assert.match(source, /const STORAGE_VERSION = 2/);
+  assert.match(source, /name: 'tomorrow:ledger'/);
+  assert.match(source, /accounts: state\.accounts/);
+  assert.match(source, /const accounts = normalizeRecords<Account>\(saved\.accounts\)/);
+  assert.match(source, /accounts,\s*transactions,\s*transfers,/);
+  assert.doesNotMatch(source, /delete\s+account\.openingBalanceDate/);
+});
+
+test('changing account financial basis clears date while metadata-only edits preserve it', () => {
+  const source = fs.readFileSync(path.join(__dirname,
+    '../src/features/finance/store/useLedgerStore.ts'), 'utf8');
+  const edit = source.slice(source.indexOf('updateAccount: (id, patch) =>'),
+    source.indexOf('setAccountArchived: (id, archived) =>'));
+  assert.match(edit, /safePatch\.initialBalance !== currentAccount\.initialBalance/);
+  assert.match(edit, /safePatch\.currencyCode !== currentAccount\.currencyCode/);
+  assert.match(edit, /financialBasisChanged \? \{ openingBalanceDate: undefined \} : \{\}/);
+  assert.match(edit, /\.\.\.safePatch/);
+});
