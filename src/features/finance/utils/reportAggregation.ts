@@ -7,6 +7,12 @@ export interface ReportPeriod {
   to: string;
 }
 
+/** Exact, case-sensitive IDs; no trimming, coercion, or unfiltered fallback. */
+export interface OperatingReportFilters {
+  readonly accountId?: string;
+  readonly categoryId?: string;
+}
+
 export interface ReportCurrencyTotal {
   currencyCode: string;
   income: number;
@@ -42,6 +48,30 @@ export interface OperatingReport {
   expenseCategories: ReportCategoryTotal[];
   unknown: ReportUnknownTransaction[];
   includedTransactions: number;
+  /** Present only for active filters. Totals are known subtotals when incomplete.
+   * Completeness is relative to the supplied ledger, not verified history. */
+  status?: 'complete' | 'incomplete';
+}
+
+function validateFilters(filters: OperatingReportFilters | undefined): OperatingReportFilters {
+  if (filters === undefined) return {};
+  if (filters === null || typeof filters !== 'object' || Array.isArray(filters)
+    || (Object.getPrototypeOf(filters) !== Object.prototype
+      && Object.getPrototypeOf(filters) !== null)) {
+    throw new Error('Invalid report filters');
+  }
+  const selected: { accountId?: string; categoryId?: string } = {};
+  for (const key of Reflect.ownKeys(filters)) {
+    if (key !== 'accountId' && key !== 'categoryId') {
+      throw new Error('Invalid report filter key');
+    }
+    const value = filters[key];
+    if (typeof value !== 'string' || value.length === 0 || /[\s\u0000-\u001f\u007f]/u.test(value)) {
+      throw new Error('Invalid report filter identifier');
+    }
+    selected[key] = value;
+  }
+  return selected;
 }
 
 function validDate(value: string): boolean {
@@ -121,12 +151,16 @@ function addUnits(
 export function aggregateOperatingReport(
   ctx: ReportClassificationContext,
   period: ReportPeriod,
+  filters?: OperatingReportFilters,
 ): OperatingReport {
   if (!validDate(period.from) || !validDate(period.to)
     || period.from > period.to) {
     throw new Error('Invalid report period');
   }
 
+  const selected = validateFilters(filters);
+  const hasFilters = selected.accountId !== undefined || selected.categoryId !== undefined;
+  // Classification must retain originals and financing evidence outside the selection.
   const classified = classifyReportTransactions(ctx);
   const currencyTotals = new Map<
     string, { income: number; expenses: number }
@@ -140,6 +174,33 @@ export function aggregateOperatingReport(
 
   classified.forEach((item, index) => {
     const tx = ctx.ledger.transactions[index];
+
+    if (hasFilters) {
+      const invalidType = tx.type !== 'income' && tx.type !== 'expense';
+      const unresolvedAccount = selected.accountId !== undefined
+        && tx.accountId !== selected.accountId;
+      // Only a unique, existing account can establish an unrelated account scope.
+      if (unresolvedAccount && typeof tx.accountId === 'string'
+        && ctx.ledger.accounts.filter(account => account.id === tx.accountId).length === 1) return;
+      if (invalidType || unresolvedAccount) {
+        // A valid out-of-period date safely excludes the record. Invalid dates
+        // and raw categories cannot prove that malformed records are irrelevant.
+        if (validDate(tx.date) && (tx.date < period.from || tx.date > period.to)) return;
+        unknown.push({
+          id: tx.id,
+          date: tx.date,
+          reason: invalidType ? 'Invalid or unsupported transaction type'
+            : 'Transaction account identity unavailable or ambiguous',
+        });
+        return;
+      }
+    }
+
+    if (selected.accountId !== undefined && tx.accountId !== selected.accountId) return;
+    // UNKNOWN raw categories are not reliable (especially orphan/protected refunds).
+    // Retain every such diagnostic within the account/date scope for category filters.
+    if (selected.categoryId !== undefined && item.kind !== 'unknown'
+      && (item.categoryId ?? 'uncategorized') !== selected.categoryId) return;
 
     if (!validDate(tx.date)) {
       unknown.push({
@@ -277,5 +338,6 @@ export function aggregateOperatingReport(
     expenseCategories: categoriesToArray(expenseCategories),
     unknown,
     includedTransactions,
+    ...(hasFilters ? { status: unknown.length > 0 ? 'incomplete' as const : 'complete' as const } : {}),
   };
 }
