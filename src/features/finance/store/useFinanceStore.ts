@@ -1,3 +1,4 @@
+import { validateAssetOpeningDate } from '@/features/finance/utils/assetOpeningDate';
 import { isPaymentOperationReceipt, type PaymentOperationReceipt } from '@/features/finance/types/paymentOperations';
 import { reservedPaymentAvailable, reservedPaymentFundingValid } from '@/features/finance/utils/reservedPayments';
 import { canEditLoanPayment, canReverseLoanPayment } from '@/features/finance/utils/loanPaymentPolicy';
@@ -61,6 +62,7 @@ interface FinanceActions {
   addReservedDebtPayment: (receipt: PaymentOperationReceipt) => EntityId | null;
   addReservedLoanPayment: (receipt: PaymentOperationReceipt) => EntityId | null;
   addAsset: (input: NewAssetInput) => EntityId;
+  verifyAssetOpeningBalanceDate: (id: EntityId, date: ISODate) => boolean;
   updateAsset: (id: EntityId, patch: AssetPatch) => void;
   deleteAsset: (id: EntityId) => void;
   clearAssets: () => void;
@@ -400,10 +402,27 @@ export const useFinanceStore = create<FinanceStore>()(
         return asset.id;
       },
 
+      verifyAssetOpeningBalanceDate: (id, date) => {
+        if (!useFinanceStore.persist.hasHydrated()) return false;
+        const snapshot = get();
+        if (!validateAssetOpeningDate(snapshot.assets, id, date).valid) return false;
+        let saved = false;
+        set(state => {
+          if (state.assets !== snapshot.assets) return state;
+          saved = true;
+          return { assets: state.assets.map(asset => asset.id === id
+            ? { ...asset, openingBalanceDate: date, updatedAt: now() } : asset) };
+        });
+        return saved;
+      },
+
       updateAsset: (id, patch) =>
         set((state) => ({
           assets: patchParent(state.assets, id, (asset) =>
-            applyAssetPatch(asset, patch)
+            { const updated = applyAssetPatch(asset, patch);
+              return (patch.currencyCode !== undefined && patch.currencyCode !== ('currencyCode' in asset ? asset.currencyCode : undefined))
+                || (patch.karat !== undefined && patch.karat !== ('karat' in asset ? asset.karat : undefined))
+                ? { ...updated, openingBalanceDate: undefined } : updated; }
           ),
         })),
 
@@ -433,6 +452,8 @@ export const useFinanceStore = create<FinanceStore>()(
         set((state) => ({
           assets: patchParent(state.assets, assetId, (asset) => ({
             ...asset,
+            openingBalanceDate: asset.openingBalanceDate && input.date < asset.openingBalanceDate
+              ? undefined : asset.openingBalanceDate,
             entries: [...asset.entries, entry],
           })),
         }));
@@ -452,6 +473,8 @@ export const useFinanceStore = create<FinanceStore>()(
         set((state) => ({
           assets: patchParent(state.assets, assetId, (asset) => ({
             ...asset,
+            openingBalanceDate: asset.entries.some(entry => entry.id === entryId)
+              ? undefined : asset.openingBalanceDate,
             entries: asset.entries.map((entry) =>
               entry.id === entryId
                 ? { ...entry, ...cleanPatch }
@@ -465,6 +488,8 @@ export const useFinanceStore = create<FinanceStore>()(
         set((state) => ({
           assets: patchParent(state.assets, assetId, (asset) => ({
             ...asset,
+            openingBalanceDate: asset.entries.some(entry => entry.id === entryId)
+              ? undefined : asset.openingBalanceDate,
             entries: asset.entries.filter((entry) => entry.id !== entryId),
           })),
         })),
