@@ -420,7 +420,8 @@ export const useFinanceStore = create<FinanceStore>()(
         set((state) => ({
           assets: patchParent(state.assets, id, (asset) =>
             { const updated = applyAssetPatch(asset, patch);
-              return (patch.currencyCode !== undefined && patch.currencyCode !== ('currencyCode' in asset ? asset.currencyCode : undefined))
+              return (patch.category !== undefined && patch.category !== asset.category)
+                || (patch.currencyCode !== undefined && patch.currencyCode !== ('currencyCode' in asset ? asset.currencyCode : undefined))
                 || (patch.karat !== undefined && patch.karat !== ('karat' in asset ? asset.karat : undefined))
                 ? { ...updated, openingBalanceDate: undefined } : updated; }
           ),
