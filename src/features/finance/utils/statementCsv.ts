@@ -10,10 +10,10 @@ export interface StatementCsvRow {
   amount: string;
   currency: string;
 }
-function csvCell(value: string): string {
+function csvCell(value: string, numeric = false): string {
   // Spreadsheet applications interpret these prefixes as formulas. Quote alone
   // is not sufficient; force text interpretation before CSV escaping.
-  const safe = /^[\s\u0000-\u001f]*[=+@\-]/u.test(value) ? "'" + value : value;
+  const safe = !numeric && /^[\s\u0000-\u001f]*[=+@\-]/u.test(value) ? "'" + value : value;
   return '"' + safe.replace(/"/g, '""') + '"';
 }
 export function serializeStatementCsv(
@@ -30,7 +30,7 @@ export function serializeStatementCsv(
       || !/^-?\d+(?:\.\d+)?$/.test(row.amount)
       || !/^[A-Z]{3}$/.test(row.currency)) throw new Error('Invalid statement export row');
     return [row.date, row.account, row.category, row.note ?? '', row.amount, row.currency]
-      .map(csvCell).join(',');
+      .map((value, index) => csvCell(value, index === 4)).join(',');
   });
   return '\uFEFF' + [header.map(csvCell).join(','), ...data].join('\r\n') + '\r\n';
 }
