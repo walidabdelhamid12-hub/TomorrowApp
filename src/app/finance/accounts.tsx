@@ -95,8 +95,11 @@ export default function AccountsScreen() {
     };
 
     if (editingAccount) {
+      const hasHistory = transactions.some(tx => tx.accountId === editingAccount.id)
+        || transfers.some(transfer => transfer.fromAccountId === editingAccount.id
+          || transfer.toAccountId === editingAccount.id);
       const basisChanged = accountInput.initialBalance !== editingAccount.initialBalance
-        || accountInput.currencyCode !== editingAccount.currencyCode;
+        || (!hasHistory && accountInput.currencyCode !== editingAccount.currencyCode);
       if (basisChanged && editingAccount.openingBalanceDate) {
         Alert.alert(
           'Opening date verification will be cleared',
