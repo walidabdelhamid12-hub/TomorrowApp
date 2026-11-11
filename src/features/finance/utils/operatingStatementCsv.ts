@@ -15,7 +15,6 @@ export interface StatementExportNames {
  */
 export function buildVerifiedOperatingStatementRows(
   statement: IncomeStatementResult | ExpensesStatementResult,
-  kind: 'income' | 'expenses',
   names: StatementExportNames,
 ): StatementCsvRow[] {
   if (!statement.reconciled || statement.report.unknown.length > 0) {
@@ -42,7 +41,7 @@ export function buildOperatingStatementCsv(
   period: { from: string; to: string },
   names: StatementExportNames,
 ): string {
-  return serializeStatementCsv(buildVerifiedOperatingStatementRows(statement, kind, names), {
+  return serializeStatementCsv(buildVerifiedOperatingStatementRows(statement, names), {
     ...period, title: kind === 'income' ? 'Income Statement' : 'Expenses Statement',
   });
 }
