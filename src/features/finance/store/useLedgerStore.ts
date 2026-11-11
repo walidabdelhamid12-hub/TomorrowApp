@@ -41,7 +41,7 @@ import {
   roundMoney,
 } from '@/features/finance/utils/finance';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
-import { aggregateAccountsReport } from '@/features/finance/utils/reportAccounts';
+import { validateAccountOpeningDate } from '@/features/finance/utils/accountOpeningDate';
 
 /* -------------------------------------------------------------------------- */
 /* Store contract                                                             */
@@ -529,17 +529,9 @@ export const useLedgerStore = create<LedgerStore>()(
       },
 
       verifyAccountOpeningBalanceDate: (id, date) => {
-        if (!useLedgerStore.persist.hasHydrated() || !isValidISODate(date)) return false;
+        if (!useLedgerStore.persist.hasHydrated()) return false;
         const state = get();
-        if (state.accounts.filter(account => account.id === id).length !== 1) return false;
-        try {
-          const rows = aggregateAccountsReport(state, { from: date, to: date },
-            [{ accountId: id, openingBalanceDate: date }]);
-          const verified = rows.find(row => row.accountId === id);
-          if (!verified || verified.status !== 'available' || !verified.reconciled) return false;
-        } catch {
-          return false;
-        }
+        if (!validateAccountOpeningDate(state, id, date).valid) return false;
         // Recheck against the latest snapshot inside the setter to avoid stale writes.
         let saved = false;
         set(current => {
