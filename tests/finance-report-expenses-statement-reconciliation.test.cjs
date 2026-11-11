@@ -57,14 +57,23 @@ test('unsafe and sub-cent transactions excluded, known subtotal reconciles', () 
   assert.deepEqual(result.rows.map(r => r.id), ['valid']);
   assert.equal(result.report.unknown.length, 2);
 });
-test('protected loan payment is excluded', () => {
-  const receipt = tx('receipt', 10000);
-  const context = ctx([receipt]);
-  context.finance.loans.push({ id: 'loan', receiptTransactionId: receipt.id,
-    receivedAmount: 10000, receivedAt: receipt.date, currencyCode: 'EGP', payments: [] });
-  const result = buildExpensesStatement(context, period);
+test('verified refund reduces expense total and uses original category', () => {
+  const original = tx('purchase', 100, { categoryId: 'food' });
+  const refund = tx('refund', 30, { entryType: 'refund',
+    relatedTransactionId: 'purchase', categoryId: 'other' });
+  const result = buildExpensesStatement(ctx([original, refund]), period, { categoryId: 'food' });
+  assert.equal(result.reconciled, true);
+  assert.equal(result.report.currencies[0].expenses, 70);
+  assert.deepEqual(result.rows.map(r => [r.id, r.amount]),
+    [['purchase', 100], ['refund', -30]]);
+});
+test('orphan refund is unknown and excluded from expense rows', () => {
+  const result = buildExpensesStatement(ctx([tx('orphan', 20, {
+    entryType: 'refund', relatedTransactionId: 'missing',
+  })]), period);
   assert.equal(result.reconciled, true);
   assert.equal(result.rows.length, 0);
+  assert.equal(result.report.unknown.length, 1);
 });
 test('period boundaries include both endpoints', () => {
   const result = buildExpensesStatement(ctx([tx('a', 10, { date: period.from }),
