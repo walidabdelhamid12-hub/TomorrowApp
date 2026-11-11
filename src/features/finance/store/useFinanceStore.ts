@@ -389,6 +389,7 @@ export const useFinanceStore = create<FinanceStore>()(
 
         const asset: Asset = {
           ...input,
+          openingBalanceDate: undefined,
           id: generateId('ast'),
           entries: [],
           createdAt: timestamp,
