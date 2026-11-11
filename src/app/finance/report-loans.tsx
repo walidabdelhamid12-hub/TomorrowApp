@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 import { AppText, Card, Screen } from '@/components/ui';
 import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { aggregateLoansReport } from '@/features/finance/utils/reportLoans';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { useTheme } from '@/theme';
 
 function monthPeriod(month: string) {
@@ -31,7 +32,7 @@ export default function LoansReportScreen() {
     if (!hydrated) return null;
     try { return aggregateLoansReport(loans, dates); } catch { return null; }
   }, [hydrated, loans, dates]);
-  const format = (value: number | null, currency: string) => value === null ? 'Unavailable' : value.toFixed(3) + ' ' + currency;
+  const format = (value: number | null, currency: string) => value === null ? 'Unavailable' : value.toFixed(getCurrencyDecimals(currency)) + ' ' + currency;
   return <Screen scroll>
     <Pressable accessibilityRole="button" accessibilityLabel="Back to Reports" onPress={() => router.back()}
       style={{ minHeight: 44, justifyContent: 'center' }}>
