@@ -40,5 +40,5 @@ export function serializeStatementCsv(
     return [row.date, row.account, row.category, row.note ?? '', row.amount, row.currency]
       .map((value, index) => csvCell(value, index === 4)).join(',');
   });
-  return '\uFEFF' + [header.map(csvCell).join(','), ...data].join('\r\n') + '\r\n';
+  return '\uFEFF' + [header.map(value => csvCell(value)).join(','), ...data].join('\r\n') + '\r\n';
 }
