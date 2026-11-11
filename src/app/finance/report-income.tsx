@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { AppText, Screen } from '@/components/ui';
@@ -301,8 +301,27 @@ export default function IncomeReportScreen() {
               </AppText>
             </View>
           )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="View Income Statement"
+            onPress={() => router.push({
+              pathname: '/finance/statement-income',
+              params: {
+                from: period.from,
+                to: period.to,
+                ...(accountId ? { accountId } : {}),
+                ...(categoryId ? { categoryId } : {}),
+              },
+            } as Href)}
+            style={{
+              minHeight: 48, marginTop: spacing.lg, borderRadius: 12,
+              backgroundColor: moduleColors.finance, alignItems: 'center',
+              justifyContent: 'center', padding: spacing.sm,
+            }}>
+            <AppText style={{ color: '#FFFFFF', fontWeight: '700' }}>View Statement</AppText>
+          </Pressable>
           <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.lg }}>
-            View Statement and exports are pending.
+            PDF and Excel exports are pending.
           </AppText>
         </>
       )}
