@@ -14,13 +14,14 @@ function period(month: string) {
 function moveMonth(month: string, offset: number) {
   const [year, number] = month.split('-').map(Number);
   const date = new Date(year, number - 1 + offset, 1);
+  if (date.getFullYear() < 100 || date.getFullYear() > 9999) return month;
   return String(date.getFullYear()).padStart(4, '0') + '-' + String(date.getMonth() + 1).padStart(2, '0');
 }
 export default function InstallmentsReportScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
   const saved = useSyncExternalStore(installmentsStorage.subscribe, installmentsStorage.getState, installmentsStorage.getState);
-  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(() => (() => { const d = new Date(); return String(d.getFullYear()).padStart(4, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0'); })());
   useEffect(() => { if (installmentsStorage.getState().hydration === 'idle') void installmentsStorage.hydrate(); }, []);
   const dates = useMemo(() => period(month), [month]);
   const rows = useMemo(() => {
