@@ -9,7 +9,7 @@ const REPORTS = [
   'Installments', 'Loans', 'Debts Receivable', 'Debts Payable',
 ] as const;
 
-/** Reports navigation. Income and Expenses are available; other reports and exports remain pending. */
+/** Reports navigation. Income, Expenses and Accounts are available; other reports and exports remain pending. */
 export default function FinanceReportsScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
@@ -23,13 +23,13 @@ export default function FinanceReportsScreen() {
       </Pressable>
       <AppText variant="h1">Reports</AppText>
       <AppText color="textSecondary" style={{ marginTop: spacing.xs, marginBottom: spacing.lg }}>
-        Income and Expenses reports are available. Additional reports and exports are coming next.
+        Income, Expenses and Accounts reports are available. Additional reports and exports are coming next.
       </AppText>
       {REPORTS.map((name) => (
-        <Pressable key={name} disabled={name !== 'Income' && name !== 'Expenses'}
+        <Pressable key={name} disabled={name !== 'Income' && name !== 'Expenses' && name !== 'Accounts'}
           accessibilityRole="button"
           accessibilityLabel={`Open ${name} report`}
-          onPress={() => router.push((name === 'Expenses' ? '/finance/report-expenses' : '/finance/report-income') as Href)} style={{
+          onPress={() => router.push((name === 'Expenses' ? '/finance/report-expenses' : name === 'Accounts' ? '/finance/report-accounts' : '/finance/report-income') as Href)} style={{
           padding: spacing.md, marginBottom: spacing.sm, borderRadius: 12,
           borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
           flexDirection: 'row', alignItems: 'center',
@@ -37,7 +37,7 @@ export default function FinanceReportsScreen() {
           <Ionicons name="bar-chart-outline" size={20} color={moduleColors.finance} />
           <View style={{ marginLeft: spacing.sm, flex: 1 }}>
             <AppText variant="bodyStrong">{name}</AppText>
-            <AppText variant="caption" color="textSecondary">{name === 'Income' || name === 'Expenses' ? 'View report' : 'Integration pending'}</AppText>
+            <AppText variant="caption" color="textSecondary">{name === 'Income' || name === 'Expenses' || name === 'Accounts' ? 'View report' : 'Integration pending'}</AppText>
           </View>
         </Pressable>
       ))}
