@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - codex/finance-3-1-linked-payments
+  pull_request:
+    branches:
+      - codex/finance-3-1-linked-payments
   workflow_dispatch:
 
 permissions:

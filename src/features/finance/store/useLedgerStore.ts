@@ -41,6 +41,7 @@ import {
   roundMoney,
 } from '@/features/finance/utils/finance';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
+import { validateAccountOpeningDate } from '@/features/finance/utils/accountOpeningDate';
 
 /* -------------------------------------------------------------------------- */
 /* Store contract                                                             */
@@ -52,6 +53,8 @@ interface LedgerActions {
   // Accounts
   addAccount: (input: NewAccountInput) => EntityId;
   updateAccount: (id: EntityId, patch: AccountPatch) => void;
+  /** Explicit metadata-only verification; never edits financial balances. */
+  verifyAccountOpeningBalanceDate: (id: EntityId, date: string) => boolean;
   setAccountArchived: (id: EntityId, archived: boolean) => void;
   deleteAccount: (id: EntityId) => boolean;
   clearAccountsAndTransactions: () => boolean;
@@ -487,6 +490,9 @@ export const useLedgerStore = create<LedgerStore>()(
       /* ------------------------------ Accounts ----------------------------- */
 
       addAccount: (input) => {
+        // Reject runtime attempts to bypass the dedicated historical-date verification.
+        // TypeScript's Omit is not a runtime guard against persisted metadata injection.
+        if (Object.prototype.hasOwnProperty.call(input, 'openingBalanceDate')) return '';
         if (!isFiniteMoneyInput(input.initialBalance)
           || (input.creditLimit !== undefined && (!isFiniteMoneyInput(input.creditLimit)))) return '';
         const initialBalance = roundMoney(input.initialBalance);
@@ -525,8 +531,26 @@ export const useLedgerStore = create<LedgerStore>()(
         return account.id;
       },
 
+      verifyAccountOpeningBalanceDate: (id, date) => {
+        if (!useLedgerStore.persist.hasHydrated()) return false;
+        const state = get();
+        if (!validateAccountOpeningDate(state, id, date).valid) return false;
+        // Recheck against the latest snapshot inside the setter to avoid stale writes.
+        let saved = false;
+        set(current => {
+          if (current !== state && (current.accounts !== state.accounts
+            || current.transactions !== state.transactions || current.transfers !== state.transfers)) return current;
+          saved = true;
+          return { accounts: current.accounts.map(account => account.id === id
+            ? { ...account, openingBalanceDate: date, updatedAt: now() } : account) };
+        });
+        return saved;
+      },
+
       updateAccount: (id, patch) =>
         set((state) => {
+          // Metadata is writable only through verifyAccountOpeningBalanceDate.
+          if (Object.prototype.hasOwnProperty.call(patch, 'openingBalanceDate')) return state;
           const clean = definedOnly(patch);
 
           if (clean.initialBalance !== undefined && (!isFiniteMoneyInput(clean.initialBalance))) return state;
@@ -576,10 +600,21 @@ export const useLedgerStore = create<LedgerStore>()(
                 }
               : clean;
 
+          const financialBasisChanged =
+            (safePatch.initialBalance !== undefined
+              && safePatch.initialBalance !== currentAccount.initialBalance)
+            || (safePatch.currencyCode !== undefined
+              && safePatch.currencyCode !== currentAccount.currencyCode);
+
           return {
             accounts: state.accounts.map((account) =>
               account.id === id
-                ? { ...account, ...safePatch, updatedAt: now() }
+                ? {
+                    ...account,
+                    ...safePatch,
+                    ...(financialBasisChanged ? { openingBalanceDate: undefined } : {}),
+                    updatedAt: now(),
+                  }
                 : account
             ),
           };

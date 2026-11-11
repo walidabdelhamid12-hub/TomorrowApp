@@ -86,7 +86,7 @@ function AccountSummary({ row }: { row: AccountReportRow }) {
   );
 }
 
-/** Read-only presentation. No verified history-basis source exists in the account schema yet. */
+/** Read-only presentation; uses only explicitly verified account history bases. */
 export default function AccountsReportScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
@@ -104,8 +104,9 @@ export default function AccountsReportScreen() {
   const period = useMemo(() => monthPeriod(month), [month]);
   const rows = useMemo(() => ready ? aggregateAccountsReport(
     { accounts, categories, transactions, transfers }, { from: period.from, to: period.to },
-    // No inferred dates or persistent fields. The engine reports missing verified history.
-    [],
+    // Only explicit, stored verification dates qualify as historical bases.
+    accounts.filter(account => typeof account.openingBalanceDate === 'string')
+      .map(account => ({ accountId: account.id, openingBalanceDate: account.openingBalanceDate! })),
   ) : null, [ready, accounts, categories, transactions, transfers, period]);
   // Filter AFTER aggregation so refund originals and both transfer legs stay available.
   const selectedRows = rows?.filter(row => accountId === null || row.accountId === accountId);

@@ -23,6 +23,8 @@ export interface Account extends Timestamps {
   currencyCode: CurrencyCode;
   /** Balance when the account was added. Current balance is derived. */
   initialBalance: number;
+  /** User-verified: initialBalance applies before movements on this date. */
+  openingBalanceDate?: ISODate;
   /** Credit limit for credit-card accounts. Not an asset or cash balance. */
   creditLimit?: number;
   /** Hidden from pickers but kept so old transactions stay valid. */
@@ -34,7 +36,7 @@ export interface Account extends Timestamps {
 
 export type NewAccountInput = Omit<
   Account,
-  'id' | 'archived' | 'createdAt' | 'updatedAt'
+  'id' | 'archived' | 'createdAt' | 'updatedAt' | 'openingBalanceDate'
 > & { archived?: boolean };
 
 export type AccountPatch = Partial<NewAccountInput>;

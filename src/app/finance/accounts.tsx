@@ -24,6 +24,7 @@ import {
 } from '@/features/finance/store/useLedgerStore';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
+import { isValidISODate } from '@/features/finance/utils/input';
 import { moduleColors, useTheme } from '@/theme';
 
 export default function AccountsScreen() {
@@ -38,6 +39,7 @@ export default function AccountsScreen() {
   const transfers = useLedgerStore((state) => state.transfers);
 
   const addAccount = useLedgerStore((state) => state.addAccount);
+  const verifyOpeningDate = useLedgerStore((state) => state.verifyAccountOpeningBalanceDate);
   const updateAccount = useLedgerStore((state) => state.updateAccount);
   const deleteAccount = useLedgerStore((state) => state.deleteAccount);
 
@@ -93,9 +95,40 @@ export default function AccountsScreen() {
     };
 
     if (editingAccount) {
+      const hasHistory = transactions.some(tx => tx.accountId === editingAccount.id)
+        || transfers.some(transfer => transfer.fromAccountId === editingAccount.id
+          || transfer.toAccountId === editingAccount.id);
+      const basisChanged = accountInput.initialBalance !== editingAccount.initialBalance
+        || (!hasHistory && accountInput.currencyCode !== editingAccount.currencyCode);
+      if (basisChanged && editingAccount.openingBalanceDate) {
+        Alert.alert(
+          'Opening date verification will be cleared',
+          'Changing the starting balance or currency invalidates the verified opening date. The account history and existing movements will not be changed.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Continue', onPress: () => {
+              updateAccount(editingAccount.id, accountInput);
+              closeModal();
+            } },
+          ],
+        );
+        return;
+      }
       updateAccount(editingAccount.id, accountInput);
     } else {
-      addAccount(accountInput);
+      if (data.openingBalanceDate && !isValidISODate(data.openingBalanceDate)) {
+        Alert.alert('Invalid opening date', 'Enter a real calendar date in YYYY-MM-DD format.');
+        return;
+      }
+      const newAccountId = addAccount(accountInput);
+      if (!newAccountId) {
+        Alert.alert('Account not saved', 'Check the starting balance and currency.');
+        return;
+      }
+      if (data.openingBalanceDate && !verifyOpeningDate(newAccountId, data.openingBalanceDate)) {
+        Alert.alert('Opening date not verified',
+          'The account was created, but its opening date could not be verified. Open account details to review and verify it.');
+      }
     }
 
     closeModal();
