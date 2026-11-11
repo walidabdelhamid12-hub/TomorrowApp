@@ -93,6 +93,22 @@ export default function AccountsScreen() {
     };
 
     if (editingAccount) {
+      const basisChanged = accountInput.initialBalance !== editingAccount.initialBalance
+        || accountInput.currencyCode !== editingAccount.currencyCode;
+      if (basisChanged && editingAccount.openingBalanceDate) {
+        Alert.alert(
+          'Opening date verification will be cleared',
+          'Changing the starting balance or currency invalidates the verified opening date. The account history and existing movements will not be changed.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Continue', onPress: () => {
+              updateAccount(editingAccount.id, accountInput);
+              closeModal();
+            } },
+          ],
+        );
+        return;
+      }
       updateAccount(editingAccount.id, accountInput);
     } else {
       addAccount(accountInput);
