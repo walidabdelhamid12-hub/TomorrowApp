@@ -149,3 +149,18 @@ test('account edits warn before invalidating a verified financial basis', () => 
   assert.match(source, /Cancel.*style: 'cancel'/s);
   assert.match(source, /Continue.*onPress/s);
 });
+
+test('new account form requires explicit opening date confirmation', () => {
+  const source = fs.readFileSync(path.join(__dirname,
+    '../src/features/finance/components/AddAccountModal.tsx'), 'utf8');
+  assert.match(source, /openingBalanceDate\?: string/);
+  assert.match(source, /openingDateConfirmed/);
+  assert.match(source, /Confirmation required/);
+  assert.match(source, /!account && openingDate\.trim\(\)/);
+});
+test('account creation never assumes the date and warns if metadata verification fails', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/app/finance/accounts.tsx'), 'utf8');
+  assert.match(source, /isValidISODate\(data\.openingBalanceDate\)/);
+  assert.match(source, /verifyOpeningDate\(newAccountId, data\.openingBalanceDate\)/);
+  assert.match(source, /Opening date not verified/);
+});
