@@ -53,6 +53,8 @@ interface AssetBase extends Timestamps {
   name: string;
   notes?: string;
   entries: AssetEntry[];
+  /** User-confirmed start of complete asset movement history, before movements on this date. */
+  openingBalanceDate?: ISODate;
 }
 
 export interface LocalCurrencyAsset extends AssetBase {
@@ -82,7 +84,7 @@ export type Asset =
 
 export type NewAssetInput = DistributiveOmit<
   Asset,
-  'id' | 'entries' | 'createdAt' | 'updatedAt'
+  'id' | 'entries' | 'createdAt' | 'updatedAt' | 'openingBalanceDate'
 >;
 
 export interface AssetPatch {
