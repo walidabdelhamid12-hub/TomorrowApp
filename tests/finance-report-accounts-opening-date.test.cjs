@@ -141,3 +141,11 @@ test('account details requires explicit user confirmation before metadata-only v
   assert.match(source, /validateAccountOpeningDate/);
   assert.doesNotMatch(source, /updateAccount\(|addTransaction\(|addTransfer\(/);
 });
+
+test('account edits warn before invalidating a verified financial basis', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/app/finance/accounts.tsx'), 'utf8');
+  assert.match(source, /basisChanged && editingAccount\.openingBalanceDate/);
+  assert.match(source, /Opening date verification will be cleared/);
+  assert.match(source, /Cancel.*style: 'cancel'/s);
+  assert.match(source, /Continue.*onPress/s);
+});
