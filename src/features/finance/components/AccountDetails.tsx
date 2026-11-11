@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, TextInput, View } from 'react-native';
 import { validateAccountOpeningDate } from '@/features/finance/utils/accountOpeningDate';
 import { AppText } from '@/components/ui';
+import { useTheme } from '@/theme';
 import { FinanceDisclosure } from './FinanceDisclosure';
 import { ACCOUNT_TYPE_LABELS } from './AccountCard';
 import { FinanceDetailsModal } from '@/features/finance/components/FinanceDetailsModal';
@@ -10,6 +11,7 @@ import { getAccountBalance } from '@/features/finance/utils/ledger';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 
 export function AccountDetails({ accountId, onClose, amountsVisible = true }: { accountId: string | null; onClose: () => void; amountsVisible?: boolean }) {
+  const { colors } = useTheme();
   const [openingDateDraft, setOpeningDateDraft] = useState('');
   useEffect(() => { setOpeningDateDraft(''); }, [accountId]);
   const verifyOpeningDate = useLedgerStore(s => s.verifyAccountOpeningBalanceDate);
@@ -76,8 +78,9 @@ export function AccountDetails({ accountId, onClose, amountsVisible = true }: { 
           value={openingDateDraft} onChangeText={setOpeningDateDraft}
           placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"
           autoCorrect={false} maxLength={10}
-          style={{ borderWidth: 1, borderColor: '#888888', borderRadius: 8,
-            minHeight: 44, paddingHorizontal: 12, color: '#888888' }} />
+          placeholderTextColor={colors.textSecondary}
+          style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8,
+            minHeight: 44, paddingHorizontal: 12, color: colors.text }} />
         <Pressable accessibilityRole="button" accessibilityLabel="Verify opening balance date"
           onPress={submitOpeningDate}
           style={{ minHeight: 44, justifyContent: 'center', paddingVertical: 8 }}>
