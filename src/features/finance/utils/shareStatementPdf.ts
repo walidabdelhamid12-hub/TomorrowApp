@@ -11,13 +11,14 @@ export async function shareStatementPdf(html: string): Promise<void> {
   if (!(await Sharing.isAvailableAsync())) {
     throw new Error('File sharing is not available on this device.');
   }
-  const { uri } = await Print.printToFileAsync({ html });
-  const source = new File(uri);
-  if (!source.exists || source.size <= 0) {
-    throw new Error('The generated PDF is missing or empty.');
+  // Use the PDF bytes returned by expo-print instead of trying to read its
+  // temporary URI, which may be inaccessible to expo-file-system on Android.
+  const { base64 } = await Print.printToFileAsync({ html, base64: true });
+  if (!base64 || !base64.startsWith('JVBERi0')) {
+    throw new Error('PDF generation did not return valid PDF data.');
   }
   const target = new File(Paths.cache, 'tomorrow-statement-' + Date.now() + '.pdf');
-  source.copy(target);
+  target.write(base64, { encoding: 'base64' });
   if (!target.exists || target.size <= 0) {
     throw new Error('Unable to prepare the PDF for sharing.');
   }
