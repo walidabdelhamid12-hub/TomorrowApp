@@ -62,3 +62,11 @@ test('asset denomination changes invalidate verification', () => {
   assert.match(section, /patch\.karat !== undefined/);
   assert.match(section, /openingBalanceDate: undefined/);
 });
+
+test('asset creation cannot inject verified history date', () => {
+  const types = fs.readFileSync(path.join(__dirname, '../src/features/finance/types/finance.ts'), 'utf8');
+  const store = fs.readFileSync(path.join(__dirname, '../src/features/finance/store/useFinanceStore.ts'), 'utf8');
+  assert.match(types, /'id' \| 'entries' \| 'createdAt' \| 'updatedAt' \| 'openingBalanceDate'/);
+  const section = store.slice(store.lastIndexOf('addAsset: (input) =>'), store.lastIndexOf('verifyAssetOpeningBalanceDate: (id, date) =>'));
+  assert.match(section, /\.\.\.input,\s*openingBalanceDate: undefined,/);
+});
