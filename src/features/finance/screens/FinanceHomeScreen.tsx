@@ -3,7 +3,7 @@ import { useFinanceConfirmation } from '@/features/finance/components/useFinance
 import { useFinancePreferences } from '@/features/finance/store/useFinancePreferences';
 
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { useState } from 'react';
 import {
@@ -592,6 +592,28 @@ export default function FinanceHomeScreen() {
         </View>
       </View>
 
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open financial reports"
+        onPress={() => router.push('/finance/reports' as Href)}
+        style={{
+          marginTop: spacing.md,
+          padding: spacing.md,
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+          borderRadius: 12,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          <Ionicons name="bar-chart-outline" size={20} color={accent} />
+          <AppText variant="bodyStrong">Reports</AppText>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+      </Pressable>
       <TransactionsSection
         onManage={openLinkedTransaction}
         amountsVisible={amountsVisible}
