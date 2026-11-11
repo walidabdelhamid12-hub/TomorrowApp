@@ -3,8 +3,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 /**
- * Print's temporary URI may be outside the shareable Expo file directory on
- * Android. Copy into the app cache before asking the OS to share it.
+ * Materialize Print's PDF bytes in the Expo app cache for local-file sharing.
  * No ledger writes or persistent document storage.
  */
 export async function shareStatementPdf(html: string): Promise<void> {
@@ -18,7 +17,8 @@ export async function shareStatementPdf(html: string): Promise<void> {
     throw new Error('PDF generation did not return valid PDF data.');
   }
   const target = new File(Paths.cache, 'tomorrow-statement-' + Date.now() + '.pdf');
-  target.write(base64, { encoding: 'base64' });
+  // SDK 58 File.write is asynchronous: metadata and sharing must wait for IO.
+  await target.write(base64, { encoding: 'base64' });
   if (!target.exists || target.size <= 0) {
     throw new Error('Unable to prepare the PDF for sharing.');
   }
