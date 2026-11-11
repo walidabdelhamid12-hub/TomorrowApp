@@ -21,6 +21,7 @@ for (const extension of ['.ts', '.tsx']) {
   };
 }
 const { aggregateAccountsReport } = require('../src/features/finance/utils/reportAccounts.ts');
+const { validateAccountOpeningDate } = require('../src/features/finance/utils/accountOpeningDate.ts');
 const baseAccount = extra => ({
   id: 'bank', name: 'Bank', type: 'bank', currencyCode: 'EGP',
   initialBalance: 100, archived: false, createdAt: '2026-01-01T00:00:00Z',
@@ -91,4 +92,42 @@ test('Accounts Report passes only stored opening dates to aggregation', () => {
     '../src/app/finance/report-accounts.tsx'), 'utf8');
   assert.match(source, /account\.openingBalanceDate/);
   assert.doesNotMatch(source, /openingBalanceDate:\s*account\.createdAt/);
+});
+
+test('opening date validator accepts verified history and never mutates ledger', () => {
+  const ledger = data(baseAccount());
+  const before = JSON.stringify(ledger);
+  assert.deepEqual(validateAccountOpeningDate(ledger, 'bank', '2026-11-01'), { valid: true });
+  assert.equal(JSON.stringify(ledger), before);
+});
+test('opening date validator rejects impossible dates and unknown accounts', () => {
+  const ledger = data(baseAccount());
+  for (const date of ['2026-02-30', '2026-11-31', 'bad', '']) {
+    const result = validateAccountOpeningDate(ledger, 'bank', date);
+    assert.equal(result.valid, false, date);
+  }
+  assert.equal(validateAccountOpeningDate(ledger, 'missing', '2026-11-01').valid, false);
+});
+test('opening date validator rejects transactions earlier than verified basis', () => {
+  const ledger = data(baseAccount(), [{
+    id: 'old', accountId: 'bank', currencyCode: 'EGP',
+    type: 'income', amount: 5, date: '2026-10-31',
+  }]);
+  const result = validateAccountOpeningDate(ledger, 'bank', '2026-11-01');
+  assert.equal(result.valid, false);
+  assert.match(result.reason, /predate/i);
+});
+test('opening date validator rejects ambiguous accounts and unsafe precision', () => {
+  const duplicate = data(baseAccount());
+  duplicate.accounts.push(baseAccount());
+  assert.equal(validateAccountOpeningDate(duplicate, 'bank', '2026-11-01').valid, false);
+  const invalid = data(baseAccount({ initialBalance: 0.001 }));
+  assert.equal(validateAccountOpeningDate(invalid, 'bank', '2026-11-01').valid, false);
+});
+test('opening date validator rejects invalid linked transfer history', () => {
+  const ledger = data(baseAccount(), [], [{
+    id: 'transfer', fromAccountId: 'bank', toAccountId: 'unknown',
+    amount: 10, currencyCode: 'EGP', type: 'internal', date: '2026-11-01',
+  }]);
+  assert.equal(validateAccountOpeningDate(ledger, 'bank', '2026-11-01').valid, false);
 });
