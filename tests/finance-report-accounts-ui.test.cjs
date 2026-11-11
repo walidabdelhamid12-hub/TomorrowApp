@@ -182,6 +182,7 @@ test('8.3B Reports enables only the three implemented routes', () => {
 
 test('8.3B wiring never adds history fields, writes, FX conversion or a statement route', () => {
   const source = fs.readFileSync(path.join(root, 'src/app/finance/report-accounts.tsx'), 'utf8');
-  assert.doesNotMatch(source, /createdAt|openingBalanceDate|AsyncStorage|useFinanceStore|useCurrencyStore|statement-accounts|View Statement/);
+  assert.doesNotMatch(source, /createdAt|AsyncStorage|useFinanceStore|useCurrencyStore|statement-accounts|View Statement/);
+  assert.match(source, /account\.openingBalanceDate/);
   assert.doesNotMatch(source, /\b(addAccount|updateAccount|addTransaction|updateTransaction|addTransfer|setState|setItem)\s*\(/);
 });
