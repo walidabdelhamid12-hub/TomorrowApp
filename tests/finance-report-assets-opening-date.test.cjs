@@ -39,3 +39,26 @@ test('historical availability is explicit and period-scoped', () => {
   assert.equal(assetReportHistoryAvailable(asset([], { openingBalanceDate: '2026-11-03' }), '2026-11-01'), false);
   assert.equal(assetReportHistoryAvailable(asset([], { openingBalanceDate: '2026-11-03' }), '2026-12-01'), true);
 });
+
+test('changing a verified movement invalidates opening-history verification in the store', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/finance/store/useFinanceStore.ts'), 'utf8');
+  const section = source.slice(source.lastIndexOf('updateAssetEntry: (assetId, entryId, patch) =>'), source.lastIndexOf('deleteAssetEntry: (assetId, entryId) =>'));
+  assert.match(section, /openingBalanceDate:\s*asset\.entries\.some\(entry => entry\.id === entryId\)\s*\? undefined/);
+});
+test('deleting a verified movement invalidates opening-history verification in the store', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/finance/store/useFinanceStore.ts'), 'utf8');
+  const section = source.slice(source.lastIndexOf('deleteAssetEntry: (assetId, entryId) =>'), source.indexOf('/* Debts */'));
+  assert.match(section, /openingBalanceDate:\s*asset\.entries\.some\(entry => entry\.id === entryId\)\s*\? undefined/);
+});
+test('backdated movements invalidate verification, later movements retain it', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/finance/store/useFinanceStore.ts'), 'utf8');
+  const section = source.slice(source.lastIndexOf('addAssetEntry: (assetId, input) =>'), source.lastIndexOf('updateAssetEntry: (assetId, entryId, patch) =>'));
+  assert.match(section, /input\.date < asset\.openingBalanceDate\s*\? undefined : asset\.openingBalanceDate/);
+});
+test('asset denomination changes invalidate verification', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/finance/store/useFinanceStore.ts'), 'utf8');
+  const section = source.slice(source.lastIndexOf('updateAsset: (id, patch) =>'), source.lastIndexOf('deleteAsset: (id) =>'));
+  assert.match(section, /patch\.currencyCode !== undefined/);
+  assert.match(section, /patch\.karat !== undefined/);
+  assert.match(section, /openingBalanceDate: undefined/);
+});
