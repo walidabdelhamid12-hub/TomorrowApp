@@ -192,3 +192,16 @@ test('same-day movements are allowed after opening balance; later backdating inv
   assert.equal(validateAccountOpeningDate(ledger, 'bank', account.openingBalanceDate).valid, false);
   assert.equal(report(ledger).status, 'historical_data_unavailable');
 });
+
+test('malformed opening date from persisted JSON fails closed without changing balances', () => {
+  const ledger = JSON.parse(JSON.stringify(data(baseAccount({
+    openingBalanceDate: '2026-02-30',
+  }))));
+  const before = JSON.stringify(ledger);
+  const row = report(ledger);
+  assert.equal(row.status, 'historical_data_unavailable');
+  assert.equal(row.openingBalance, null);
+  assert.equal(row.closingBalance, null);
+  assert.equal(row.change, null);
+  assert.equal(JSON.stringify(ledger), before);
+});
