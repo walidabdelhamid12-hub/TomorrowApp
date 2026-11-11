@@ -27,7 +27,7 @@ export default function LoansStatementScreen() {
   }, [hydrated, loans, period]);
   const entries = useMemo(() => {
     if (!rows || !period) return [];
-    const safe = new Set(rows.filter(row => row.totalPaid !== null && row.periodPaid !== null).map(row => row.loanId));
+    const safe = new Set(rows.filter(row => row.status === 'available' && row.totalPaid !== null && row.periodPaid !== null).map(row => row.loanId));
     return loans.filter(loan => safe.has(loan.id)).flatMap(loan =>
       loan.payments.filter(payment => payment.date >= period.from && payment.date <= period.to)
         .map(payment => ({ id: loan.id + ':' + payment.id, name: loan.name,
