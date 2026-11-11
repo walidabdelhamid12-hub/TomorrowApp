@@ -16,6 +16,8 @@ export default function AssetsStatementScreen() {
   const assets = useFinanceStore(state => state.assets);
   const month = typeof params.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month) ? params.month : null;
   const assetId = typeof params.assetId === 'string' ? params.assetId : '';
+  const filterValid = params.assetId === undefined || (typeof params.assetId === 'string'
+    && params.assetId.length > 0 && !/[\\s\\u0000-\\u001f\\u007f]/u.test(params.assetId));
   const period = useMemo(() => {
     if (!month) return null;
     const [year, number] = month.split('-').map(Number);
@@ -42,7 +44,7 @@ export default function AssetsStatementScreen() {
           note: entry.note })))
       .sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   }, [rows, period, assets, assetId]);
-  const selectionValid = !assetId || assets.filter(asset => asset.id === assetId).length === 1;
+  const selectionValid = filterValid && (!assetId || assets.filter(asset => asset.id === assetId).length === 1);
   const incomplete = !!rows && rows.some(row => (!assetId || row.assetId === assetId) && !assets.some(asset =>
     asset.id === row.assetId && row.status === 'available' && !!asset.openingBalanceDate
       && validateAssetOpeningDate(assets, asset.id, asset.openingBalanceDate).valid
