@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Pressable, View } from 'react-native';
 import { AppText, Card, Screen } from '@/components/ui';
 import { installmentsStorage } from '@/features/finance/store/installmentsStorage';
-import { aggregateSavedInstallmentsReport } from '@/features/finance/utils/reportSavedInstallments';
+import { aggregateSavedInstallmentsReport, summarizeSavedInstallmentsByCurrency } from '@/features/finance/utils/reportSavedInstallments';
 import { useTheme } from '@/theme';
 
 function period(month: string) {
@@ -29,6 +29,7 @@ export default function InstallmentsReportScreen() {
     try { return aggregateSavedInstallmentsReport(saved.contracts, dates.from, dates.to); }
     catch { return null; }
   }, [saved, dates]);
+  const summary = useMemo(() => rows === null ? [] : summarizeSavedInstallmentsByCurrency(rows), [rows]);
   return <Screen scroll>
     <Pressable accessibilityRole="button" accessibilityLabel="Back to Reports" onPress={() => router.back()}
       style={{ minHeight: 44, justifyContent: 'center' }}>
@@ -54,7 +55,16 @@ export default function InstallmentsReportScreen() {
       saved.hydration !== 'ready' ? <Card><AppText>Loading contracts...</AppText></Card> :
       rows === null ? <Card><AppText color="danger">Report data could not be validated.</AppText></Card> :
       rows.length === 0 ? <Card><AppText>No installment contracts yet.</AppText></Card> :
-      rows.map(row => <Card key={row.id} style={{ marginBottom: spacing.sm }}>
+      <View>
+        <AppText variant="bodyStrong" style={{ marginBottom: spacing.sm }}>Summary by currency · {rows.length} contracts</AppText>
+        {summary.map(item => <Card key={item.currencyCode} style={{ marginBottom: spacing.sm }}>
+          <AppText variant="bodyStrong">{item.currencyCode} · {item.contractCount} contracts</AppText>
+          <AppText>All scheduled contracts: {item.totalScheduled} {item.currencyCode}</AppText>
+          <AppText>Due this month: {item.dueInPeriod} {item.currencyCode}</AppText>
+          <AppText color="textSecondary">{item.dueCount} installments due this month</AppText>
+        </Card>)}
+        <AppText variant="bodyStrong" style={{ marginBottom: spacing.sm }}>Contract details</AppText>
+        {rows.map(row => <Card key={row.id} style={{ marginBottom: spacing.sm }}>
         <Pressable accessibilityRole="button" accessibilityLabel={"Open installment contract " + row.name}
           onPress={() => router.push({ pathname: '/finance/installment-contract', params: { id: row.id, mode: 'details' } })}
           style={{ minHeight: 44, justifyContent: 'center' }}>
@@ -66,5 +76,6 @@ export default function InstallmentsReportScreen() {
         <AppText color="textSecondary">View contract details ›</AppText>
         </Pressable>
       </Card>)}
+      </View>}
   </Screen>;
 }
