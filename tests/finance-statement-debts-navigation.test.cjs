@@ -15,3 +15,10 @@ test('statement lists period-filtered recorded payments and never writes', () =>
   assert.match(statement, /Recorded payments only/);
   assert.doesNotMatch(statement, /addDebtPayment|deleteDebtPayment|updateDebtPayment|setState/);
 });
+
+test('Unverified historical rows cannot be presented as complete statements', () => {
+  const screen = read('app/finance/statement-debts.tsx');
+  assert.match(screen, /row\.status === 'available'/);
+  assert.match(screen, /rows\.some\(row => row\.status !== 'available'\)/);
+  assert.match(screen, /Payment details are withheld to avoid misleading totals/);
+});
