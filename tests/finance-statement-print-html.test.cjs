@@ -31,4 +31,5 @@ test('Printable statement rejects malformed rows and period', () => {
   assert.throws(() => buildStatementPrintHtml([row], { ...period, from: '2026-02-01' }), /metadata/);
   assert.throws(() => buildStatementPrintHtml([{ ...row, amount: '=1+1' }], period), /row/);
   assert.throws(() => buildStatementPrintHtml([{ ...row, currency: 'egp' }], period), /row/);
+  assert.throws(() => buildStatementPrintHtml([row], { ...period, to: '2026-02-30' }), /metadata/);
 });
