@@ -167,6 +167,60 @@ export default function IncomeReportScreen() {
               </AppText>
             </View>
           ))}
+          <AppText variant="h3" style={{ marginTop: spacing.lg }}>Income by Category</AppText>
+          <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
+            Income categories are grouped by account currency. Figures reflect the selected filters.
+          </AppText>
+          {report.incomeCategories.length === 0 ? (
+            <AppText color="textSecondary">No classified income categories for this selection.</AppText>
+          ) : (
+            [...new Set(report.incomeCategories.map(item => item.currencyCode))]
+              .sort()
+              .map(currencyCode => {
+                const rows = report.incomeCategories
+                  .filter(item => item.currencyCode === currencyCode)
+                  .sort((a, b) => b.amount - a.amount || a.categoryId.localeCompare(b.categoryId));
+                const top = rows.find(item => item.amount > 0);
+                return (
+                  <View key={currencyCode} style={{
+                    backgroundColor: colors.surface, borderColor: colors.border,
+                    borderWidth: 1, borderRadius: 12, padding: spacing.md,
+                    marginBottom: spacing.sm,
+                  }}>
+                    <AppText variant="bodyStrong" style={{ marginBottom: spacing.sm }}>
+                      {currencyCode}
+                    </AppText>
+                    {top && (
+                      <AppText color="textSecondary" style={{ marginBottom: spacing.sm }}>
+                        Top category: {categories.find(category => category.id === top.categoryId)?.name
+                          ?? (top.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category')}
+                      </AppText>
+                    )}
+                    {rows.map(item => (
+                      <View key={item.categoryId} style={{
+                        flexDirection: 'row', justifyContent: 'space-between',
+                        alignItems: 'center', marginBottom: spacing.sm,
+                      }}>
+                        <View style={{ flex: 1, marginRight: spacing.sm }}>
+                          <AppText>
+                            {categories.find(category => category.id === item.categoryId)?.name
+                              ?? (item.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category')}
+                          </AppText>
+                        </View>
+                        <AppText variant="bodyStrong">
+                          {formatAmount(item.amount, currencyCode)}
+                        </AppText>
+                      </View>
+                    ))}
+                  </View>
+                );
+              })
+          )}
+          {report.unknown.length > 0 && (
+            <AppText color="textSecondary">
+              Category figures are known subtotals only; unverified transactions are excluded.
+            </AppText>
+          )}
           <AppText variant="h3" style={{ marginTop: spacing.lg }}>Compared with previous month</AppText>
           {filtersActive && <AppText color="textSecondary">Comparison is shown for all accounts and categories only. Clear the filters to see it.</AppText>}
           {!filtersActive && (
@@ -219,7 +273,7 @@ export default function IncomeReportScreen() {
             </View>
           )}
           <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.lg }}>
-            Category insights, charts, View Statement and exports are pending.
+            Charts, View Statement and exports are pending.
           </AppText>
         </>
       )}
