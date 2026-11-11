@@ -44,3 +44,38 @@ export function aggregateSavedInstallmentsReport(
     };
   });
 }
+
+
+export interface SavedInstallmentCurrencySummary {
+  currencyCode: string;
+  totalScheduled: string;
+  dueInPeriod: string;
+  contractCount: number;
+  dueCount: number;
+}
+
+/** Currency-isolated totals: never sum unlike currencies or infer payment status. */
+export function summarizeSavedInstallmentsByCurrency(
+  rows: readonly SavedInstallmentReportRow[],
+): SavedInstallmentCurrencySummary[] {
+  const totals = new Map<string, { total: bigint; due: bigint; contracts: number; dueCount: number }>();
+  for (const row of rows) {
+    const decimals = getCurrencyDecimals(row.currencyCode);
+    const current = totals.get(row.currencyCode) ?? { total: 0n, due: 0n, contracts: 0, dueCount: 0 };
+    current.total += units(row.totalScheduled, decimals);
+    current.due += units(row.dueInPeriod, decimals);
+    current.contracts += 1;
+    current.dueCount += row.dueCount;
+    totals.set(row.currencyCode, current);
+  }
+  return [...totals].sort(([a], [b]) => a.localeCompare(b)).map(([currencyCode, values]) => {
+    const decimals = getCurrencyDecimals(currencyCode);
+    return {
+      currencyCode,
+      totalScheduled: money(values.total, decimals),
+      dueInPeriod: money(values.due, decimals),
+      contractCount: values.contracts,
+      dueCount: values.dueCount,
+    };
+  });
+}
