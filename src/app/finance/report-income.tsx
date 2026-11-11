@@ -196,6 +196,35 @@ export default function IncomeReportScreen() {
                           ?? (top.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category')}
                       </AppText>
                     )}
+                    <AppText color="textSecondary" style={{ marginBottom: spacing.sm }}>
+                      Category distribution (positive income only)
+                    </AppText>
+                    {rows.some(item => item.amount > 0) ? (
+                      rows.filter(item => item.amount > 0).map(item => {
+                        const maxAmount = Math.max(...rows.map(row => row.amount));
+                        const ratio = maxAmount > 0 ? Math.min(1, item.amount / maxAmount) : 0;
+                        const label = categories.find(category => category.id === item.categoryId)?.name
+                          ?? (item.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category');
+                        return (
+                          <View key={`chart-${item.categoryId}`} style={{ marginBottom: spacing.sm }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <AppText style={{ flex: 1, marginRight: spacing.sm }}>{label}</AppText>
+                              <AppText>{formatAmount(item.amount, currencyCode)}</AppText>
+                            </View>
+                            <View
+                              accessibilityLabel={`${label}: ${formatAmount(item.amount, currencyCode)} ${currencyCode}`}
+                              style={{ height: 12, borderRadius: 6, backgroundColor: colors.border, overflow: 'hidden' }}>
+                              <View style={{
+                                width: `${ratio * 100}%`, height: 12,
+                                backgroundColor: moduleColors.finance, borderRadius: 6,
+                              }} />
+                            </View>
+                          </View>
+                        );
+                      })
+                    ) : (
+                      <AppText color="textSecondary">No positive income to chart.</AppText>
+                    )}
                     {rows.map(item => (
                       <View key={item.categoryId} style={{
                         flexDirection: 'row', justifyContent: 'space-between',
@@ -273,7 +302,7 @@ export default function IncomeReportScreen() {
             </View>
           )}
           <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.lg }}>
-            Charts, View Statement and exports are pending.
+            View Statement and exports are pending.
           </AppText>
         </>
       )}
