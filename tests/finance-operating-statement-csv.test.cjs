@@ -8,7 +8,7 @@ test('Operating CSV export accepts only fully verified reconciled statements', (
   const source = read('operatingStatementCsv.ts');
   assert.match(source, /!statement\.reconciled \|\| statement\.report\.unknown\.length > 0/);
   assert.match(source, /Statement export requires fully verified transactions/);
-  assert.match(source, /serializeStatementCsv\(rows,/);
+  assert.match(source, /serializeStatementCsv\(buildVerifiedOperatingStatementRows\(statement, names\),/);
   assert.doesNotMatch(source, /setState\(|addTransaction\(|updateTransaction\(|postingAllowed\s*=\s*true/);
 });
 
