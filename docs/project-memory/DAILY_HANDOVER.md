@@ -24,10 +24,10 @@ Date: 2026-11-11 (post-8.2D)
 - Candidate for approval only: **Read-only monthly operating trend series**, one bounded consecutive-month series using existing operating aggregation and optional account/category filters. No UI, persistence or posting.
 - Proposed acceptance, pending approval: strict bounded month range; correct inclusive dates/leap years/year transitions; separate currency totals; safe exact minor units; correct refunds and financing exclusions; explicit empty/incomplete months and retained diagnostics; reconciliation and immutability tests; full Finance, TypeScript and scoped ESLint pass.
 - Dependencies: 8.2A full-ledger classification; 8.2B operating/category aggregation; 8.2C monthly/precision conventions; 8.2D filters and malformed-record handling. Accounts Report remains a separate historical-balance utility.
-- MASTER_ROADMAP.md's 8.2A/8.2B-only status and open filter/comparison wording are stale versus f139799. This discrepancy is recorded here; MASTER_ROADMAP.md and the 12-phase plan were not modified.
+- MASTER_ROADMAP.md was later updated by a documentation-only commit to reflect 8.2A–8.2D completion while preserving the 12-phase scope.
 
 ## Next session / TOMORROW-RESUME
-1. Read CURRENT_STATE.md, MASTER_ROADMAP.md, ACCOUNTING_DECISIONS.md, DAILY_HANDOVER.md and WORK_RULES.md from the actual active branch.
+1. Read CURRENT_STATE.md, MASTER_ROADMAP.md, ACCOUNTING_DECISIONS.md, DAILY_HANDOVER.md, WORK_RULES.md and FUTURE_MODULES_AND_ZAKAT.md from the actual active branch.
 2. Verify branch, HEAD and local Git status; account for any newer accepted checkpoint. Never infer local uncommitted work from GitHub.
 3. Obtain approval for the next scope/identifier, files and acceptance criteria before implementation. The trend-series candidate above is not authorization to start.
 4. Preserve postingAllowed=false, dormant V3, canonical ledger behavior and unrelated backups/scripts.
@@ -41,3 +41,9 @@ Date: 2026-11-11 (post-8.2D)
 - minorUnits metadata is readonly/frozen but transient; JSON, object spread and structuredClone do not preserve it.
 - Independent Categories management and earlier-phase final acceptance remain open. Safe linked-payment activation/recovery is separately gated; installments payment posting stays deferred.
 - Phases 9–12 remain planned. Health, Spiritual, English/Growth and app-wide release work remain separate from Finance's 12 phases.
+
+## New approved design handover (2026-11-11; documentation only)
+- TomorrowApp top-level navigation: Finance, Spiritual, Health, Growth only. Reports is an action **within Finance**, not a fifth module.
+- Finance visual reference: eight tiles, Add/Rates/Reports actions, Financial Planning with Trips (left), Events (middle), Budget (right). Original design PNG was shared in chat; **not yet committed as a binary repository asset**.
+- Zakat: Finance → Reports → Annual Reports → Zakat Calculator; Finance computes and records, Spiritual displays read-only reminders, no automatic deductions. See FUTURE_MODULES_AND_ZAKAT.md for Sharia-policy, Hijri, Health and Growth details.
+- Do not treat this as code implementation or start proposed 8.2E without separate scope approval. On 'Tomorrow Resume', reconcile actual repo/branch state, checkpoints, tests and next task against the canonical docs.
