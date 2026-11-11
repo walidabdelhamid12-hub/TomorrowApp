@@ -182,12 +182,12 @@ test('8.3B engine diagnostics remain visible and unsafe row figures are hidden',
   assert.doesNotMatch(allText(), /1,000\.00/);
 });
 
-test('Reports enables the four implemented routes', () => {
+test('Reports enables the five implemented routes', () => {
   render(Reports);
-  for (const [name, route] of [['Income','income'], ['Expenses','expenses'], ['Accounts','accounts'], ['Assets','assets']]) {
+  for (const [name, route] of [['Income','income'], ['Expenses','expenses'], ['Accounts','accounts'], ['Assets','assets'], ['Installments','installments']]) {
     press(`Open ${name} report`); assert.equal(calls.at(-1), `/finance/report-${route}`);
   }
-  for (const name of ['Installments','Loans','Debts Receivable','Debts Payable']) {
+  for (const name of ['Loans','Debts Receivable','Debts Payable']) {
     assert.equal(nodes('Pressable').find(n => n.props.accessibilityLabel === `Open ${name} report`).props.disabled, true);
   }
 });
