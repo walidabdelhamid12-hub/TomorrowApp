@@ -18,3 +18,10 @@ test('Assets statement lists only recorded movements in selected period without 
   assert.match(screen, /Some asset history is unverified/);
   assert.doesNotMatch(screen, /addAssetEntry|updateAsset|deleteAsset|setState/);
 });
+
+test('Statement rejects malformed or repeated selection filters', () => {
+  const screen = read('app/finance/statement-assets.tsx');
+  assert.match(screen, /const filterValid =/);
+  assert.match(screen, /params\.assetId\.length > 0/);
+  assert.match(screen, /const selectionValid = filterValid &&/);
+});
