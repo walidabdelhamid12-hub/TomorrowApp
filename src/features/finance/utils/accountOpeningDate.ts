@@ -19,7 +19,7 @@ export function validateAccountOpeningDate(
   }
   // Match the report engine's strict ISO calendar validation before calling it.
   // This keeps user input errors distinct from unexpected report failures.
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(date);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!match) return { valid: false, reason: 'Enter the opening date as YYYY-MM-DD' };
   const year = Number(match[1]);
   const month = Number(match[2]);
