@@ -7,7 +7,14 @@ const ts = require('typescript');
 const source = fs.readFileSync(path.join(__dirname, '../src/features/finance/utils/statementPrintHtml.ts'), 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
 const mod = { exports: {} };
-new Function('module', 'exports', js)(mod, mod.exports);
+const csvSource = fs.readFileSync(path.join(__dirname, '../src/features/finance/utils/statementCsv.ts'), 'utf8');
+const csvJs = ts.transpileModule(csvSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+const csvMod = { exports: {} };
+new Function('module', 'exports', csvJs)(csvMod, csvMod.exports);
+new Function('module', 'exports', 'require', js)(mod, mod.exports, id => {
+  if (id === './statementCsv') return csvMod.exports;
+  throw new Error('Unexpected dependency: ' + id);
+});
 const { buildStatementPrintHtml } = mod.exports;
 const period = { from: '2026-01-01', to: '2026-01-31', title: 'Income <Statement>' };
 const row = { date: '2026-01-02', account: '<script>alert(1)</script>', category: 'Salary', note: 'A&B "quote"', amount: '-125.50', currency: 'EGP' };
