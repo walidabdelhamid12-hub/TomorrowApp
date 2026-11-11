@@ -33,6 +33,27 @@ export function DebtReportScreen({ direction }: { direction: Direction }) {
     if (!hydrated) return null;
     try { return aggregateDebtsReport(debts, period, direction); } catch { return null; }
   }, [hydrated, debts, period, direction]);
+  const summaries = useMemo(() => {
+    if (!rows) return [];
+    const byCurrency = new Map<string, { total: number; periodPaid: number; remaining: number; count: number; unavailable: boolean }>();
+    for (const row of rows) {
+      const previous = byCurrency.get(row.currencyCode) ?? { total: 0, periodPaid: 0, remaining: 0, count: 0, unavailable: false };
+      previous.count++;
+      if (row.totalAmount === null || row.periodPaid === null || row.currentRemaining === null) {
+        previous.unavailable = true;
+      } else {
+        previous.total += row.totalAmount;
+        previous.periodPaid += row.periodPaid;
+        previous.remaining += row.currentRemaining;
+        if (![previous.total, previous.periodPaid, previous.remaining].every(Number.isSafeInteger)) {
+          // Fractional amounts are valid; reject only unsafe magnitudes below.
+          if (![previous.total, previous.periodPaid, previous.remaining].every(Number.isFinite)) previous.unavailable = true;
+        }
+      }
+      byCurrency.set(row.currencyCode, previous);
+    }
+    return [...byCurrency].sort(([a], [b]) => a.localeCompare(b));
+  }, [rows]);
   const money = (value: number | null, currency: string) =>
     value === null ? 'Unavailable' : value.toFixed(getCurrencyDecimals(currency)) + ' ' + currency;
   return <Screen scroll>
@@ -55,6 +76,14 @@ export function DebtReportScreen({ direction }: { direction: Direction }) {
     <AppText variant="caption" color="textSecondary" style={{ marginBottom: spacing.md }}>
       Read-only debt records. Recorded collections and payments are not independent proof of bank posting. Historical balances may be unavailable after edits. Currencies are never combined.
     </AppText>
+    {summaries.map(([currency, summary]) => <Card key={currency} style={{ marginBottom: spacing.sm }}>
+      <AppText variant="bodyStrong">{currency} · {summary.count} debts</AppText>
+      {summary.unavailable ? <AppText color="textSecondary">Summary unavailable: incomplete debt evidence</AppText> : <>
+        <AppText>Total: {money(summary.total, currency)}</AppText>
+        <AppText>{direction === 'receivable' ? 'Collected' : 'Paid'} this month: {money(summary.periodPaid, currency)}</AppText>
+        <AppText>Remaining: {money(summary.remaining, currency)}</AppText>
+      </>}
+    </Card>)}
     {!hydrated ? <ActivityIndicator /> : rows === null ?
       <Card><AppText color="textSecondary">Debt report could not be validated.</AppText></Card> :
       rows.length === 0 ? <Card><AppText>No matching debts saved.</AppText></Card> :
