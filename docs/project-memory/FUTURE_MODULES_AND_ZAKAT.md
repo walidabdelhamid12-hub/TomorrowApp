@@ -5,7 +5,7 @@ Status: **Approved design requirements; implementation deferred**. Updated 2026-
 TomorrowApp has **exactly four top-level modules**: **Finance, Spiritual, Health, Growth**. Reports is **not** a fifth top-level module; it is an entry point **inside Finance**.
 
 ### Finance home visual reference
-The user-approved Finance dashboard reference is the previously shared `TomorrowApp_Finance_Design.png` image (2026-11-11 chat). **Image binary not yet committed to this repository; attach it to this document when available.** Do not pretend the image is a runtime screenshot or that every illustration detail is implemented.
+The user-approved Finance dashboard reference is the previously shared `TomorrowApp_Finance_Design.png` image (2026-11-11 chat). **Approved final visual reference: [TomorrowApp Final Dashboard](assets/TomorrowApp_Final_Dashboard.png).** Do not pretend the image is a runtime screenshot or that every illustration detail is implemented.
 
 Preserve the **eight main finance tiles in a two-column grid** as shown in the approved visual:
 - Row 1: Expenses (left), Income (right).
