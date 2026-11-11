@@ -164,3 +164,10 @@ test('account creation never assumes the date and warns if metadata verification
   assert.match(source, /verifyOpeningDate\(newAccountId, data\.openingBalanceDate\)/);
   assert.match(source, /Opening date not verified/);
 });
+
+test('invalid stored dates are not presented as verified in account details', () => {
+  const source = fs.readFileSync(path.join(__dirname,
+    '../src/features/finance/components/AccountDetails.tsx'), 'utf8');
+  assert.match(source, /storedDateStatus\?\.valid/);
+  assert.match(source, /Stored date needs review/);
+});
