@@ -554,6 +554,8 @@ export const useLedgerStore = create<LedgerStore>()(
 
       updateAccount: (id, patch) =>
         set((state) => {
+          // Metadata is writable only through verifyAccountOpeningBalanceDate.
+          if (Object.prototype.hasOwnProperty.call(patch, 'openingBalanceDate')) return state;
           const clean = definedOnly(patch);
 
           if (clean.initialBalance !== undefined && (!isFiniteMoneyInput(clean.initialBalance))) return state;
