@@ -18,6 +18,10 @@ export function AccountDetails({ accountId, onClose, amountsVisible = true }: { 
   const transfers = useLedgerStore(s => s.transfers);
   const matches = accounts.filter(a => a.id === accountId);
   const account = matches.length === 1 ? matches[0] : undefined;
+  const storedDateStatus = account?.openingBalanceDate
+    ? validateAccountOpeningDate({ accounts, transactions, transfers, categories: [] },
+        account.id, account.openingBalanceDate)
+    : null;
   const submitOpeningDate = () => {
     if (!account) return;
     const requestedDate = openingDateDraft.trim();
@@ -61,7 +65,9 @@ export function AccountDetails({ accountId, onClose, amountsVisible = true }: { 
       <View style={{ gap: 8, marginVertical: 12 }}>
         <AppText variant="bodyStrong">Opening balance date</AppText>
         <AppText variant="caption" color="textSecondary">
-          {account.openingBalanceDate ? 'Verified: ' + account.openingBalanceDate : 'Not verified'}
+          {account.openingBalanceDate
+            ? (storedDateStatus?.valid ? 'Verified: ' : 'Stored date needs review: ') + account.openingBalanceDate
+            : 'Not verified'}
         </AppText>
         <AppText variant="caption" color="textSecondary">
           This starting balance applies before transactions on this date. Only confirm a date you can verify.
