@@ -63,6 +63,11 @@ export default function InstallmentsReportScreen() {
           <AppText>Due this month: {item.dueInPeriod} {item.currencyCode}</AppText>
           <AppText color="textSecondary">{item.dueCount} installments due this month</AppText>
         </Card>)}
+        <Pressable accessibilityRole="button" accessibilityLabel="View Statement"
+          onPress={() => router.push({ pathname: '/finance/statement-installments', params: { month } })}
+          style={{ minHeight: 44, justifyContent: 'center', marginBottom: spacing.sm }}>
+          <AppText color="primary">View Schedule Statement · {month}</AppText>
+        </Pressable>
         <AppText variant="bodyStrong" style={{ marginBottom: spacing.sm }}>Contract details</AppText>
         {rows.map(row => <Card key={row.id} style={{ marginBottom: spacing.sm }}>
         <Pressable accessibilityRole="button" accessibilityLabel={"Open installment contract " + row.name}
