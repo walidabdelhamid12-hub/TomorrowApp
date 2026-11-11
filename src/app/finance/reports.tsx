@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { AppText, Screen } from '@/components/ui';
 import { moduleColors, useTheme } from '@/theme';
@@ -26,7 +26,10 @@ export default function FinanceReportsScreen() {
         Report navigation is ready. Financial figures, charts, statements and exports will be connected in the next steps.
       </AppText>
       {REPORTS.map((name) => (
-        <View key={name} style={{
+        <Pressable key={name} disabled={name !== 'Income'}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${name} report`}
+          onPress={() => router.push('/finance/report-income' as Href)} style={{
           padding: spacing.md, marginBottom: spacing.sm, borderRadius: 12,
           borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
           flexDirection: 'row', alignItems: 'center',
@@ -34,9 +37,9 @@ export default function FinanceReportsScreen() {
           <Ionicons name="bar-chart-outline" size={20} color={moduleColors.finance} />
           <View style={{ marginLeft: spacing.sm, flex: 1 }}>
             <AppText variant="bodyStrong">{name}</AppText>
-            <AppText variant="caption" color="textSecondary">Integration pending</AppText>
+            <AppText variant="caption" color="textSecondary">{name === 'Income' ? 'View report' : 'Integration pending'}</AppText>
           </View>
-        </View>
+        </Pressable>
       ))}
     </Screen>
   );
