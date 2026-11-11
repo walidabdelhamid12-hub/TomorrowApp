@@ -53,6 +53,11 @@ export default function LoansReportScreen() {
     <AppText variant="caption" color="textSecondary" style={{ marginBottom: spacing.md }}>
       Read-only loan records. Recorded payments are not independent proof of ledger posting. Historical figures are hidden when contract history is insufficient. Amounts are never combined across currencies.
     </AppText>
+    {hydrated && rows !== null && <Pressable accessibilityRole="button" accessibilityLabel="View Statement"
+      onPress={() => router.push({ pathname: '/finance/statement-loans', params: { month } })}
+      style={{ minHeight: 44, justifyContent: 'center', marginBottom: spacing.sm }}>
+      <AppText color="primary">View Statement · {month}</AppText>
+    </Pressable>}
     {!hydrated ? <ActivityIndicator /> : rows === null ?
       <Card><AppText color="danger">Loan report could not be validated.</AppText></Card> :
       rows.length === 0 ? <Card><AppText>No loans saved yet.</AppText></Card> :
