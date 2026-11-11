@@ -131,3 +131,13 @@ test('opening date validator rejects invalid linked transfer history', () => {
   }]);
   assert.equal(validateAccountOpeningDate(ledger, 'bank', '2026-11-01').valid, false);
 });
+
+test('account details requires explicit user confirmation before metadata-only verification', () => {
+  const source = fs.readFileSync(path.join(__dirname,
+    '../src/features/finance/components/AccountDetails.tsx'), 'utf8');
+  assert.match(source, /Verify opening balance date/);
+  assert.match(source, /Alert\.alert\('Verify opening balance date'/);
+  assert.match(source, /verifyOpeningDate\(account\.id,/);
+  assert.match(source, /validateAccountOpeningDate/);
+  assert.doesNotMatch(source, /updateAccount\(|addTransaction\(|addTransfer\(/);
+});
