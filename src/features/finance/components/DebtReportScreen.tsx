@@ -42,13 +42,12 @@ export function DebtReportScreen({ direction }: { direction: Direction }) {
       if (row.totalAmount === null || row.periodPaid === null || row.currentRemaining === null) {
         previous.unavailable = true;
       } else {
-        previous.total += row.totalAmount;
-        previous.periodPaid += row.periodPaid;
-        previous.remaining += row.currentRemaining;
-        if (![previous.total, previous.periodPaid, previous.remaining].every(Number.isSafeInteger)) {
-          // Fractional amounts are valid; reject only unsafe magnitudes below.
-          if (![previous.total, previous.periodPaid, previous.remaining].every(Number.isFinite)) previous.unavailable = true;
-        }
+        const scale = 10 ** getCurrencyDecimals(row.currencyCode);
+        const next = [previous.total + Math.round(row.totalAmount * scale),
+          previous.periodPaid + Math.round(row.periodPaid * scale),
+          previous.remaining + Math.round(row.currentRemaining * scale)];
+        if (!next.every(Number.isSafeInteger)) previous.unavailable = true;
+        else [previous.total, previous.periodPaid, previous.remaining] = next;
       }
       byCurrency.set(row.currencyCode, previous);
     }
@@ -79,9 +78,9 @@ export function DebtReportScreen({ direction }: { direction: Direction }) {
     {summaries.map(([currency, summary]) => <Card key={currency} style={{ marginBottom: spacing.sm }}>
       <AppText variant="bodyStrong">{currency} · {summary.count} debts</AppText>
       {summary.unavailable ? <AppText color="textSecondary">Summary unavailable: incomplete debt evidence</AppText> : <>
-        <AppText>Total: {money(summary.total, currency)}</AppText>
-        <AppText>{direction === 'receivable' ? 'Collected' : 'Paid'} this month: {money(summary.periodPaid, currency)}</AppText>
-        <AppText>Remaining: {money(summary.remaining, currency)}</AppText>
+        <AppText>Total: {money(summary.total / (10 ** getCurrencyDecimals(currency)), currency)}</AppText>
+        <AppText>{direction === 'receivable' ? 'Collected' : 'Paid'} this month: {money(summary.periodPaid / (10 ** getCurrencyDecimals(currency)), currency)}</AppText>
+        <AppText>Remaining: {money(summary.remaining / (10 ** getCurrencyDecimals(currency)), currency)}</AppText>
       </>}
     </Card>)}
     {!hydrated ? <ActivityIndicator /> : rows === null ?
