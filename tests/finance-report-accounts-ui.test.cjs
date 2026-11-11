@@ -88,6 +88,18 @@ test('8.3B missing verified history renders unavailable balances, never inferred
   assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel?.startsWith('Movements for')), false);
 });
 
+test('8.3C stored verified date is forwarded to the report engine without fixture injection', () => {
+  ledger.accounts = [account({ openingBalanceDate: '2026-11-01' })];
+  ledger.transactions = [{ id: 'income', accountId: 'bank', currencyCode: 'EGP',
+    type: 'income', amount: 25, date: '2026-11-10' }];
+  render();
+  assert.deepEqual(engineCalls[0].bases, [
+    { accountId: 'bank', openingBalanceDate: '2026-11-01' },
+  ]);
+  assert.match(allText(), /1,025\.00 EGP/);
+  assert.doesNotMatch(allText(), /Incomplete history/);
+});
+
 test('8.3B hydration and empty states avoid misleading balances', () => {
   ready = false; render();
   assert.equal(nodes('ActivityIndicator').length, 1); assert.equal(engineCalls.length, 0);
