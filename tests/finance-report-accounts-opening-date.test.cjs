@@ -180,3 +180,15 @@ test('account creation rejects runtime injection of historical date metadata', (
   assert.match(create, /hasOwnProperty\.call\(input, 'openingBalanceDate'\)/);
   assert.match(create, /return ''/);
 });
+
+test('same-day movements are allowed after opening balance; later backdating invalidates it', () => {
+  const account = baseAccount({ openingBalanceDate: '2026-11-01' });
+  const ledger = data(account, [{ id: 'same-day', accountId: 'bank',
+    currencyCode: 'EGP', type: 'income', amount: 10, date: '2026-11-01' }]);
+  assert.equal(validateAccountOpeningDate(ledger, 'bank', account.openingBalanceDate).valid, true);
+  assert.equal(report(ledger).status, 'available');
+  ledger.transactions.push({ id: 'backdated', accountId: 'bank',
+    currencyCode: 'EGP', type: 'expense', amount: 2, date: '2026-10-31' });
+  assert.equal(validateAccountOpeningDate(ledger, 'bank', account.openingBalanceDate).valid, false);
+  assert.equal(report(ledger).status, 'historical_data_unavailable');
+});
