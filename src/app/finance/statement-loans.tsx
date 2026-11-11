@@ -47,6 +47,7 @@ export default function LoansStatementScreen() {
     {!period ? <Card><AppText>Invalid statement month.</AppText></Card> :
       !hydrated ? <Card><AppText>Loading loans...</AppText></Card> :
       rows === null ? <Card><AppText>Statement unavailable.</AppText></Card> :
+      rows.some(row => row.status !== 'available') ? <Card><AppText color="textSecondary">Historical data is unverified for one or more records. Payment details are withheld to avoid misleading totals.</AppText></Card> :
       entries.length === 0 ? <Card><AppText>No recorded payments this month.</AppText></Card> :
       entries.map(item => <Card key={item.id} style={{ marginBottom: spacing.sm }}>
         <AppText variant="bodyStrong">{item.name}</AppText>
