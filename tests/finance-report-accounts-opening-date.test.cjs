@@ -205,3 +205,11 @@ test('malformed opening date from persisted JSON fails closed without changing b
   assert.equal(row.change, null);
   assert.equal(JSON.stringify(ledger), before);
 });
+
+test('opening-date field uses theme text and border colors', () => {
+  const source = fs.readFileSync(path.join(__dirname,
+    '../src/features/finance/components/AccountDetails.tsx'), 'utf8');
+  assert.match(source, /color: colors\.text/);
+  assert.match(source, /borderColor: colors\.border/);
+  assert.match(source, /placeholderTextColor=\{colors\.textSecondary\}/);
+});
