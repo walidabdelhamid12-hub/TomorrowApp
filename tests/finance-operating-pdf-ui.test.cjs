@@ -16,8 +16,8 @@ for (const kind of ['income', 'expenses']) {
 
 test('PDF sharing copies the generated file into a readable app cache location', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/features/finance/utils/shareStatementPdf.ts'), 'utf8');
-  assert.match(source, /Print\.printToFileAsync\(\{ html \}\)/);
-  assert.match(source, /source\.copy\(target\)/);
+  assert.match(source, /Print\.printToFileAsync\(\{ html, base64: true \}\)/);
+  assert.match(source, /target\.write\(base64, \{ encoding: 'base64' \}\)/);
   assert.match(source, /new File\(Paths\.cache,/);
   assert.match(source, /Sharing\.shareAsync\(target\.uri,/);
   assert.match(source, /!target\.exists \|\| target\.size <= 0/);
