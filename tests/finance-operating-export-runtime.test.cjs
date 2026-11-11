@@ -15,7 +15,7 @@ function loadTs(name, dependencies) {
   return mod.exports;
 }
 const csv = loadTs('statementCsv.ts', {});
-const print = loadTs('statementPrintHtml.ts', {});
+const print = loadTs('statementPrintHtml.ts', { './statementCsv': csv });
 const format = { formatAmount: (n) => n.toFixed(2) };
 const operating = loadTs('operatingStatementCsv.ts', {
   './amountFormat': format, './statementCsv': csv,
