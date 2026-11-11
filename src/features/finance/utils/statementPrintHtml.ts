@@ -10,14 +10,39 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function categorySymbol(category: string): string {
+function svgIcon(paths: string, viewBox = '0 0 24 24'): string {
+  return '<svg xmlns="http://www.w3.org/2000/svg" class="inline-icon" viewBox="' + viewBox
+    + '" aria-hidden="true">' + paths + '</svg>';
+}
+function categoryIcon(category: string): string {
   const value = category.toLowerCase();
-  if (/food|grocer|market|shopping/.test(value)) return '●';
-  if (/transport|taxi|fuel|travel/.test(value)) return '◆';
-  if (/salary|income|bonus|work/.test(value)) return '↑';
-  if (/bill|utilities|electric|water/.test(value)) return '■';
-  if (/health|medical|pharmacy/.test(value)) return '+';
-  return '•';
+  if (/food|grocer|restaurant|dining|meal/.test(value)) {
+    return svgIcon('<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">'
+      + '<path d="M4 2v7a3 3 0 0 0 6 0V2M7 2v20M18 22V2c-5 3-5 10 0 11"/></g>');
+  }
+  if (/transport|taxi|fuel|travel/.test(value)) {
+    return svgIcon('<g fill="none" stroke="currentColor" stroke-width="2"><path d="M5 16h14l-2-7H7l-2 7ZM3 16v4m18-4v4M7 9l2-4h6l2 4"/></g>');
+  }
+  if (/salary|income|bonus|work/.test(value)) {
+    return svgIcon('<path fill="none" stroke="currentColor" stroke-width="2" d="M12 20V4m-6 6 6-6 6 6"/>');
+  }
+  return svgIcon('<circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/>');
+}
+function currencyFlag(code: string): string {
+  if (code === 'EGP') return svgIcon('<rect width="24" height="16" y="4" rx="1" fill="#fff"/>'
+    + '<path fill="#ce1126" d="M0 4h24v5.33H0z"/><path fill="#000" d="M0 14.67h24V20H0z"/>'
+    + '<path fill="#c6a348" d="M11 10h2v4h-2z"/>');
+  if (code === 'USD') return svgIcon('<rect width="24" height="16" y="4" rx="1" fill="#fff"/>'
+    + Array.from({ length: 7 }, (_, i) => '<rect x="0" y="' + (4 + i * 2.3)
+      + '" width="24" height="1.15" fill="#b22234"/>').join('')
+    + '<rect x="0" y="4" width="10" height="9" fill="#3c3b6e"/>'
+    + '<g fill="#fff"><circle cx="2" cy="6" r=".6"/><circle cx="5" cy="6" r=".6"/>'
+    + '<circle cx="8" cy="6" r=".6"/><circle cx="3.5" cy="9" r=".6"/>'
+    + '<circle cx="6.5" cy="9" r=".6"/></g>');
+  return '';
+}
+function currencyLabel(code: string): string {
+  return currencyFlag(code) + '<span>' + escapeHtml(code) + '</span>';
 }
 
 function formatPeriod(date: string): string {
@@ -40,15 +65,15 @@ export function buildStatementPrintHtml(
   const body = rows.map((row, index) => '<tr class="' + (index % 2 ? 'alternate' : '') + '">'
     + '<td class="date">' + escapeHtml(row.date) + '</td>'
     + '<td>' + escapeHtml(row.account) + '</td>'
-    + '<td><span class="category-mark">' + categorySymbol(row.category) + '</span>'
+    + '<td><span class="category-mark">' + categoryIcon(row.category) + '</span>'
     + escapeHtml(row.category) + '</td>'
     + '<td class="note">' + escapeHtml(row.note ?? '') + '</td>'
     + '<td class="amount">' + escapeHtml(row.amount) + '</td>'
-    + '<td class="currency"><span class="currency-mark">¤</span> ' + escapeHtml(row.currency) + '</td>'
+    + '<td class="currency">' + currencyLabel(row.currency) + '</td>'
     + '</tr>').join('');
   const heading = escapeHtml(options.title);
   const period = escapeHtml(formatPeriod(options.from) + ' – ' + formatPeriod(options.to));
-  const currencyLabels = currencies.length ? currencies.map(escapeHtml).join(' · ') : '—';
+  const currencyLabels = currencies.length ? currencies.map(currencyLabel).join('<span class="currency-separator"> · </span>') : '—';
   return `<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -85,7 +110,7 @@ th:nth-child(4){width:23%}th:nth-child(5){width:14%}th:nth-child(6){width:10%}
 th.amount{text-align:right}
 .currency{white-space:nowrap}
 .category-mark{color:${accentDark};font-weight:bold;margin-right:6px}
-.currency-mark{color:#64748b;font-weight:bold}
+.inline-icon{width:15px;height:15px;display:inline-block;vertical-align:-3px;margin-right:5px;color:#64748b}.category-mark .inline-icon{color:${accentDark}}.currency-separator{padding:0 4px}
 .note{color:#56657a}
 .empty{text-align:center;color:#64748b;padding:24px}
 .footer{margin-top:22px;padding-top:10px;border-top:1px solid #e2e9f0;display:flex;justify-content:space-between;color:#64748b;font-size:9px}
@@ -97,8 +122,8 @@ th.amount{text-align:right}
   <div class="period"><div class="eyebrow">REPORT PERIOD</div><div class="value">${period}</div></div></div>
 </section>
 <section class="summary">
-  <div class="summary-card"><div class="summary-label">Transactions</div><div class="summary-value">${rows.length}</div></div>
   <div class="summary-card"><div class="summary-label">Report Type</div><div class="summary-value accent">${expense ? 'Expenses' : 'Income'}</div></div>
+  <div class="summary-card"><div class="summary-label">Transactions</div><div class="summary-value">${rows.length}</div></div>
   <div class="summary-card"><div class="summary-label">Currencies (${currencies.length})</div><div class="summary-value currencies">${currencyLabels}</div></div>
 </section>
 <h2 class="section">Transactions</h2>
