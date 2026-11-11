@@ -2,8 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Alert } from 'react-native';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
+import { shareStatementPdf } from '@/features/finance/utils/shareStatementPdf';
 import { buildOperatingStatementPrintHtml } from '@/features/finance/utils/operatingStatementPrintHtml';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { AppText, Screen } from '@/components/ui';
@@ -71,12 +70,7 @@ export default function IncomeStatementScreen() {
         accounts: new Map(accounts.map(account => [account.id, account.name])),
         categories: new Map(categories.map(category => [category.id, category.name])),
       });
-      const { uri } = await Print.printToFileAsync({ html });
-      if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('PDF created', 'File sharing is not available on this device.');
-        return;
-      }
-      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
+      await shareStatementPdf(html);
     } catch (error) {
       Alert.alert('Export failed', error instanceof Error ? error.message : 'Unable to create PDF.');
     } finally {
