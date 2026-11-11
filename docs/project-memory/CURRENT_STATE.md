@@ -34,9 +34,14 @@ Finance Phase 8 — **Analytics/reports**, using MASTER_ROADMAP.md as the canoni
 
 ## Roadmap reconciliation and next action
 - The exact canonical heading is **8. Analytics/reports**. Its scope includes monthly income/expense, comparison, category breakdown, weekly/monthly trends, account history, date/account/category filters, transfer exclusion and reconciliation with known examples.
-- MASTER_ROADMAP.md still describes 8.2A/8.2B as committed and filters/comparisons as open. That status text is stale relative to f139799; the canonical roadmap and its 12-phase scope were deliberately left unchanged under this task's authorization.
+- MASTER_ROADMAP.md was synchronized in the later documentation-only update to reflect 8.2A–8.2D as completed; its canonical 12-phase scope remains unchanged.
 - The roadmap does **not** document an exact next unfinished subtask identifier/title or an ordered sequence after 8.2D. Do not invent an approved 8.2E task or claim the proposed task is already authorized.
 - Proposed candidate for approval only: **Read-only monthly operating trend series**. Return a bounded consecutive-month series, preserving separate currency totals and per-month diagnostics; reuse the approved operating aggregator and its optional filters without adding UI, storage or posting.
 - Proposed acceptance criteria, not yet approved: strict month/range validation and an explicit range bound; correct inclusive month boundaries/year/leap transitions; exact safe minor units and overflow handling; refund attribution and financing exclusions unchanged; explicit empty versus incomplete months; currency/category reconciliation; no input mutation; focused regressions, full Finance suite, TypeScript and scoped ESLint pass.
 - Dependencies: 8.2A classification; 8.2B operating/category aggregation (Accounts Report remains separate); 8.2C monthly-boundary/comparison and precision conventions; 8.2D validated filters and D1 diagnostic handling.
 - Obtain approval and agree the identifier, files and acceptance criteria before implementation. Weekly trends, report UI/charts and device/manual reconciliation remain separate future increments. Do not start the candidate during this handover update.
+
+## Approved UI/future-module documentation update (2026-11-11)
+- See [FUTURE_MODULES_AND_ZAKAT.md](FUTURE_MODULES_AND_ZAKAT.md): four top-level modules only; Reports is within Finance; eight Finance tiles; Zakat lives under Finance → Reports → Annual Reports, with read-only Spiritual reminders and user-confirmed payment only.
+- These are future design requirements, not implementation/device verification. The approved Finance screenshot was shared in chat; its binary is not yet stored in the repository.
+- Latest Finance **feature** checkpoint remains f139799; subsequent documentation-only commits do not change Finance code or approve 8.2E.
