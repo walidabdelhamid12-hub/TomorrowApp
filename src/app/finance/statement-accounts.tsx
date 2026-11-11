@@ -19,6 +19,8 @@ export default function AccountsStatementScreen() {
   const transfers = useLedgerStore(s => s.transfers);
   const month = typeof params.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month) ? params.month : null;
   const accountId = typeof params.accountId === 'string' ? params.accountId : '';
+  const filterValid = params.accountId === undefined || (typeof params.accountId === 'string'
+    && params.accountId.length > 0 && !/[\\s\\u0000-\\u001f\\u007f]/u.test(params.accountId));
   const period = useMemo(() => {
     if (!month) return null;
     const [year, number] = month.split('-').map(Number);
@@ -54,7 +56,7 @@ export default function AccountsStatementScreen() {
       ]);
     return [...txEntries, ...transferEntries].sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   }, [rows, selected, period, transactions, transfers]);
-  const selectionValid = !accountId || accounts.filter(account => account.id === accountId).length === 1;
+  const selectionValid = filterValid && (!accountId || accounts.filter(account => account.id === accountId).length === 1);
   const names = new Map(accounts.map(account => [account.id, { name: account.name, currency: account.currencyCode }]));
   return <Screen scroll>
     <Pressable accessibilityRole="button" accessibilityLabel="Back to Accounts Report"
