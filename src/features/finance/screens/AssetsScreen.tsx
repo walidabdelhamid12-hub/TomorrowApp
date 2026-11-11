@@ -1,8 +1,9 @@
+import { validateAssetOpeningDate } from '@/features/finance/utils/assetOpeningDate';
 import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppButton, AppText, Screen } from '@/components/ui';
 import type { AddAssetFormData } from '@/features/finance/components/AddAssetModal';
@@ -29,6 +30,9 @@ export default function AssetsScreen() {
 
   const assets = useFinanceStore((state) => state.assets);
   const addAsset = useFinanceStore((state) => state.addAsset);
+  const verifyAssetOpeningBalanceDate = useFinanceStore(state => state.verifyAssetOpeningBalanceDate);
+  const [verificationAssetId, setVerificationAssetId] = useState<string | null>(null);
+  const [verificationDate, setVerificationDate] = useState('');
   const updateAsset = useFinanceStore((state) => state.updateAsset);
   const deleteAsset = useFinanceStore((state) => state.deleteAsset);
   const addAssetEntry = useFinanceStore((state) => state.addAssetEntry);
@@ -216,10 +220,40 @@ export default function AssetsScreen() {
                   : 'Silver';
 
             return (
-              <AssetCard key={asset.id} asset={asset} categoryLabel={categoryLabel}
-                balanceText={originalBalance} valuationText={convertedValue} baseCurrency={baseCurrency}
-                onViewEntries={() => openEntries(asset)} onEdit={() => openAsset(asset)}
-                onDelete={() => confirmDeleteAsset(asset)} />
+              <View key={asset.id}>
+                <AssetCard asset={asset} categoryLabel={categoryLabel}
+                  balanceText={originalBalance} valuationText={convertedValue} baseCurrency={baseCurrency}
+                  onViewEntries={() => openEntries(asset)} onEdit={() => openAsset(asset)}
+                  onDelete={() => confirmDeleteAsset(asset)} />
+                <AppText variant="caption" color="textSecondary">
+                  {asset.openingBalanceDate ? 'Verified history starts: ' + asset.openingBalanceDate : 'Opening history not verified'}
+                </AppText>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Verify history for ${asset.name}`}
+                  onPress={() => { setVerificationAssetId(asset.id); setVerificationDate(''); }}
+                  style={{ minHeight: 44, justifyContent: 'center' }}>
+                  <AppText>Verify opening history date</AppText>
+                </Pressable>
+                {verificationAssetId === asset.id && <View style={{ gap: 8 }}>
+                  <TextInput accessibilityLabel="Asset opening date (YYYY-MM-DD)"
+                    value={verificationDate} onChangeText={setVerificationDate} placeholder="YYYY-MM-DD"
+                    placeholderTextColor={colors.textSecondary}
+                    style={{ borderWidth: 1, borderColor: colors.border, color: colors.text, minHeight: 44, paddingHorizontal: 12 }} />
+                  <AppButton title="Confirm verified date" accentColor={accent} onPress={() => {
+                    const date = verificationDate.trim();
+                    const check = validateAssetOpeningDate(assets, asset.id, date);
+                    if (!check.valid) { Alert.alert('Cannot verify asset history', check.reason); return; }
+                    Alert.alert('Confirm asset history', 'Confirm the recorded opening quantity and all movements from this date are complete. No balances will change.', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Verify', onPress: () => {
+                        if (verifyAssetOpeningBalanceDate(asset.id, date)) {
+                          setVerificationAssetId(null);
+                          Alert.alert('Verified', 'Asset history start date saved.');
+                        } else Alert.alert('Not saved', 'Asset history changed or verification failed.');
+                      } },
+                    ]);
+                  }} />
+                </View>}
+              </View>
             );
           })}
         </View>
