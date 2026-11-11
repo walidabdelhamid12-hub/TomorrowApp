@@ -13,5 +13,8 @@ test('Assets statement lists only recorded movements in selected period without 
   assert.match(screen, /aggregateAssetsReport\(assets, period\)/);
   assert.match(screen, /entry\.date >= period\.from && entry\.date <= period\.to/);
   assert.match(screen, /Historical market valuations and unverified balances are unavailable/);
+  assert.match(screen, /validateAssetOpeningDate\(assets, asset\.id, asset\.openingBalanceDate\)\.valid/);
+  assert.match(screen, /assetReportHistoryAvailable\(asset, period\.from\)/);
+  assert.match(screen, /Some asset history is unverified/);
   assert.doesNotMatch(screen, /addAssetEntry|updateAsset|deleteAsset|setState/);
 });
