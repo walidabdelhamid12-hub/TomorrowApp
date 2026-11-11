@@ -28,3 +28,16 @@ test('month navigation uses device-local calendar and has year bounds', () => {
   assert.match(source, /date\.getFullYear\(\) < 100/);
   assert.doesNotMatch(source, /toISOString\(\)\.slice\(0, 7\)/);
 });
+
+test('report contract cards open details and label both monetary and count metrics', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/app/finance/report-installments.tsx'), 'utf8');
+  assert.match(source, /accessibilityLabel=\{"Open installment contract " \+ row\.name\}/);
+  assert.match(source, /pathname: '\/finance\/installment-contract'/);
+  assert.match(source, /mode: 'details'/);
+  assert.match(source, /Contract total \(all scheduled\): \{row\.totalScheduled\}/);
+  assert.match(source, /Due this month: \{row\.dueInPeriod\}/);
+  assert.match(source, /Installments scheduled this month: \{row\.dueCount\}/);
+  assert.match(source, /accessibilityLabel="Previous month"/);
+  assert.match(source, /accessibilityLabel="Next month"/);
+  assert.doesNotMatch(source, /\\\\n\s*<Pressable/);
+});
