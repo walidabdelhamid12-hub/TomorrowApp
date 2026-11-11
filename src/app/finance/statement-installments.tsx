@@ -3,7 +3,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { Pressable } from 'react-native';
 import { AppText, Card, Screen } from '@/components/ui';
 import { installmentsStorage } from '@/features/finance/store/installmentsStorage';
-import { aggregateSavedInstallmentsReport } from '@/features/finance/utils/reportSavedInstallments';
+import { buildScheduledInstallmentsStatement } from '@/features/finance/utils/statementScheduledInstallments';
 import { useTheme } from '@/theme';
 
 /** Scheduled due dates only. Does not infer payment status or account effects. */
@@ -20,19 +20,12 @@ export default function InstallmentsStatementScreen() {
     if (year < 100) return null;
     return { from: month + '-01', to: month + '-' + String(new Date(year, number, 0).getDate()).padStart(2, '0') };
   }, [month]);
-  const rows = useMemo(() => {
+  const statement = useMemo(() => {
     if (saved.hydration !== 'ready' || !period) return null;
-    try { return aggregateSavedInstallmentsReport(saved.contracts, period.from, period.to); } catch { return null; }
+    try { return buildScheduledInstallmentsStatement(saved.contracts, period.from, period.to); }
+    catch { return null; }
   }, [saved, period]);
-  const entries = useMemo(() => {
-    if (!rows || !period) return [];
-    const ids = new Set(rows.map(row => row.id));
-    return saved.contracts.filter(record => ids.has(record.contract.id)).flatMap(record =>
-      record.contract.schedule.filter(item => item.dueDate >= period.from && item.dueDate <= period.to)
-        .map(item => ({ id: record.contract.id + ':' + item.id, name: record.name,
-          date: item.dueDate, amount: item.amount, currency: record.contract.currencyCode })))
-      .sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-  }, [saved, rows, period]);
+  const entries = statement?.entries ?? [];
   return <Screen scroll>
     <Pressable accessibilityRole="button" accessibilityLabel="Back to Installments Report"
       onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
@@ -45,7 +38,8 @@ export default function InstallmentsStatementScreen() {
     {!period ? <Card><AppText>Invalid statement month.</AppText></Card> :
       saved.hydration === 'blocked' ? <Card><AppText>Saved installments unavailable.</AppText></Card> :
       saved.hydration !== 'ready' ? <Card><AppText>Loading contracts...</AppText></Card> :
-      rows === null ? <Card><AppText>Schedule statement unavailable.</AppText></Card> :
+      statement === null ? <Card><AppText>Schedule statement unavailable.</AppText></Card> :
+      !statement.reconciled ? <Card><AppText>Schedule totals do not reconcile. Details are withheld.</AppText></Card> :
       entries.length === 0 ? <Card><AppText>No installments scheduled this month.</AppText></Card> :
       entries.map(item => <Card key={item.id} style={{ marginBottom: spacing.sm }}>
         <AppText variant="bodyStrong">{item.name}</AppText>
