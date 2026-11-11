@@ -16,3 +16,10 @@ test('CSV protects spreadsheet formula prefixes and rejects invalid rows', () =>
   assert.match(source, /Invalid statement export metadata/);
   assert.match(source, /row\.date < options\.from \|\| row\.date > options\.to/);
 });
+
+test('CSV retains negative amounts as numeric spreadsheet cells, not escaped text', () => {
+  assert.match(source, /function csvCell\(value: string, numeric = false\)/);
+  assert.match(source, /!numeric &&/);
+  assert.match(source, /index === 4/);
+  assert.match(source, /\^-\?\\d\+/);
+});
