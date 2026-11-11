@@ -84,7 +84,7 @@ export type Asset =
 
 export type NewAssetInput = DistributiveOmit<
   Asset,
-  'id' | 'entries' | 'createdAt' | 'updatedAt'
+  'id' | 'entries' | 'createdAt' | 'updatedAt' | 'openingBalanceDate'
 >;
 
 export interface AssetPatch {
