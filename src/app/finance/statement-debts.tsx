@@ -28,7 +28,7 @@ export default function DebtStatementScreen() {
   }, [hydrated, direction, period, debts]);
   const entries = useMemo(() => {
     if (!rows || !period) return [];
-    const valid = new Set(rows.filter(row => row.totalAmount !== null && row.periodPaid !== null).map(row => row.debtId));
+    const valid = new Set(rows.filter(row => row.status === 'available' && row.totalAmount !== null && row.periodPaid !== null).map(row => row.debtId));
     return debts.filter(debt => valid.has(debt.id)).flatMap(debt =>
       debt.payments.filter(payment => payment.date >= period.from && payment.date <= period.to)
         .map(payment => ({ id: debt.id + ':' + payment.id, person: debt.personName,
