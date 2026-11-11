@@ -75,6 +75,11 @@ export function DebtReportScreen({ direction }: { direction: Direction }) {
     <AppText variant="caption" color="textSecondary" style={{ marginBottom: spacing.md }}>
       Read-only debt records. Recorded collections and payments are not independent proof of bank posting. Historical balances may be unavailable after edits. Currencies are never combined.
     </AppText>
+    {hydrated && rows !== null && <Pressable accessibilityRole="button" accessibilityLabel="View Statement"
+      onPress={() => router.push({ pathname: '/finance/statement-debts', params: { direction, month } })}
+      style={{ minHeight: 44, justifyContent: 'center', marginBottom: spacing.sm }}>
+      <AppText color="primary">View Statement · {month}</AppText>
+    </Pressable>}
     {summaries.map(([currency, summary]) => <Card key={currency} style={{ marginBottom: spacing.sm }}>
       <AppText variant="bodyStrong">{currency} · {summary.count} debts</AppText>
       {summary.unavailable ? <AppText color="textSecondary">Summary unavailable: incomplete debt evidence</AppText> : <>
