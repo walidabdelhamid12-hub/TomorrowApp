@@ -6,7 +6,7 @@ const source = fs.readFileSync(path.join(__dirname, '../src/features/finance/uti
 test('CSV foundation is read-only and labels its format accurately', () => {
   assert.match(source, /CSV is not an XLSX workbook/);
   assert.match(source, /export function serializeStatementCsv/);
-  assert.match(source, /\uFEFF/);
+  assert.match(source, /\\uFEFF/);
   assert.match(source, /replace\(\/"\/g, '""'\)/);
   assert.doesNotMatch(source, /postingAllowed\s*=\s*true|setState\(|writeFile\(|saveAsync\(/);
 });
