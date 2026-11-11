@@ -116,7 +116,7 @@ export default function ExpensesStatementScreen() {
                   <AppText variant="bodyStrong">
                     {categories.find(c => c.id === row.categoryId)?.name ?? 'Uncategorized'}
                   </AppText>
-                  <AppText color="textSecondary">{row.date} Â· {accounts.find(a => a.id === row.accountId)?.name ?? 'Unknown account'}</AppText>
+                  <AppText color="textSecondary">{row.date} · {accounts.find(a => a.id === row.accountId)?.name ?? 'Unknown account'}</AppText>
                   {!!row.note && <AppText color="textSecondary">{row.note}</AppText>}
                   <AppText variant="bodyStrong" style={{ color: moduleColors.finance, marginTop: spacing.xs }}>
                     {row.amount < 0 ? '-' : ''}{formatAmount(Math.abs(row.amount), row.currencyCode)} {row.currencyCode}
