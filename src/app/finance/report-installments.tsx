@@ -54,12 +54,17 @@ export default function InstallmentsReportScreen() {
       saved.hydration !== 'ready' ? <Card><AppText>Loading contracts...</AppText></Card> :
       rows === null ? <Card><AppText color="danger">Report data could not be validated.</AppText></Card> :
       rows.length === 0 ? <Card><AppText>No installment contracts yet.</AppText></Card> :
-      rows.map(row => <Card key={row.id} style={{ marginBottom: spacing.sm }}>\n        <Pressable accessibilityRole="button" accessibilityLabel={"Open installment contract " + row.name}\n          onPress={() => router.push({ pathname: '/finance/installment-contract', params: { id: row.id, mode: 'details' } })}\n          style={{ minHeight: 44, justifyContent: 'center' }}>
+      rows.map(row => <Card key={row.id} style={{ marginBottom: spacing.sm }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={"Open installment contract " + row.name}
+          onPress={() => router.push({ pathname: '/finance/installment-contract', params: { id: row.id, mode: 'details' } })}
+          style={{ minHeight: 44, justifyContent: 'center' }}>
         <AppText variant="bodyStrong">{row.name}</AppText>
         <AppText color="textSecondary">{row.currencyCode} · {row.ownership.replace('_', ' ')}</AppText>
         <AppText>Contract total (all scheduled): {row.totalScheduled} {row.currencyCode}</AppText>
         <AppText>Due this month: {row.dueInPeriod} {row.currencyCode}</AppText>
-        <AppText>Installments scheduled this month: {row.dueCount} of {row.scheduledCount} total</AppText>\n        <AppText color="textSecondary">View contract details ›</AppText>\n        </Pressable>
+        <AppText>Installments scheduled this month: {row.dueCount} of {row.scheduledCount} total</AppText>
+        <AppText color="textSecondary">View contract details ›</AppText>
+        </Pressable>
       </Card>)}
   </Screen>;
 }
