@@ -144,7 +144,8 @@ test('8.3B verified fixture renders compact balances and separate currencies wit
   render();
   assert.match(allText(), /1,000\.00 EGP/); assert.match(allText(), /1\.237 KWD/);
   assert.match(allText(), /Opening Balance/); assert.match(allText(), /Closing Balance/); assert.match(allText(), /Net Change/);
-  assert.doesNotMatch(allText(), /Total balance|View Statement/i);
+  assert.doesNotMatch(allText(), /Total balance/i);
+  assert.match(allText(), /View Statement/);
   assert.equal(nodes('View').filter(n => n.props.testID?.startsWith('account-report-')).length, 2);
   assert.ok(nodes('View').some(n => n.props.style.flexWrap === 'wrap'));
   assert.ok(nodes('View').every(n => n.props.style.height === undefined));
