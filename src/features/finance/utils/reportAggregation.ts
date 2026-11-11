@@ -83,7 +83,7 @@ function validDate(value: string): boolean {
     && date.getUTCDate() === day;
 }
 
-function toUnits(amount: number, currencyCode: string): number | null {
+export function reportAmountToUnits(amount: number, currencyCode: string): number | null {
   if (!isSupportedCurrency(currencyCode) || !Number.isFinite(amount)) return null;
 
   const decimals = getCurrencyDecimals(currencyCode);
@@ -239,8 +239,8 @@ export function aggregateOperatingReport(
     }
 
     const currency = item.currencyCode;
-    const incomeUnits = toUnits(item.incomeAmount, currency);
-    const expenseUnits = toUnits(item.expenseAmount, currency);
+    const incomeUnits = reportAmountToUnits(item.incomeAmount, currency);
+    const expenseUnits = reportAmountToUnits(item.expenseAmount, currency);
 
     if (incomeUnits === null || expenseUnits === null) {
       unknown.push({

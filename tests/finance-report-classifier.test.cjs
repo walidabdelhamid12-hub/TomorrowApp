@@ -179,3 +179,40 @@ test('conflicting property ledger ownership is rejected', () => {
     'unknown',
   );
 });
+for (const amount of [0, -1, NaN, Infinity]) {
+  test('refund cannot verify against invalid original amount: ' + amount, () => {
+    const original = tx('original', 'expense', amount);
+    const refund = tx('refund', 'expense', 10, { entryType: 'refund', relatedTransactionId: original.id });
+    assert.equal(classify(refund, ctx([original, refund])).kind, 'unknown');
+  });
+}
+test('refund cannot bypass reverse property ownership evidence', () => {
+  const original = tx('original', 'expense', 100);
+  const refund = tx('refund', 'expense', 10, { entryType: 'refund', relatedTransactionId: original.id });
+  const property = { contracts: [], installments: [], payments: [{ id: 'p', ledgerTransactionId: original.id }] };
+  assert.equal(classify(refund, ctx([original, refund], [], [], property)).kind, 'unknown');
+});
+for (const type of ['adjustment', undefined, null, 7]) {
+  test('unsupported transaction type is explicitly unknown: ' + type, () => {
+    const t = tx('bad', type, 100);
+    assert.equal(classify(t, ctx([t])).kind, 'unknown');
+  });
+}
+
+test('refund with reverse property ownership is unknown', () => {
+  const original = tx('original', 'expense', 100);
+  const refund = tx('refund', 'expense', 10, { entryType: 'refund', relatedTransactionId: original.id });
+  const property = { contracts: [], installments: [], payments: [{ id: 'p', ledgerTransactionId: refund.id }] };
+  assert.equal(classify(refund, ctx([original, refund], [], [], property)).kind, 'unknown');
+});
+test('refund with unsupported purpose is unknown', () => {
+  const original = tx('original', 'expense', 100);
+  const refund = tx('refund', 'expense', 10, { entryType: 'refund', relatedTransactionId: original.id, purpose: 'unsupported' });
+  assert.equal(classify(refund, ctx([original, refund])).kind, 'unknown');
+});
+test('account IDs must be unique even across currencies', () => {
+  const t = tx('ordinary', 'income', 100);
+  const data = ctx([t]);
+  data.ledger.accounts.push(account('bank', 'USD'));
+  assert.equal(classify(t, data).kind, 'unknown');
+});

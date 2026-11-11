@@ -81,3 +81,36 @@ test('period boundaries include both endpoints', () => {
   assert.equal(result.reconciled, true);
   assert.deepEqual(result.rows.map(r => r.id), ['b', 'a']);
 });
+
+for (const amount of [134217728.02, 4398046511104.02]) {
+  test('valid large fractional amount reconciles exactly: ' + amount, () => {
+    const result = buildExpensesStatement(ctx([tx('large', amount)]), period);
+    assert.equal(result.report.unknown.length, 0);
+    assert.equal(result.reconciled, true);
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.rows[0].amount, amount);
+  });
+}
+
+test('three-decimal currency reconciles without mutating frozen ledger', () => {
+  const data = ctx([tx('kwd', 134217728.021, { accountId: 'kwd', currencyCode: 'KWD' })]);
+  data.ledger.accounts.push({ id: 'kwd', currencyCode: 'KWD' });
+  const before = structuredClone(data);
+  const freeze = value => { if (value && typeof value === 'object') { Object.freeze(value); Object.values(value).forEach(freeze); } };
+  freeze(data);
+  const result = buildExpensesStatement(data, period);
+  assert.equal(result.reconciled, true);
+  assert.equal(result.rows.length, 1);
+  assert.deepEqual(data, before);
+});
+
+test('large cross-month cross-currency refund keeps original category and actual cash currency', () => {
+  const original = tx('purchase', 200000000, { date: '2026-10-01', categoryId: 'food' });
+  const refund = tx('refund', 134217728.02, { accountId: 'usd', currencyCode: 'USD',
+    entryType: 'refund', relatedTransactionId: original.id, categoryId: 'other' });
+  const result = buildExpensesStatement(ctx([original, refund]), period, { accountId: 'usd', categoryId: 'food' });
+  assert.equal(result.reconciled, true);
+  assert.equal(result.report.currencies[0].expenses, -134217728.02);
+  assert.deepEqual(result.rows.map(row => [row.id, row.categoryId, row.currencyCode, row.amount]),
+    [['refund', 'food', 'USD', -134217728.02]]);
+});

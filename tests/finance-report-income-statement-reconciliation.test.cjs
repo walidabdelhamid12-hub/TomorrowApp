@@ -72,3 +72,25 @@ test('period boundaries include both endpoints', () => {
   assert.equal(result.reconciled, true);
   assert.deepEqual(result.rows.map(r => r.id), ['b', 'a']);
 });
+
+for (const amount of [134217728.02, 4398046511104.02]) {
+  test('valid large fractional amount reconciles exactly: ' + amount, () => {
+    const result = buildIncomeStatement(ctx([tx('large', amount)]), period);
+    assert.equal(result.report.unknown.length, 0);
+    assert.equal(result.reconciled, true);
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.rows[0].amount, amount);
+  });
+}
+
+test('three-decimal currency reconciles without mutating frozen ledger', () => {
+  const data = ctx([tx('kwd', 134217728.021, { accountId: 'kwd', currencyCode: 'KWD' })]);
+  data.ledger.accounts.push({ id: 'kwd', currencyCode: 'KWD' });
+  const before = structuredClone(data);
+  const freeze = value => { if (value && typeof value === 'object') { Object.freeze(value); Object.values(value).forEach(freeze); } };
+  freeze(data);
+  const result = buildIncomeStatement(data, period);
+  assert.equal(result.reconciled, true);
+  assert.equal(result.rows.length, 1);
+  assert.deepEqual(data, before);
+});

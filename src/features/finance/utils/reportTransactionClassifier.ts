@@ -74,9 +74,13 @@ export function classifyReportTransaction(
   ctx: ReportClassificationContext,
 ): ReportClassification {
   const { ledger, finance } = ctx;
+  if (tx.type !== 'income' && tx.type !== 'expense') {
+    return result(tx, 'unknown', 'Invalid or unsupported transaction type');
+  }
   if (ledger.transactions.filter(t => t.id === tx.id).length !== 1
     || ledger.transactions.find(t => t.id === tx.id) !== tx
     || !Number.isFinite(tx.amount) || tx.amount <= 0
+    || ledger.accounts.filter(a => a.id === tx.accountId).length !== 1
     || ledger.accounts.filter(a => a.id === tx.accountId && a.currencyCode === tx.currencyCode).length !== 1) {
     return result(tx, 'unknown', 'Invalid or duplicate ledger transaction/account');
   }
@@ -86,8 +90,11 @@ export function classifyReportTransaction(
     const original = originals[0];
     if (originals.length !== 1 || !original || original.type !== 'expense'
       || original.entryType === 'refund' || original.id === tx.id
+      || classifyReportTransaction(original, ctx).kind !== 'expense'
       || isProtectedTransaction(original, finance) || isProtectedTransaction(tx, finance)
       || ledger.accounts.filter(a => a.id === original.accountId && a.currencyCode === original.currencyCode).length !== 1
+      || (ctx.property?.payments.some(p => p.ledgerTransactionId === tx.id) ?? false)
+      || (tx.purpose !== undefined && tx.purpose !== 'normal')
       || tx.type !== 'expense') {
       return result(tx, 'unknown', 'Refund original missing, incompatible or protected');
     }

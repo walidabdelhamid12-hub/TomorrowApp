@@ -33,6 +33,8 @@ export default function ExpensesStatementScreen() {
   const accountId = single(params.accountId);
   const categoryId = single(params.categoryId);
   const valid = validDate(from) && validDate(to) && from <= to
+    && (params.accountId === undefined || (typeof params.accountId === 'string' && params.accountId.length > 0))
+    && (params.categoryId === undefined || (typeof params.categoryId === 'string' && params.categoryId.length > 0))
     && (!accountId || !/[\s\u0000-\u001f\u007f]/u.test(accountId))
     && (!categoryId || !/[\s\u0000-\u001f\u007f]/u.test(categoryId));
 

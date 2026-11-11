@@ -290,10 +290,13 @@ test('D1 malformed amounts/currencies are never inferred or accumulated',()=>{
     assert.deepEqual(r.currencies,[]);assert.deepEqual(r.incomeCategories,[]);assert.deepEqual(r.expenseCategories,[]);
   }
 });
-test('D1 omitted, undefined and empty filters retain exact legacy malformed-type behavior',()=>{
+test('D1 omitted, undefined and empty filters retain diagnostics for malformed types',()=>{
   const data=context([tx('good','income',5),tx('bad','adjustment',100),tx('missing',undefined,100)]);
   const expected={period,currencies:[{currencyCode:'EGP',income:5,expenses:0,net:5}],
-    incomeCategories:[{currencyCode:'EGP',categoryId:'food',amount:5}],expenseCategories:[],unknown:[],includedTransactions:1};
+    incomeCategories:[{currencyCode:'EGP',categoryId:'food',amount:5}],expenseCategories:[],unknown:[
+      {id:'bad',date:'2026-11-10',reason:'Invalid or unsupported transaction type'},
+      {id:'missing',date:'2026-11-10',reason:'Invalid or unsupported transaction type'},
+    ],includedTransactions:1};
   const omitted=report(data,period);
   assert.deepEqual(omitted,expected);assert.equal(Object.hasOwn(omitted,'status'),false);
   for(const filters of [undefined,{}]) {

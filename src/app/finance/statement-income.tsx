@@ -33,6 +33,8 @@ export default function IncomeStatementScreen() {
   const accountId = single(params.accountId);
   const categoryId = single(params.categoryId);
   const valid = validDate(from) && validDate(to) && from <= to
+    && (params.accountId === undefined || (typeof params.accountId === 'string' && params.accountId.length > 0))
+    && (params.categoryId === undefined || (typeof params.categoryId === 'string' && params.categoryId.length > 0))
     && (!accountId || !/[\s\u0000-\u001f\u007f]/u.test(accountId))
     && (!categoryId || !/[\s\u0000-\u001f\u007f]/u.test(categoryId));
 
@@ -116,7 +118,7 @@ export default function IncomeStatementScreen() {
                   <AppText variant="bodyStrong">
                     {categories.find(c => c.id === row.categoryId)?.name ?? 'Uncategorized'}
                   </AppText>
-                  <AppText color="textSecondary">{row.date} Â· {accounts.find(a => a.id === row.accountId)?.name ?? 'Unknown account'}</AppText>
+                  <AppText color="textSecondary">{row.date} · {accounts.find(a => a.id === row.accountId)?.name ?? 'Unknown account'}</AppText>
                   {!!row.note && <AppText color="textSecondary">{row.note}</AppText>}
                   <AppText variant="bodyStrong" style={{ color: moduleColors.finance, marginTop: spacing.xs }}>
                     +{formatAmount(row.amount, row.currencyCode)} {row.currencyCode}

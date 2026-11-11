@@ -1,5 +1,4 @@
-import { getCurrencyDecimals, isSupportedCurrency } from '../constants/currencies';
-import { aggregateOperatingReport, type OperatingReportFilters, type ReportPeriod } from './reportAggregation';
+import { aggregateOperatingReport, reportAmountToUnits, type OperatingReportFilters, type ReportPeriod } from './reportAggregation';
 import { classifyReportTransactions, type ReportClassificationContext } from './reportTransactionClassifier';
 
 export interface IncomeStatementRow {
@@ -36,12 +35,10 @@ export function buildIncomeStatement(
       || tx.date < period.from || tx.date > period.to
       || (filters.accountId !== undefined && tx.accountId !== filters.accountId)
       || (filters.categoryId !== undefined && (item.categoryId ?? 'uncategorized') !== filters.categoryId)) continue;
-    if (!isSupportedCurrency(item.currencyCode)) { safe = false; continue; }
-    const factor = 10 ** getCurrencyDecimals(item.currencyCode);
-    const units = Math.round(item.incomeAmount * factor);
+    const units = reportAmountToUnits(item.incomeAmount, item.currencyCode);
+    if (units === null) { safe = false; continue; }
     const next = (sums.get(item.currencyCode) ?? 0) + units;
-    if (!Number.isSafeInteger(units) || !Number.isSafeInteger(next)
-      || Math.abs(item.incomeAmount * factor - units) > 0.000001) {
+    if (!Number.isSafeInteger(next)) {
       safe = false;
       continue;
     }
