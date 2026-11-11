@@ -41,3 +41,17 @@ test('report contract cards open details and label both monetary and count metri
   assert.match(source, /accessibilityLabel="Next month"/);
   assert.doesNotMatch(source, /\\\\n\s*<Pressable/);
 });
+
+test('currency summary remains read-only and never combines currencies', () => {
+  const utility = fs.readFileSync(path.join(__dirname, '../src/features/finance/utils/reportSavedInstallments.ts'), 'utf8');
+  const screen = fs.readFileSync(path.join(__dirname, '../src/app/finance/report-installments.tsx'), 'utf8');
+  assert.match(utility, /new Map<string,/);
+  assert.match(utility, /totals\.get\(row\.currencyCode\)/);
+  assert.match(utility, /totals\.set\(row\.currencyCode, current\)/);
+  assert.match(utility, /current\.total \+= units\(row\.totalScheduled, decimals\)/);
+  assert.match(utility, /current\.due \+= units\(row\.dueInPeriod, decimals\)/);
+  assert.match(screen, /summarizeSavedInstallmentsByCurrency\(rows\)/);
+  assert.match(screen, /Summary by currency/);
+  assert.match(screen, /All scheduled contracts: \{item\.totalScheduled\}/);
+  assert.doesNotMatch(utility, /setState|createContract\(|updateContract\(|deleteContract\(/);
+});
