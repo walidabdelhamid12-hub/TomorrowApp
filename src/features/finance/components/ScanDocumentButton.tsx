@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AppButton, AppText } from '@/components/ui';
@@ -12,29 +12,28 @@ import { moduleColors, useTheme } from '@/theme';
 
 interface ScanDocumentButtonProps {
   onResult: (result: ScanResult) => void;
+  initialSource?: ScanSource | null;
+  onFinished?: () => void;
 }
 
 /** Camera / gallery / PDF buttons that fill the transaction form from a document. */
-export function ScanDocumentButton({ onResult }: ScanDocumentButtonProps) {
+export function ScanDocumentButton({ onResult, initialSource, onFinished }: ScanDocumentButtonProps) {
   const { spacing } = useTheme();
   const [busy, setBusy] = useState<ScanSource | null>(null);
   const [message, setMessage] = useState<string | undefined>();
 
   const run = async (source: ScanSource) => {
-    const provider = getScanProvider();
-    if (!provider) {
-      setMessage(
-        'Scanner is not set up yet. Set EXPO_PUBLIC_OCR_ENDPOINT to your OCR service.'
-      );
-      return;
-    }
-
     setBusy(source);
     setMessage(undefined);
     try {
       const input = await pickDocument(source);
       if (!input) return;
 
+      const provider = getScanProvider();
+      if (!provider) {
+        setMessage('File selected, but automatic scanning needs an OCR service. Enter the transaction details manually.');
+        return;
+      }
       const result = await provider.extract(input);
       if (result.amount === undefined && result.date === undefined) {
         setMessage('No amount or date found. Please enter them manually.');
@@ -46,8 +45,14 @@ export function ScanDocumentButton({ onResult }: ScanDocumentButtonProps) {
       setMessage(error instanceof Error ? error.message : 'Scan failed.');
     } finally {
       setBusy(null);
+      onFinished?.();
     }
   };
+
+  useEffect(() => {
+    if (initialSource) void run(initialSource);
+    // Run once per selected source; parent unmounts after completion.
+  }, [initialSource]);
 
   const accent = moduleColors.finance;
 
@@ -60,7 +65,7 @@ export function ScanDocumentButton({ onResult }: ScanDocumentButtonProps) {
       >
         SCAN CHEQUE / RECEIPT / PDF
       </AppText>
-      <View style={styles.row}>
+      {!initialSource ? <View style={styles.row}>
         <View style={[styles.flex, { marginEnd: spacing.sm }]}>
           <AppButton
             title="Camera"
@@ -91,7 +96,7 @@ export function ScanDocumentButton({ onResult }: ScanDocumentButtonProps) {
             onPress={() => void run('file')}
           />
         </View>
-      </View>
+      </View> : null}
       {message ? (
         <AppText
           variant="caption"

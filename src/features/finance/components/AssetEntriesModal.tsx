@@ -1,10 +1,13 @@
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
+import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
+import { AssetTypeIcon } from '@/features/finance/components/AssetTypeIcon';
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
     Alert,
     Modal,
-    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -14,7 +17,9 @@ import {
 
 import { AppButton, AppText } from '@/components/ui';
 import type { Asset, AssetEntry } from '@/features/finance/types/finance';
-import { formatMoney, formatNumber } from '@/features/finance/utils/money';
+import { formatMoney, formatNumber, parseAmount } from '@/features/finance/utils/money';
+import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { moduleColors, useTheme } from '@/theme';
 
 interface AssetEntriesModalProps {
@@ -37,6 +42,8 @@ export function AssetEntriesModal({
   onDelete,
 }: AssetEntriesModalProps) {
   const { colors, spacing } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
+  const metals = useCurrencyStore(s => s.metals);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
@@ -73,9 +80,9 @@ export function AssetEntriesModal({
   };
 
   const saveEditing = (entryId: string) => {
-    const parsedAmount = Number(amount);
+    const parsedAmount = parseAmount(amount);
 
-    if (!amount.trim() || !Number.isFinite(parsedAmount)) {
+    if (!amount.trim() || parsedAmount === null) {
       Alert.alert('Invalid amount', 'Enter a valid amount.');
       return;
     }
@@ -85,6 +92,10 @@ export function AssetEntriesModal({
       return;
     }
 
+    if (!isMetal && !hasValidCurrencyPrecision(amount, asset.currencyCode)) {
+      Alert.alert('Invalid amount precision', `${asset.currencyCode} allows up to ${getCurrencyDecimals(asset.currencyCode)} decimal places. Please correct the amount before saving.`);
+      return;
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
       Alert.alert('Invalid date', 'Use YYYY-MM-DD format.');
       return;
@@ -116,25 +127,10 @@ export function AssetEntriesModal({
 
     const remove = () => onDelete(asset.id, entry.id);
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Delete this entry?\n\n${message}`)) {
-        remove();
-        if (editingId === entry.id) cancelEditing();
-      }
-      return;
-    }
-
-    Alert.alert('Delete entry?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
+    confirm('Delete entry?', message, () => {
           remove();
           if (editingId === entry.id) cancelEditing();
-        },
-      },
-    ]);
+        }, 'Delete');
   };
 
   return (
@@ -144,6 +140,7 @@ export function AssetEntriesModal({
       animationType="slide"
       onRequestClose={onClose}
     >
+      {confirmation}
       <View style={styles.backdrop}>
         <View
           style={[
@@ -156,8 +153,8 @@ export function AssetEntriesModal({
         >
           <View style={styles.header}>
             <View style={styles.flex}>
-              <AppText variant="h3">Asset entries</AppText>
-              <AppText color="textSecondary" numberOfLines={1}>
+              <AssetTypeIcon category={asset.category} currencyCode={'currencyCode' in asset ? asset.currencyCode : undefined} /><AppText variant="h3">Asset movements</AppText>
+              <AppText color="textSecondary">
                 {asset.name}
               </AppText>
             </View>
@@ -167,6 +164,9 @@ export function AssetEntriesModal({
             </Pressable>
           </View>
 
+          {(asset.category === 'gold' || asset.category === 'silver') && <AppText variant="caption" color="textSecondary">
+            {asset.category === 'gold' ? 'Gold reference: 24K · ' + (metals.gold24PerGram ?? 'Not set') : 'Silver reference (purity unspecified): ' + (metals.silverPerGram ?? 'Not set')} EGP per 1 gram. Valuation uses full source precision.
+          </AppText>}
           <ScrollView
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.list}
@@ -286,33 +286,7 @@ export function AssetEntriesModal({
                             ) : null}
                           </View>
 
-                          <View style={styles.actions}>
-                            <Pressable
-                              onPress={() => startEditing(entry)}
-                              hitSlop={8}
-                              accessibilityRole="button"
-                              accessibilityLabel="Edit entry"
-                            >
-                              <Ionicons
-                                name="create-outline"
-                                size={20}
-                                color={moduleColors.finance}
-                              />
-                            </Pressable>
-
-                            <Pressable
-                              onPress={() => confirmDelete(entry)}
-                              hitSlop={8}
-                              accessibilityRole="button"
-                              accessibilityLabel="Delete entry"
-                            >
-                              <Ionicons
-                                name="trash-outline"
-                                size={19}
-                                color="#DC2626"
-                              />
-                            </Pressable>
-                          </View>
+                          <FinanceActionButtons label={'entry dated ' + entry.date} onEdit={() => startEditing(entry)} onDelete={() => confirmDelete(entry)} />
                         </View>
                       </>
                     )}
@@ -366,14 +340,9 @@ const styles = StyleSheet.create({
     gap: 9,
   },
   entryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     gap: 12,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
   },
   input: {
     minHeight: 44,

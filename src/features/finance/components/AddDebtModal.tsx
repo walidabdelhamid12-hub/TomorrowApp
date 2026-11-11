@@ -14,6 +14,8 @@ import {
 
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { parseAmount } from '@/features/finance/utils/money';
+import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { roundMoney } from '@/features/finance/utils/finance';
 import type {
     CurrencyCode,
@@ -52,6 +54,7 @@ interface AddDebtModalProps {
   visible: boolean;
   direction: DebtDirection;
   debt?: Debt | null;
+  currencyLocked?: boolean;
   onClose: () => void;
   onSave: (data: NewDebtInput) => void;
 }
@@ -123,6 +126,7 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
   visible,
   direction,
   debt = null,
+  currencyLocked = false,
   onClose,
   onSave,
 }) => {
@@ -267,6 +271,10 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
       return;
     }
 
+    if (!hasValidCurrencyPrecision(amount, selectedCurrency)) {
+      Alert.alert('Invalid amount precision', `${selectedCurrency} allows up to ${getCurrencyDecimals(selectedCurrency)} decimal places. Please correct the amount before saving.`);
+      return;
+    }
     if (!isValidDate(cleanDate)) {
       Alert.alert(
         'Invalid date',
@@ -467,6 +475,7 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
               </View>
 
               <Text style={styles.label}>CURRENCY</Text>
+              {currencyLocked && <Text>Currency is locked to preserve payment history and linked account transactions.</Text>}
 
               <View style={styles.currenciesGrid}>
                 {CURRENCY_OPTIONS.map((currency) => {
@@ -480,8 +489,9 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
                         active && styles.currencyCardActive,
                       ]}
                       onPress={() => setSelectedCurrency(currency.code)}
+                      disabled={currencyLocked}
                       accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
+                      accessibilityState={{ selected: active, disabled: currencyLocked }}
                     >
                       <Text style={styles.currencyFlag}>
                         {currency.flag}

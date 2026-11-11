@@ -1,5 +1,5 @@
 
-import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
+import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { roundMoney } from '@/features/finance/utils/finance';
 import { normalizeDigits } from '@/utils/input';
 
@@ -49,13 +49,13 @@ export function formatNumber(value: number, decimals: number): string {
 /**
  * Formats monetary amounts with:
  * - Thousands separators.
- * - Exactly two decimal places for every currency.
+ * - Currency-specific decimal places and the shared decimal half-up display rule.
  *
  * This affects display only.
  * It does not change stored values or calculation precision.
  */
 export function formatMoney(value: number, code: string): string {
-  return formatNumber(value, getCurrencyDecimals(code));
+  return formatAmount(value, code);
 }
 
 /**
@@ -77,6 +77,7 @@ export function convertAmount(
   to: string,
   rates: RateMap,
   verifiedCurrencies: readonly string[] = ['EGP'],
+  roundResult: boolean = true,
 ): number | null {
   if (!Number.isFinite(amount)) return null;
 
@@ -107,5 +108,17 @@ export function convertAmount(
     return null;
   }
 
-  return roundMoney((amount * fromRate) / toRate);
+  const converted = (amount * fromRate) / toRate;
+  return roundResult ? roundMoney(converted) : converted;
+}
+
+/** Convert for aggregate summaries without per-item intermediate rounding. */
+export function convertAmountUnrounded(
+  amount: number,
+  from: string,
+  to: string,
+  rates: RateMap,
+  verifiedCurrencies: readonly string[] = ['EGP'],
+): number | null {
+  return convertAmount(amount, from, to, rates, verifiedCurrencies, false);
 }

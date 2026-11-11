@@ -1,4 +1,5 @@
 
+import type { PaymentJournalMarker } from './paymentJournalInstallation';
 import type {
   CurrencyCode,
   EntityId,
@@ -22,6 +23,8 @@ export interface Account extends Timestamps {
   currencyCode: CurrencyCode;
   /** Balance when the account was added. Current balance is derived. */
   initialBalance: number;
+  /** User-verified: initialBalance applies before movements on this date. */
+  openingBalanceDate?: ISODate;
   /** Credit limit for credit-card accounts. Not an asset or cash balance. */
   creditLimit?: number;
   /** Hidden from pickers but kept so old transactions stay valid. */
@@ -33,7 +36,7 @@ export interface Account extends Timestamps {
 
 export type NewAccountInput = Omit<
   Account,
-  'id' | 'archived' | 'createdAt' | 'updatedAt'
+  'id' | 'archived' | 'createdAt' | 'updatedAt' | 'openingBalanceDate'
 > & { archived?: boolean };
 
 export type AccountPatch = Partial<NewAccountInput>;
@@ -70,9 +73,38 @@ export type TransactionPurpose =
   | 'debt_collection'
   | 'loan_payment'
   | 'loan_principal_payment'
-  | 'loan_interest_payment';
+  | 'loan_interest_payment'
+  | 'property_installment_payment';
 
+/**
+ * Historical FX evidence captured for a transaction.
+ * Rate direction: reference currency units per one transaction currency unit.
+ * The rate must correspond to the transaction date.
+ */
+export interface HistoricalFxSnapshot {
+  sourceCurrencyCode: CurrencyCode;
+  referenceCurrencyCode: CurrencyCode;
+  rate: number;
+  rateDate: ISODate;
+  /** Actual published rate date, when earlier than the transaction date. */
+  effectiveRateDate?: ISODate;
+  source: 'historical_api' | 'manual';
+}
+/**
+ * Direct historical conversion evidence.
+ * Rate direction: transaction-currency units per one account-currency unit.
+ * Manual evidence must never be represented as an API-derived EGP anchor.
+ */
+export interface DirectHistoricalFxSnapshot {
+  accountCurrencyCode: CurrencyCode;
+  transactionCurrencyCode: CurrencyCode;
+  rate: number;
+  rateDate: ISODate;
+  source: 'historical_api_derived' | 'manual';
+}
 export interface Transaction extends Timestamps {
+  historicalFx?: HistoricalFxSnapshot;
+  directHistoricalFx?: DirectHistoricalFxSnapshot;
   id: EntityId;
   type: TransactionType;
 
@@ -88,6 +120,14 @@ export interface Transaction extends Timestamps {
   /** Always positive. The accounting effect depends on type and entryType. */
   amount: number;
 
+  /** Original user-entered amount; optional for legacy transactions. */
+  originalAmount?: number;
+  /** Currency of the original user-entered amount. */
+  originalCurrencyCode?: CurrencyCode;
+  /** Account-currency units per one original-currency unit. */
+  accountFxRate?: number;
+  /** Historical account-currency rate evidence, when conversion is needed. */
+  accountFxSnapshot?: HistoricalFxSnapshot;
   /** Copied from the account when saved. */
   currencyCode: CurrencyCode;
 
@@ -101,7 +141,7 @@ export interface Transaction extends Timestamps {
    * Optional link to the debt or loan settled by this transaction.
    * These fields allow the app to prevent duplicate ledger posting.
    */
-  linkedEntityType?: 'debt' | 'loan';
+  linkedEntityType?: 'debt' | 'loan' | 'property';
   linkedEntityId?: EntityId;
   linkedPaymentId?: EntityId;
 
@@ -114,7 +154,9 @@ export type NewTransactionInput = Omit<
   'id' | 'currencyCode' | 'createdAt' | 'updatedAt'
 >;
 
-export type TransactionPatch = Partial<NewTransactionInput>;
+/** Ownership is established by payment posting, never by a generic edit. */
+export type TransactionPatch = Partial<Omit<NewTransactionInput,
+  'purpose' | 'linkedEntityType' | 'linkedEntityId' | 'linkedPaymentId'>>;
 
 /* -------------------------------- Transfers ------------------------------- */
 
@@ -172,6 +214,8 @@ export type TransferPatch = Partial<NewTransferInput>;
 /* ------------------------------ Persisted data --------------------------- */
 
 export interface LedgerData {
+  paymentAccounting?: import('./paymentRecovery').PaymentAccountingMetadata;
+  paymentJournal?: PaymentJournalMarker;
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];

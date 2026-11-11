@@ -2,6 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,9 @@ import {
 } from 'react-native';
 
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
+import { parseAmount } from '@/features/finance/utils/money';
+import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
 
 export type AccountTypeLabel =
@@ -26,6 +30,7 @@ export type AddAccountFormData = {
   amount: string;
   selectedType: AccountTypeLabel;
   selectedCurrency: string;
+  openingBalanceDate?: string;
 };
 
 const ACCOUNT_TYPE_OPTIONS: {
@@ -126,6 +131,8 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   );
 
   const [accountName, setAccountName] = useState('');
+  const [openingDate, setOpeningDate] = useState('');
+  const [openingDateConfirmed, setOpeningDateConfirmed] = useState(false);
   const [amount, setAmount] = useState('0');
   const [selectedType, setSelectedType] =
     useState<AccountTypeLabel>('Cash');
@@ -135,6 +142,8 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   useEffect(() => {
     if (!visible) return;
 
+    setOpeningDate('');
+    setOpeningDateConfirmed(false);
     if (account) {
       setAccountName(account.name);
       setAmount(String(account.initialBalance));
@@ -318,10 +327,46 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
               Money already in the account before you start tracking.
             </Text>
 
+            {!account && <View style={{ marginTop: 12, gap: 8 }}>
+              <Text style={styles.label}>VERIFIED OPENING DATE (OPTIONAL)</Text>
+              <TextInput accessibilityLabel="New account opening date (YYYY-MM-DD)"
+                style={styles.input} value={openingDate} onChangeText={value => {
+                  setOpeningDate(value); setOpeningDateConfirmed(false);
+                }} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"
+                autoCorrect={false} maxLength={10} />
+              <TouchableOpacity accessibilityRole="checkbox"
+                accessibilityState={{ checked: openingDateConfirmed }}
+                onPress={() => setOpeningDateConfirmed(value => !value)}
+                style={{ minHeight: 44, justifyContent: 'center' }}>
+                <Text style={styles.helperText}>
+                  {openingDateConfirmed ? '☑' : '☐'} This starting balance applies before transactions on this date.
+                </Text>
+              </TouchableOpacity>
+            </View>}
+
             <TouchableOpacity
               style={styles.saveButton}
               onPress={() => {
+                const parsed = parseAmount(amount);
+                if (!hasValidCurrencyPrecision(amount, selectedCurrency)) {
+                  Alert.alert('Invalid amount precision', `${selectedCurrency} allows up to ${getCurrencyDecimals(selectedCurrency)} decimal places. Please correct the amount before saving.`);
+                  return;
+                }
+                if (parsed === null || parsed < 0 || !Number.isSafeInteger(Math.round(parsed * 1000))
+                  || Math.abs(parsed * 1000 - Math.round(parsed * 1000)) > 1e-6) {
+                  Alert.alert('Invalid starting balance', 'Enter a valid non-negative amount.');
+                  return;
+                }
+                if (!accountName.trim()) {
+                  Alert.alert('Account name required', 'Enter a name for this account.');
+                  return;
+                }
+                if (!account && openingDate.trim() && !openingDateConfirmed) {
+                  Alert.alert('Confirmation required', 'Confirm the opening balance date before saving.');
+                  return;
+                }
                 onSave({
+                  ...(!account && openingDate.trim() ? { openingBalanceDate: openingDate.trim() } : {}),
                   accountName: accountName.trim(),
                   amount,
                   selectedType,

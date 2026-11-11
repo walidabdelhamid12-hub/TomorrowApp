@@ -1,0 +1,36 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const ts = require('typescript');
+function load(name, exportName) {
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/finance/store', name + '.ts'), 'utf8');
+  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const m = { exports: {} };
+  vm.runInNewContext(js, { module: m, exports: m.exports });
+  return m.exports[exportName];
+}
+const classify = load('paymentJournalVersionDetection', 'classifyPaymentJournalVersion');
+test("missing", () => assert.equal(classify(null).kind, "missing"));
+test("v1", () => assert.equal(classify("{\"version\":1,\"state\":{}}").kind, "legacy"));
+test("v2", () => assert.equal(classify("{\"version\":2,\"state\":{}}").kind, "legacy"));
+test("v3", () => assert.equal(classify("{\"version\":3,\"state\":{}}").kind, "v3"));
+test("bad json", () => assert.equal(classify("{").kind, "blocked"));
+test("empty", () => assert.equal(classify("").kind, "blocked"));
+test("null", () => assert.equal(classify("null").kind, "blocked"));
+test("array", () => assert.equal(classify("[]").kind, "blocked"));
+test("number", () => assert.equal(classify("4").kind, "blocked"));
+test("missing state", () => assert.equal(classify("{\"version\":3}").kind, "blocked"));
+test("missing version", () => assert.equal(classify("{\"state\":{}}").kind, "blocked"));
+test("extra field", () => assert.equal(classify("{\"version\":3,\"state\":{},\"extra\":1}").kind, "blocked"));
+test("null state", () => assert.equal(classify("{\"version\":3,\"state\":null}").kind, "blocked"));
+test("array state", () => assert.equal(classify("{\"version\":3,\"state\":[]}").kind, "blocked"));
+test("v0", () => assert.equal(classify("{\"version\":0,\"state\":{}}").kind, "blocked"));
+test("v4", () => assert.equal(classify("{\"version\":4,\"state\":{}}").kind, "blocked"));
+test("string version", () => assert.equal(classify("{\"version\":\"3\",\"state\":{}}").kind, "blocked"));
+test("fraction", () => assert.equal(classify("{\"version\":2.5,\"state\":{}}").kind, "blocked"));
+test("primitive state", () => assert.equal(classify("{\"version\":3,\"state\":true}").kind, "blocked"));
+test("unvalidated contents", () => assert.equal(classify("{\"version\":3,\"state\":{}}").kind, "v3"));
+test('read-only', () => { const raw = '{"version":3,"state":{}}'; classify(raw); assert.equal(raw, '{"version":3,"state":{}}'); });

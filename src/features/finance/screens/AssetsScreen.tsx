@@ -1,11 +1,14 @@
+import { validateAssetOpeningDate } from '@/features/finance/utils/assetOpeningDate';
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppButton, AppText, Screen } from '@/components/ui';
 import type { AddAssetFormData } from '@/features/finance/components/AddAssetModal';
 import { AddAssetModal } from '@/features/finance/components/AddAssetModal';
+import { AssetCard } from '@/features/finance/components/AssetCard';
 import { AssetEntriesModal } from '@/features/finance/components/AssetEntriesModal';
 import { useCurrencyHydrated, useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
@@ -18,6 +21,7 @@ import { moduleColors, useTheme } from '@/theme';
 export default function AssetsScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
   const accent = moduleColors.finance;
 
   const financeReady = useFinanceHydrated();
@@ -26,6 +30,9 @@ export default function AssetsScreen() {
 
   const assets = useFinanceStore((state) => state.assets);
   const addAsset = useFinanceStore((state) => state.addAsset);
+  const verifyAssetOpeningBalanceDate = useFinanceStore(state => state.verifyAssetOpeningBalanceDate);
+  const [verificationAssetId, setVerificationAssetId] = useState<string | null>(null);
+  const [verificationDate, setVerificationDate] = useState('');
   const updateAsset = useFinanceStore((state) => state.updateAsset);
   const deleteAsset = useFinanceStore((state) => state.deleteAsset);
   const addAssetEntry = useFinanceStore((state) => state.addAssetEntry);
@@ -80,16 +87,7 @@ export default function AssetsScreen() {
   const confirmDeleteAsset = (asset: Asset) => {
     const message = 'This will permanently delete the asset and all of its recorded movements.';
 
-    if (Platform.OS === 'web') {
-      const confirmed = window.confirm(`Delete "${asset.name}" and all its movements?\\n\\n${message}`);
-      if (confirmed) deleteAsset(asset.id);
-      return;
-    }
-
-    Alert.alert(`Delete "${asset.name}"?`, message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteAsset(asset.id) },
-    ]);
+    confirm(`Delete "${asset.name}"?`, message, () => deleteAsset(asset.id), 'Delete');
   };
 
   const saveAsset = (data: AddAssetFormData) => {
@@ -174,6 +172,7 @@ export default function AssetsScreen() {
 
   return (
     <Screen scroll>
+      {confirmation}
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -221,47 +220,39 @@ export default function AssetsScreen() {
                   : 'Silver';
 
             return (
-              <View key={asset.id} style={[styles.assetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Pressable onPress={() => openEntries(asset)} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                  <View style={styles.assetTop}>
-                    <View style={styles.flex}>
-                      <AppText variant="bodyStrong">{asset.name}</AppText>
-                      <AppText color="textSecondary" style={styles.category}>{categoryLabel}</AppText>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-                  </View>
-                  <View style={styles.values}>
-                    <View style={styles.flex}>
-                      <AppText color="textSecondary">Original balance</AppText>
-                      <AppText variant="bodyStrong">{originalBalance}</AppText>
-                    </View>
-                    <View style={styles.flex}>
-                      <AppText color="textSecondary">Value in {baseCurrency}</AppText>
-                      <AppText variant="bodyStrong" style={{ color: valuation === null ? colors.textSecondary : accent }}>
-                        {convertedValue}
-                      </AppText>
-                    </View>
-                  </View>
+              <View key={asset.id}>
+                <AssetCard asset={asset} categoryLabel={categoryLabel}
+                  balanceText={originalBalance} valuationText={convertedValue} baseCurrency={baseCurrency}
+                  onViewEntries={() => openEntries(asset)} onEdit={() => openAsset(asset)}
+                  onDelete={() => confirmDeleteAsset(asset)} />
+                <AppText variant="caption" color="textSecondary">
+                  {asset.openingBalanceDate ? 'Verified history starts: ' + asset.openingBalanceDate : 'Opening history not verified'}
+                </AppText>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Verify history for ${asset.name}`}
+                  onPress={() => { setVerificationAssetId(asset.id); setVerificationDate(''); }}
+                  style={{ minHeight: 44, justifyContent: 'center' }}>
+                  <AppText>Verify opening history date</AppText>
                 </Pressable>
-                <View style={[styles.actions, { borderTopColor: colors.border }]}>
-                  <Pressable onPress={() => openEntries(asset)} style={[styles.action, styles.movementAction]} accessibilityRole="button">
-                    <Ionicons name="list-outline" size={17} color="#3978C5" />
-                    <AppText style={styles.actionLabel}>Movements</AppText>
-                  </Pressable>
-                  <Pressable onPress={() => openAsset(asset)} style={[styles.action, styles.editAction]} accessibilityRole="button">
-                    <Ionicons name="create-outline" size={17} color="#27845B" />
-                    <AppText style={styles.actionLabel}>Edit</AppText>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => confirmDeleteAsset(asset)}
-                    style={[styles.action, styles.deleteAction]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete ${asset.name}`}
-                  >
-                    <Ionicons name="trash-outline" size={17} color="#D94B4B" />
-                    <AppText style={styles.actionLabel}>Delete</AppText>
-                  </Pressable>
-                </View>
+                {verificationAssetId === asset.id && <View style={{ gap: 8 }}>
+                  <TextInput accessibilityLabel="Asset opening date (YYYY-MM-DD)"
+                    value={verificationDate} onChangeText={setVerificationDate} placeholder="YYYY-MM-DD"
+                    placeholderTextColor={colors.textSecondary}
+                    style={{ borderWidth: 1, borderColor: colors.border, color: colors.text, minHeight: 44, paddingHorizontal: 12 }} />
+                  <AppButton title="Confirm verified date" accentColor={accent} onPress={() => {
+                    const date = verificationDate.trim();
+                    const check = validateAssetOpeningDate(assets, asset.id, date);
+                    if (!check.valid) { Alert.alert('Cannot verify asset history', check.reason); return; }
+                    Alert.alert('Confirm asset history', 'Confirm the recorded opening quantity and all movements from this date are complete. No balances will change.', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Verify', onPress: () => {
+                        if (verifyAssetOpeningBalanceDate(asset.id, date)) {
+                          setVerificationAssetId(null);
+                          Alert.alert('Verified', 'Asset history start date saved.');
+                        } else Alert.alert('Not saved', 'Asset history changed or verification failed.');
+                      } },
+                    ]);
+                  }} />
+                </View>}
               </View>
             );
           })}
@@ -294,17 +285,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   backButton: { width: 40, height: 40, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
   headerText: { flex: 1, gap: 2 },
-  flex: { flex: 1, minWidth: 0 },
   list: { gap: 12, marginBottom: 14 },
   emptyCard: { minHeight: 220, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, alignItems: 'center', justifyContent: 'center', padding: 20, gap: 12 },
-  assetCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 14, gap: 12 },
-  assetTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  category: { marginTop: 3 },
-  values: { flexDirection: 'row', gap: 12, marginTop: 12 },
-  actions: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10 },
-  action: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 9 },
-  movementAction: { backgroundColor: '#EAF1FC' },
-  editAction: { backgroundColor: '#E8F5EE' },
-  deleteAction: { backgroundColor: '#FCEEEE' },
-  actionLabel: { color: '#4B5563', fontSize: 12, fontWeight: '600' },
 });

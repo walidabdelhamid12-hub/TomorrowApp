@@ -11,6 +11,8 @@
 /* Common types                                                               */
 /* -------------------------------------------------------------------------- */
 
+import type { PaymentJournalMarker } from './paymentJournalInstallation';
+
 export type EntityId = string;
 export type ISODate = string;
 export type ISODateTime = string;
@@ -51,6 +53,8 @@ interface AssetBase extends Timestamps {
   name: string;
   notes?: string;
   entries: AssetEntry[];
+  /** User-confirmed start of complete asset movement history, before movements on this date. */
+  openingBalanceDate?: ISODate;
 }
 
 export interface LocalCurrencyAsset extends AssetBase {
@@ -80,7 +84,7 @@ export type Asset =
 
 export type NewAssetInput = DistributiveOmit<
   Asset,
-  'id' | 'entries' | 'createdAt' | 'updatedAt'
+  'id' | 'entries' | 'createdAt' | 'updatedAt' | 'openingBalanceDate'
 >;
 
 export interface AssetPatch {
@@ -267,6 +271,10 @@ export type ChequePatch = Partial<
 /* -------------------------------------------------------------------------- */
 
 export interface FinanceData {
+  /** Retained creation evidence only; never a posting or acknowledgement certificate. */
+  creationProvenance?: import('./creationProvenance').CreationProvenanceMetadataV1;
+  paymentAccounting?: import('./paymentRecovery').PaymentAccountingMetadata;
+  paymentJournal?: PaymentJournalMarker;
   assets: Asset[];
   debts: Debt[];
   loans: Loan[];

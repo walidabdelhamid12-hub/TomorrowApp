@@ -1,6 +1,9 @@
+import { AccountDropdown } from '@/features/finance/components/AccountDropdown';
+import { CurrencyDropdown } from '@/features/finance/components/CurrencyDropdown';
+import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -19,10 +22,17 @@ import {
   DateField,
 } from '@/components/ui';
 import { FormModal } from '@/features/finance/components/FormModal';
+import { HistoricalFxField } from '@/features/finance/components/HistoricalFxField';
+import { DirectHistoricalFxField } from '@/features/finance/components/DirectHistoricalFxField';
+import { getHistoricalRate, createManualHistoricalRate } from '@/services/historicalRates';
+import { isValidHistoricalFx } from '@/features/finance/utils/historicalFx';
+import type { HistoricalFxSnapshot, DirectHistoricalFxSnapshot } from '@/features/finance/types/ledger';
 import { ScanDocumentButton } from '@/features/finance/components/ScanDocumentButton';
 import { getCurrencyLabel } from '@/features/finance/constants/currencies';
 import type { ScanResult } from '@/features/finance/scanner/types';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
+import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
+import { isProtectedTransaction } from '@/features/finance/utils/paymentTransactionOwnership';
 import type {
   Category,
   NewCategoryInput,
@@ -30,9 +40,27 @@ import type {
   TransactionType,
 } from '@/features/finance/types/ledger';
 import { roundMoney, todayISO } from '@/features/finance/utils/finance';
-import { formatMoney, parseAmount } from '@/features/finance/utils/money';
+import { calculateCrossCurrency, calculateDirectHistoricalRate } from '@/features/finance/utils/crossCurrency';
+import { formatMoney } from '@/features/finance/utils/money';
+import { resolveAmountExpression } from '@/features/finance/utils/amountExpression';
+import { evaluateExpression } from '@/features/finance/utils/calculator';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { moduleColors, useTheme } from '@/theme';
 import { isValidISODate } from '@/utils/input';
+
+function resolveHistoricalRateExpression(input: string): number | null {
+  const text = input.trim();
+  if (!text || /[+\-×÷*/]$/.test(text)) return null;
+  if (!/^[0-9.+\-×÷*/()]+$/.test(text)) return null;
+
+  const value = evaluateExpression(
+    text.replace(/\*/g, '×').replace(/\//g, '÷'),
+  );
+
+  return value !== null && Number.isFinite(value) && value > 0
+    ? value
+    : null;
+}
 
 type EntryMode = 'normal' | 'refund';
 
@@ -84,6 +112,8 @@ export function AddTransactionModal({
   const accounts = useLedgerStore((s) => s.accounts);
   const categories = useLedgerStore((s) => s.categories);
   const transactions = useLedgerStore((s) => s.transactions);
+  const loans = useFinanceStore((s) => s.loans);
+  const debts = useFinanceStore((s) => s.debts);
   const addTransaction = useLedgerStore((s) => s.addTransaction);
   const updateTransaction = useLedgerStore((s) => s.updateTransaction);
   const addCategory = useLedgerStore((s) => s.addCategory);
@@ -93,6 +123,8 @@ export function AddTransactionModal({
   const [type, setType] = useState<TransactionType>('expense');
   const [entryMode, setEntryMode] = useState<EntryMode>('normal');
   const [amount, setAmount] = useState('');
+  const [transactionCurrency, setTransactionCurrency] = useState('');
+  const [actualAccountDebit, setActualAccountDebit] = useState('');
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [originalTransactionId, setOriginalTransactionId] = useState('');
@@ -100,7 +132,38 @@ export function AddTransactionModal({
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | undefined>();
 
+  const fxRequestId = useRef(0);
+  const [fxReadyFor, setFxReadyFor] = useState<string | null>(null);
+  const [fxRecord, setFxRecord] = useState<{
+    key: string;
+    snapshot: HistoricalFxSnapshot;
+  } | null>(null);
+  const [fxLoading, setFxLoading] = useState(false);
+  const [fxManualMode, setFxManualMode] = useState(false);
+  const [fxManualRate, setFxManualRate] = useState('');
+  const [fxManualRateKey, setFxManualRateKey] = useState<string | null>(null);
+  const [fxError, setFxError] = useState<string | undefined>();
+  const originalFxRequestId = useRef(0);
+  const [originalFxRecord, setOriginalFxRecord] = useState<{
+    key: string;
+    snapshot: HistoricalFxSnapshot;
+  } | null>(null);
+  const [originalFxLoading, setOriginalFxLoading] = useState(false);
+  const [originalFxError, setOriginalFxError] = useState<string | undefined>();
+  const [originalFxManualMode, setOriginalFxManualMode] = useState(false);
+  const [originalFxManualRate, setOriginalFxManualRate] = useState('');
+  const [originalFxManualRateKey, setOriginalFxManualRateKey] = useState<string | null>(null);
+  const [directFxManualMode, setDirectFxManualMode] = useState(false);
+  const [directFxManualRate, setDirectFxManualRate] = useState('');
+  const [directFxManualKey, setDirectFxManualKey] = useState<string | null>(null);
+
   const [categoryManagerVisible, setCategoryManagerVisible] = useState(false);
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [attachPickerOpen, setAttachPickerOpen] = useState(false);
+  const [scanSource, setScanSource] = useState<'camera' | 'gallery' | 'file' | null>(null);
+  const [confirmUnusedDeleteCategory, setConfirmUnusedDeleteCategory] = useState<Category | null>(null);
+  const [selectedManagerCategoryId, setSelectedManagerCategoryId] = useState('');
   const [categoryFormVisible, setCategoryFormVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
@@ -117,10 +180,18 @@ export function AddTransactionModal({
   const isEditingRefund = transaction?.entryType === 'refund';
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      setFxReadyFor(null);
+      return;
+    }
 
     setError(undefined);
     setCategoryManagerVisible(false);
+    setTypePickerOpen(false);
+    setCategoryPickerOpen(false);
+    setAttachPickerOpen(false);
+    setScanSource(null);
+    setConfirmUnusedDeleteCategory(null);
     setCategoryFormVisible(false);
     setEditingCategory(null);
     setPendingDeleteCategory(null);
@@ -129,7 +200,9 @@ export function AddTransactionModal({
     if (transaction) {
       setType(transaction.type);
       setEntryMode(transaction.entryType === 'refund' ? 'refund' : 'normal');
-      setAmount(String(transaction.amount));
+      setAmount(String(transaction.originalAmount ?? transaction.amount));
+      setTransactionCurrency(transaction.originalCurrencyCode ?? transaction.currencyCode);
+      setActualAccountDebit(transaction.originalCurrencyCode ? String(transaction.amount) : '');
       setAccountId(transaction.accountId);
       setCategoryId(transaction.categoryId);
       setOriginalTransactionId(transaction.relatedTransactionId ?? '');
@@ -139,12 +212,15 @@ export function AddTransactionModal({
       setType('expense');
       setEntryMode('normal');
       setAmount('');
+      setTransactionCurrency('');
+      setActualAccountDebit('');
       setAccountId('');
       setCategoryId('');
       setOriginalTransactionId('');
       setDate(todayISO());
       setNote('');
     }
+    setFxReadyFor(transaction?.id ?? 'new');
   }, [visible, transaction]);
 
   const selectableAccounts = useMemo(
@@ -166,6 +242,7 @@ export function AddTransactionModal({
         (item) =>
           item.type === 'expense' &&
           item.entryType !== 'refund' &&
+          !isProtectedTransaction(item, { loans, debts }) &&
           item.id !== transaction?.id,
       )
       .map((item) => {
@@ -191,7 +268,7 @@ export function AddTransactionModal({
       })
       .filter((item) => item.remainingAmount > 0)
       .sort((a, b) => b.transaction.date.localeCompare(a.transaction.date));
-  }, [transactions, transaction]);
+  }, [transactions, transaction, loans, debts]);
 
   const selectedOriginal = refundableTransactions.find(
     (item) => item.transaction.id === originalTransactionId,
@@ -228,6 +305,280 @@ export function AddTransactionModal({
       ? originalAccount
       : selectableAccounts.find((account) => account.id === activeAccountId);
 
+  const fxCurrency = entryMode === 'refund'
+    ? selectedOriginal?.transaction.currencyCode
+    : activeAccount?.currencyCode;
+  const fxKey = `${fxCurrency ?? ''}|${date}`;
+  const amountCurrencyCode = entryMode === 'refund'
+    ? selectedOriginal?.transaction.currencyCode
+    : transactionCurrency || activeAccount?.currencyCode;
+  const crossCurrencySelected = entryMode !== 'refund' &&
+    !!activeAccount && !!amountCurrencyCode &&
+    amountCurrencyCode !== activeAccount.currencyCode;
+
+  const fxInitializationMatches =
+    fxReadyFor === (transaction?.id ?? 'new');
+  const fxSnapshot =
+    fxRecord?.key === fxKey &&
+    fxCurrency &&
+    isValidHistoricalFx(fxRecord.snapshot, fxCurrency, date)
+      ? fxRecord.snapshot
+      : undefined;
+
+  const manualFxValue = resolveHistoricalRateExpression(fxManualRate);
+  const manualFxResult =
+    fxManualMode && fxManualRateKey === fxKey && fxCurrency && manualFxValue !== null
+      ? createManualHistoricalRate(fxCurrency, date, manualFxValue)
+      : null;
+
+  const directFxKey = `${activeAccount?.currencyCode ?? ''}|${amountCurrencyCode ?? ''}|${date}`;
+  const manualDirectRate = directFxManualMode && directFxManualKey === directFxKey
+    ? resolveHistoricalRateExpression(directFxManualRate) : null;
+  const manualDirectSelected = directFxManualMode && directFxManualKey === directFxKey;
+
+  const originalFxCurrency = crossCurrencySelected ? amountCurrencyCode : undefined;
+  const originalFxKey = `${originalFxCurrency ?? ''}|${date}`;
+  const originalFxSnapshot =
+    originalFxRecord?.key === originalFxKey &&
+    originalFxCurrency &&
+    isValidHistoricalFx(originalFxRecord.snapshot, originalFxCurrency, date)
+      ? originalFxRecord.snapshot
+      : undefined;
+
+  const originalManualValue = resolveHistoricalRateExpression(originalFxManualRate);
+  const originalManualResult =
+    originalFxManualMode &&
+    originalFxManualRateKey === originalFxKey &&
+    originalFxCurrency &&
+    originalManualValue !== null
+      ? createManualHistoricalRate(originalFxCurrency, date, originalManualValue)
+      : null;
+
+  useEffect(() => {
+    setDirectFxManualMode(false);
+    setDirectFxManualRate('');
+    setDirectFxManualKey(null);
+    if (visible && transaction?.directHistoricalFx &&
+        transaction.date === date &&
+        transaction.directHistoricalFx.accountCurrencyCode === activeAccount?.currencyCode &&
+        transaction.directHistoricalFx.transactionCurrencyCode === amountCurrencyCode &&
+        transaction.directHistoricalFx.source === 'manual') {
+      setDirectFxManualMode(true);
+      setDirectFxManualRate(String(transaction.directHistoricalFx.rate));
+      setDirectFxManualKey(directFxKey);
+    }
+  }, [visible, transaction, directFxKey]);
+
+  const selectedOriginalFx =
+    originalFxManualMode
+      ? (originalManualResult?.ok ? originalManualResult.snapshot : undefined)
+      : originalFxSnapshot;
+
+  useEffect(() => {
+    if (!visible || !fxInitializationMatches || !originalFxCurrency ||
+        !isValidISODate(date)) {
+      originalFxRequestId.current += 1;
+      setOriginalFxRecord(null);
+      setOriginalFxLoading(false);
+      return;
+    }
+
+    const requestId = ++originalFxRequestId.current;
+    setOriginalFxRecord(null);
+    setOriginalFxError(undefined);
+    setOriginalFxManualMode(false);
+    setOriginalFxManualRate('');
+    setOriginalFxManualRateKey(null);
+    setOriginalFxLoading(false);
+
+    const existing = transaction?.accountFxSnapshot;
+    if (transaction?.date === date &&
+        transaction.originalCurrencyCode === originalFxCurrency &&
+        existing &&
+        isValidHistoricalFx(existing, originalFxCurrency, date)) {
+      setOriginalFxRecord({ key: originalFxKey, snapshot: existing });
+      if (existing.source === 'manual') {
+        setOriginalFxManualMode(true);
+        setOriginalFxManualRate(String(existing.rate));
+        setOriginalFxManualRateKey(originalFxKey);
+      }
+      return;
+    }
+
+    setOriginalFxLoading(true);
+    void getHistoricalRate(originalFxCurrency, date).then((result) => {
+      if (originalFxRequestId.current !== requestId) return;
+      setOriginalFxLoading(false);
+      if (result.ok &&
+          isValidHistoricalFx(result.snapshot, originalFxCurrency, date)) {
+        setOriginalFxRecord({ key: originalFxKey, snapshot: result.snapshot });
+      } else {
+        setOriginalFxError(result.ok
+          ? 'Original currency historical rate is invalid.'
+          : result.reason);
+      }
+    });
+
+    return () => { originalFxRequestId.current += 1; };
+  }, [visible, fxInitializationMatches, originalFxKey, originalFxCurrency, date, transaction]);
+  const selectedFx =
+    fxManualMode
+      ? (manualFxResult?.ok ? manualFxResult.snapshot : undefined)
+      : fxSnapshot;
+
+  useEffect(() => {
+    if (!visible || !fxInitializationMatches) {
+      fxRequestId.current += 1;
+      return;
+    }
+
+    const requestId = ++fxRequestId.current;
+    setFxRecord(null);
+    setFxError(undefined);
+    setFxManualMode(false);
+    setFxManualRate('');
+    setFxManualRateKey(null);
+    setFxLoading(false);
+
+    if (!fxCurrency || !isValidISODate(date) || isEditingRefund) return;
+
+    const existing = transaction?.historicalFx;
+    if (
+      transaction?.date === date &&
+      transaction.currencyCode === fxCurrency &&
+      existing &&
+      isValidHistoricalFx(existing, fxCurrency, date)
+    ) {
+      setFxRecord({ key: fxKey, snapshot: existing });
+      if (existing.source === 'manual') {
+        setFxManualMode(true);
+        setFxManualRate(String(existing.rate));
+        setFxManualRateKey(fxKey);
+      }
+      return;
+    }
+
+    setFxLoading(true);
+    void getHistoricalRate(fxCurrency, date).then((result) => {
+      if (fxRequestId.current !== requestId) return;
+      setFxLoading(false);
+      if (
+        result.ok &&
+        isValidHistoricalFx(result.snapshot, fxCurrency, date)
+      ) {
+        setFxRecord({ key: fxKey, snapshot: result.snapshot });
+        setFxError(undefined);
+      } else {
+        setFxRecord(null);
+        setFxError(result.ok
+          ? 'Historical rate does not match the selected date or currency.'
+          : result.reason);
+      }
+    });
+    return () => {
+      fxRequestId.current += 1;
+    };
+  }, [visible, fxInitializationMatches, fxKey, fxCurrency, date, transaction, isEditingRefund]);
+
+  const fetchFx = () => {
+    if (!fxCurrency || !isValidISODate(date)) {
+      setFxError('Select a valid currency and transaction date.');
+      return;
+    }
+    const requestId = ++fxRequestId.current;
+    setFxManualMode(false);
+    setFxRecord(null);
+    setFxError(undefined);
+    setFxLoading(true);
+    void getHistoricalRate(fxCurrency, date).then((result) => {
+      if (fxRequestId.current !== requestId) return;
+      setFxLoading(false);
+      if (
+        result.ok &&
+        isValidHistoricalFx(result.snapshot, fxCurrency, date)
+      ) {
+        setFxRecord({ key: fxKey, snapshot: result.snapshot });
+        setFxError(undefined);
+      } else {
+        setFxRecord(null);
+        setFxError(result.ok
+          ? 'Historical rate does not match the selected date or currency.'
+          : result.reason);
+      }
+    });
+  };
+
+  const toggleManualFx = () => {
+    fxRequestId.current += 1;
+    setFxLoading(false);
+    setFxError(undefined);
+    if (fxManualMode) {
+      setFxManualMode(false);
+      fetchFx();
+    } else {
+      setFxManualMode(true);
+      setFxManualRate('');
+      setFxManualRateKey(null);
+      setFxRecord(null);
+    }
+  };
+
+  const originalValue = amountCurrencyCode
+    ? resolveAmountExpression(amount, amountCurrencyCode)
+    : null;
+
+  const actualDebitValue = activeAccount && actualAccountDebit.trim()
+    ? resolveAmountExpression(actualAccountDebit, activeAccount.currencyCode)
+    : null;
+
+  const directHistoricalRateFromApi =
+    crossCurrencySelected &&
+    activeAccount &&
+    amountCurrencyCode &&
+    selectedOriginalFx &&
+    selectedFx
+      ? calculateDirectHistoricalRate(
+          selectedOriginalFx,
+          selectedFx,
+          amountCurrencyCode,
+          activeAccount.currencyCode,
+          date,
+        )
+      : null;
+  const directHistoricalRate = manualDirectSelected ? manualDirectRate : directHistoricalRateFromApi;
+  const manualEstimatedAmount = manualDirectRate !== null && originalValue !== null && activeAccount
+    ? roundMoney(originalValue / manualDirectRate, getCurrencyDecimals(activeAccount.currencyCode))
+    : null;
+  const manualAccountAmount = manualEstimatedAmount !== null &&
+    (!actualAccountDebit.trim() || actualDebitValue !== null)
+    ? (actualAccountDebit.trim() ? actualDebitValue : manualEstimatedAmount)
+    : null;
+  const manualEffectiveRate = manualAccountAmount !== null && originalValue !== null && manualAccountAmount > 0
+    ? originalValue / manualAccountAmount : null;
+  const crossCurrencyPreview =
+    crossCurrencySelected &&
+    activeAccount &&
+    amountCurrencyCode &&
+    originalValue !== null &&
+    !manualDirectSelected &&
+    selectedOriginalFx &&
+    selectedFx &&
+    (!actualAccountDebit.trim() || actualDebitValue !== null)
+      ? calculateCrossCurrency({
+          originalAmount: originalValue,
+          originalCurrencyCode: amountCurrencyCode,
+          accountCurrencyCode: activeAccount.currencyCode,
+          transactionDate: date,
+          originalFx: selectedOriginalFx,
+          accountFx: selectedFx,
+          actualAccountAmount: actualAccountDebit.trim()
+            ? actualDebitValue!
+            : undefined,
+        })
+      : null;
+  const estimatedAccountAmount = manualDirectSelected ? manualEstimatedAmount : crossCurrencyPreview?.estimatedAccountAmount;
+  const amountToRecord = manualDirectSelected ? manualAccountAmount : crossCurrencyPreview?.accountAmount;
+
   const replacementCategories = useMemo(
     () =>
       pendingDeleteCategory
@@ -241,6 +592,7 @@ export function AddTransactionModal({
   );
 
   const openCategoryManager = () => {
+    setSelectedManagerCategoryId(activeCategoryId);
     setCategoryManagerVisible(true);
   };
 
@@ -323,32 +675,7 @@ export function AddTransactionModal({
       return;
     }
 
-    Alert.alert(
-      'Delete category?',
-      `Are you sure you want to delete "${category.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            const deleted = deleteCategory(category.id);
-
-            if (!deleted) {
-              Alert.alert(
-                'Could not delete category',
-                'Please try again.',
-              );
-              return;
-            }
-
-            if (categoryId === category.id) {
-              setCategoryId('');
-            }
-          },
-        },
-      ],
-    );
+    setConfirmUnusedDeleteCategory(category);
   };
 
   const confirmDeleteWithReplacement = () => {
@@ -412,10 +739,27 @@ export function AddTransactionModal({
   };
 
   const submit = () => {
-    const value = parseAmount(amount);
+    const current = transaction &&
+      useLedgerStore.getState().transactions.find(t => t.id === transaction.id);
 
-    if (value === null || value <= 0) {
-      setError('Enter an amount greater than zero.');
+    if (current && isProtectedTransaction(current, useFinanceStore.getState())) {
+      setError('This transaction belongs to a loan or debt. Manage its payment from Loans or Debts.');
+      return;
+    }
+
+    const amountCurrency = entryMode === 'refund'
+      ? selectedOriginal?.transaction.currencyCode
+      : amountCurrencyCode;
+
+    if (!amountCurrency) {
+      setError('Select a valid account and currency.');
+      return;
+    }
+
+    const value = resolveAmountExpression(amount, amountCurrency);
+
+    if (value === null) {
+      setError(`Enter a valid positive amount. ${amountCurrency} allows up to ${getCurrencyDecimals(amountCurrency)} decimal places.`);
       return;
     }
 
@@ -441,6 +785,7 @@ export function AddTransactionModal({
         type: 'expense',
         entryType: 'refund',
         relatedTransactionId: selectedOriginal.transaction.id,
+        historicalFx: selectedFx,
         amount: value,
         accountId: selectedOriginal.transaction.accountId,
         categoryId: selectedOriginal.transaction.categoryId,
@@ -457,6 +802,7 @@ export function AddTransactionModal({
       return;
     }
 
+
     if (!activeAccount) {
       setError('Create an account first.');
       return;
@@ -467,14 +813,107 @@ export function AddTransactionModal({
       return;
     }
 
-    if (transaction) {
-      const ok = updateTransaction(transaction.id, {
+    const isCross = amountCurrency !== activeAccount.currencyCode;
+
+    const financialUnchanged = !isCross && !!current &&
+      current.accountId === activeAccount.id &&
+      current.date === date &&
+      (current.originalCurrencyCode ?? current.currencyCode) === amountCurrency &&
+      (current.originalAmount ?? current.amount) === value &&
+      (
+        current.originalCurrencyCode
+          ? actualAccountDebit.trim() !== '' &&
+            resolveAmountExpression(
+              actualAccountDebit,
+              activeAccount.currencyCode
+            ) === current.amount
+          : !isCross
+      );
+
+    if (financialUnchanged && current) {
+      const ok = updateTransaction(current.id, {
         type,
-        amount: value,
+        categoryId: activeCategoryId,
+        note: note.trim(),
+      });
+
+      if (!ok) {
+        setError('Could not save the changes.');
+        return;
+      }
+
+      onClose();
+      return;
+    }
+
+    const legacyUnchanged = !!current &&
+      !current.historicalFx &&
+      !isCross &&
+      current.date === date &&
+      current.currencyCode === activeAccount.currencyCode;
+
+    if (
+      !legacyUnchanged && !(isCross && manualDirectSelected) &&
+      (!fxInitializationMatches || fxLoading || !selectedFx ||
+        !isValidHistoricalFx(
+          selectedFx, activeAccount.currencyCode, date
+        ))
+    ) {
+      setError('A valid account-currency historical rate is required.');
+      return;
+    }
+
+    if (isCross && !manualDirectSelected && (
+      !fxInitializationMatches ||
+      originalFxLoading ||
+      !selectedOriginalFx ||
+      !isValidHistoricalFx(selectedOriginalFx, amountCurrency, date) ||
+      !crossCurrencyPreview
+    )) {
+      setError('A valid original-currency rate and account amount are required.');
+      return;
+    }
+
+    if (isCross && manualDirectSelected && (
+      !fxInitializationMatches || manualDirectRate === null ||
+      manualAccountAmount === null || manualAccountAmount <= 0 ||
+      manualEffectiveRate === null
+    )) {
+      setError('Enter a valid manual rate and account amount.');
+      return;
+    }
+
+    const accountAmount = isCross ? amountToRecord! : value;
+    const directHistoricalFx: DirectHistoricalFxSnapshot | undefined =
+      isCross && manualDirectSelected && manualDirectRate !== null
+        ? { accountCurrencyCode: activeAccount.currencyCode,
+            transactionCurrencyCode: amountCurrency, rate: manualDirectRate,
+            rateDate: date, source: 'manual' }
+        : undefined;
+    const crossFields = isCross
+      ? { originalAmount: value, originalCurrencyCode: amountCurrency,
+          accountFxRate: manualDirectSelected ? manualEffectiveRate! : crossCurrencyPreview!.effectiveAccountRate,
+          accountFxSnapshot: manualDirectSelected ? undefined : selectedOriginalFx!,
+        }
+      : {};
+
+    if (current) {
+      const ok = updateTransaction(current.id, {
+        type,
+        historicalFx: manualDirectSelected ? undefined : selectedFx,
+        directHistoricalFx,
+        amount: accountAmount,
         accountId: activeAccount.id,
         categoryId: activeCategoryId,
         date,
         note: note.trim(),
+        ...crossFields,
+        ...(!isCross ? {
+          originalAmount: undefined,
+          originalCurrencyCode: undefined,
+          accountFxRate: undefined,
+          accountFxSnapshot: undefined,
+        } : {}),
       });
 
       if (!ok) {
@@ -484,11 +923,14 @@ export function AddTransactionModal({
     } else {
       const id = addTransaction({
         type,
-        amount: value,
+        historicalFx: manualDirectSelected ? undefined : selectedFx,
+        directHistoricalFx,
+        amount: accountAmount,
         accountId: activeAccount.id,
         categoryId: activeCategoryId,
         date,
         note: note.trim() || undefined,
+        ...crossFields,
       });
 
       if (id === null) {
@@ -525,23 +967,28 @@ export function AddTransactionModal({
           </AppText>
         ) : (
           <>
-            {entryMode === 'normal' ? (
-              <ScanDocumentButton onResult={applyScan} />
-            ) : null}
-
-            {!transaction ? (
-              <ChipSelect<string>
-                options={[
-                  { value: 'expense', label: 'Expense', color: colors.expense },
-                  { value: 'income', label: 'Income', color: colors.income },
-                  { value: 'refund', label: 'Refund', color: moduleColors.finance },
-                ]}
-                value={entryMode === 'refund' ? 'refund' : type}
-                onChange={handleEntryModeChange}
-              />
-            ) : null}
-
-            {entryMode === 'refund' ? (
+                         <View style={{ flexDirection: 'row', gap: 10 }}>
+               <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                 <AppText variant="label" color="textSecondary">TYPE</AppText>
+                 <Pressable accessibilityRole="button" accessibilityLabel="Transaction type" onPress={() => !transaction && setTypePickerOpen(true)}
+                   style={[styles.dropdownButton, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
+                   <Ionicons name={entryMode === 'refund' ? 'return-down-back-outline' : type === 'income' ? 'arrow-up-circle-outline' : 'arrow-down-circle-outline'} size={19} color={entryMode === 'refund' ? '#3B82F6' : type === 'income' ? '#10B981' : '#EF4444'} />
+                   <AppText style={{ flex: 1 }}>{entryMode === 'refund' ? 'Refund' : type === 'income' ? 'Income' : 'Expense'}</AppText>
+                   <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                 </Pressable>
+               </View>
+               <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                 <AppText variant="label" color="textSecondary">ATTACH (OPTIONAL)</AppText>
+                 <Pressable accessibilityRole="button" accessibilityLabel="Scan from camera, gallery or PDF" onPress={() => setAttachPickerOpen(true)}
+                   style={[styles.dropdownButton, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
+                   <Ionicons name="attach-outline" size={19} color={colors.textSecondary} />
+                   <AppText style={{ flex: 1 }}>— None</AppText>
+                   <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                 </Pressable>
+               </View>
+             </View>
+             {scanSource ? <ScanDocumentButton onResult={applyScan} initialSource={scanSource} onFinished={() => setScanSource(null)} /> : null}
+{entryMode === 'refund' ? (
               <>
                 <AppText variant="caption" color="textSecondary">
                   Select the original purchase. The refund will return to the
@@ -590,70 +1037,254 @@ export function AddTransactionModal({
               </>
             ) : (
               <>
-                <ChipSelect<string>
-                  label="ACCOUNT"
-                  options={selectableAccounts.map((account) => ({
-                    value: account.id,
-                    label: `${account.name} · ${getCurrencyLabel(account.currencyCode)}`,
-                    color: moduleColors.finance,
-                  }))}
-                  value={activeAccountId}
-                  onChange={setAccountId}
-                />
-
-                <View style={styles.categoryHeader}>
-                  <AppText variant="label" color="textSecondary">
-                    CATEGORY
-                  </AppText>
-
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={openCategoryManager}
-                    style={[
-                      styles.addCategoryButton,
-                      { borderColor: colors.primary },
-                    ]}
-                  >
-                    <Ionicons
-                      name="create-outline"
-                      size={17}
-                      color={colors.primary}
-                    />
-                    <AppText variant="label" color={colors.primary}>
-                      Edit Categories
-                    </AppText>
-                  </Pressable>
-                </View>
-
-                <ChipSelect<string>
-                  options={kindCategories.map((category) => ({
-                    value: category.id,
-                    label: category.name,
-                    color: category.color,
-                  }))}
-                  value={activeCategoryId}
-                  onChange={setCategoryId}
-                />
-              </>
+                                 <View style={{ flexDirection: 'row', gap: 10 }}>
+                   <AccountDropdown label="ACCOUNT" options={selectableAccounts} value={activeAccountId}
+                     onChange={setAccountId} emptyMessage="No accounts" />
+                   <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                     <AppText variant="label" color="textSecondary">CATEGORY</AppText>
+                     <Pressable accessibilityRole="button" accessibilityLabel="Choose or manage category" onPress={() => setCategoryPickerOpen(true)}
+                       style={[styles.dropdownButton, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
+                       {kindCategories.find(item => item.id === activeCategoryId) ? <Ionicons name={kindCategories.find(item => item.id === activeCategoryId)!.icon as keyof typeof Ionicons.glyphMap} size={19} color={kindCategories.find(item => item.id === activeCategoryId)!.color} /> : <Ionicons name="pricetag-outline" size={19} color={colors.textSecondary} />}
+                       <AppText style={{ flex: 1 }}>{kindCategories.find(item => item.id === activeCategoryId)?.name ?? 'Choose category'}</AppText>
+                       <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                     </Pressable>
+                   </View>
+                 </View>
+</>
             )}
+            {entryMode === 'normal' && activeAccount ? (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                <AppInput
+              label="Amount"
+              containerStyle={{ flex: 1, minWidth: 0 }}
+              fieldStyle={{ height: 48, minHeight: 48 }}
+              style={{ paddingVertical: 0 }}
+              value={amount}
+              onChangeText={(text) => {
+                setAmount(text);
+                setError(undefined);
+              }}
+              onBlur={() => {
+                const currencyCode = amountCurrencyCode;
 
-            <AppInput
+                if (!currencyCode || !amount.trim()) return;
+
+                const result = resolveAmountExpression(amount, currencyCode);
+
+                if (result !== null) {
+                  setAmount(String(result));
+                } else {
+                  setError('Invalid amount or calculation. Please correct it.');
+                }
+              }}
+              onSubmitEditing={() => {
+                const currencyCode = amountCurrencyCode;
+
+                if (!currencyCode || !amount.trim()) return;
+
+                const result = resolveAmountExpression(amount, currencyCode);
+
+                if (result !== null) {
+                  setAmount(String(result));
+                } else {
+                  setError('Invalid amount or calculation. Please correct it.');
+                }
+              }}
+              keyboardType="decimal-pad"
+              placeholder="0"
+            />
+                <CurrencyDropdown
+                  label="CURRENCY"
+                  value={amountCurrencyCode ?? activeAccount.currencyCode}
+                  onChange={(value) => {
+                    setTransactionCurrency(value);
+                    setError(undefined);
+                  }}
+                />
+              </View>
+            ) : (
+              <AppInput
               label="Amount"
               value={amount}
-              onChangeText={setAmount}
+              onChangeText={(text) => {
+                setAmount(text);
+                setError(undefined);
+              }}
+              onBlur={() => {
+                const currencyCode = amountCurrencyCode;
+
+                if (!currencyCode || !amount.trim()) return;
+
+                const result = resolveAmountExpression(amount, currencyCode);
+
+                if (result !== null) {
+                  setAmount(String(result));
+                } else {
+                  setError('Invalid amount or calculation. Please correct it.');
+                }
+              }}
+              onSubmitEditing={() => {
+                const currencyCode = amountCurrencyCode;
+
+                if (!currencyCode || !amount.trim()) return;
+
+                const result = resolveAmountExpression(amount, currencyCode);
+
+                if (result !== null) {
+                  setAmount(String(result));
+                } else {
+                  setError('Invalid amount or calculation. Please correct it.');
+                }
+              }}
               keyboardType="decimal-pad"
               placeholder="0"
               leftElement={
                 <AppText color="textSecondary">
-                  {activeAccount
-                    ? getCurrencyLabel(activeAccount.currencyCode)
+                  {amountCurrencyCode
+                    ? getCurrencyLabel(amountCurrencyCode)
                     : ''}
                 </AppText>
               }
             />
+            )}
 
             <DateField value={date} onChange={setDate} />
 
+            {!isEditingRefund && fxCurrency && !crossCurrencySelected ? (
+              <HistoricalFxField
+                currencyCode={fxCurrency}
+                transactionDate={date}
+                snapshot={selectedFx}
+                loading={fxLoading}
+                manualMode={fxManualMode}
+                manualRate={fxManualRate}
+                error={fxError}
+                onFetch={fetchFx}
+                onManualMode={toggleManualFx}
+                onManualRateChange={(value) => {
+                  setFxManualRate(value);
+                  setFxManualRateKey(fxKey);
+                  setFxError(undefined);
+                }}
+              />
+            ) : null}
+
+            {crossCurrencySelected && activeAccount && amountCurrencyCode ? (
+              <DirectHistoricalFxField
+                accountCurrencyCode={activeAccount.currencyCode}
+                transactionCurrencyCode={amountCurrencyCode}
+                rate={directHistoricalRate}
+                loading={fxLoading || originalFxLoading}
+                manualMode={manualDirectSelected}
+                manualRate={directFxManualRate}
+                transactionDate={date}
+                error={manualDirectSelected ? undefined : (fxError || originalFxError)}
+                onFetch={() => {
+                  if (!activeAccount || !amountCurrencyCode || !isValidISODate(date)) {
+                    setError('Select valid currencies and date.');
+                    return;
+                  }
+
+                  setDirectFxManualMode(false);
+                  setDirectFxManualRate('');
+                  setDirectFxManualKey(null);
+                  const accountRequestId = ++fxRequestId.current;
+                  const originalRequestId = ++originalFxRequestId.current;
+
+                  setFxLoading(true);
+                  setOriginalFxLoading(true);
+                  setFxError(undefined);
+                  setOriginalFxError(undefined);
+                  setFxRecord(null);
+                  setOriginalFxRecord(null);
+                  setFxManualMode(false);
+                  setOriginalFxManualMode(false);
+
+                  void Promise.all([
+                    getHistoricalRate(activeAccount.currencyCode, date),
+                    getHistoricalRate(amountCurrencyCode, date),
+                  ]).then(([accountResult, originalResult]) => {
+                    if (
+                      fxRequestId.current !== accountRequestId ||
+                      originalFxRequestId.current !== originalRequestId
+                    ) return;
+
+                    setFxLoading(false);
+                    setOriginalFxLoading(false);
+
+                    if (accountResult.ok) {
+                      setFxRecord({ key: fxKey, snapshot: accountResult.snapshot });
+                    } else {
+                      setFxError(accountResult.reason);
+                    }
+
+                    if (originalResult.ok) {
+                      setOriginalFxRecord({
+                        key: originalFxKey,
+                        snapshot: originalResult.snapshot,
+                      });
+                    } else {
+                      setOriginalFxError(originalResult.reason);
+                    }
+                  });
+                }}
+                onManualMode={() => {
+                  if (manualDirectSelected) {
+                    setDirectFxManualMode(false);
+                    setDirectFxManualRate('');
+                    setDirectFxManualKey(null);
+                  } else {
+                    fxRequestId.current += 1;
+                    originalFxRequestId.current += 1;
+                    setFxLoading(false);
+                    setOriginalFxLoading(false);
+                    setDirectFxManualMode(true);
+                    setDirectFxManualRate('');
+                    setDirectFxManualKey(directFxKey);
+                    setError(undefined);
+                  }
+                }}
+                onManualRateChange={(value) => {
+                  setDirectFxManualRate(value);
+                  setDirectFxManualKey(directFxKey);
+                  setError(undefined);
+                }}
+              />
+            ) : null}
+            {crossCurrencySelected && activeAccount ? (
+              <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
+                <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+                  <AppText variant="caption" color="textSecondary">Estimated Amount</AppText>
+                  <AppText numberOfLines={1} adjustsFontSizeToFit>
+                    {estimatedAccountAmount != null ? formatMoney(estimatedAccountAmount, activeAccount.currencyCode) : '—'}
+                  </AppText>
+                  <AppText variant="caption" color="textSecondary">{activeAccount.currencyCode}</AppText>
+                </View>
+                <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+                  <AppText variant="caption" color="textSecondary">Actual Amount</AppText>
+                  <AppInput
+                    containerStyle={{ minWidth: 0 }}
+                    fieldStyle={{ minHeight: 42, height: 42 }}
+                    style={{ paddingVertical: 0 }}
+                    value={actualAccountDebit}
+                    onChangeText={(value) => {
+                      setActualAccountDebit(value);
+                      setError(undefined);
+                    }}
+                    keyboardType="decimal-pad"
+                    placeholder="Optional"
+                  />
+                  <AppText variant="caption" color="textSecondary">{activeAccount.currencyCode}</AppText>
+                </View>
+                <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+                  <AppText variant="caption" color="textSecondary">Amount to Record</AppText>
+                  <AppText numberOfLines={1} adjustsFontSizeToFit>
+                    {amountToRecord != null ? formatMoney(amountToRecord, activeAccount.currencyCode) : '—'}
+                  </AppText>
+                  <AppText variant="caption" color="textSecondary">{activeAccount.currencyCode}</AppText>
+                </View>
+              </View>
+            ) : null}
             <AppInput
               label="Note (optional)"
               value={note}
@@ -676,6 +1307,7 @@ export function AddTransactionModal({
                     : 'Add transaction'
               }
               accentColor={moduleColors.finance}
+              disabled={fxLoading && !isEditingRefund}
               onPress={submit}
               style={{ marginTop: spacing.xs }}
             />
@@ -733,68 +1365,56 @@ export function AddTransactionModal({
                 </AppText>
               ) : (
                 kindCategories.map((category) => {
-                  const isUsed = transactions.some(
-                    (item) => item.categoryId === category.id,
-                  );
+                  const selected = selectedManagerCategoryId === category.id;
 
                   return (
-                    <View
+                    <Pressable
                       key={category.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={category.name}
+                      accessibilityState={{ selected }}
+                      onPress={() => setSelectedManagerCategoryId(category.id)}
                       style={[
-                        styles.categoryManagerRow,
-                        { borderColor: colors.border },
+                        styles.compactGridTile,
+                        {
+                          backgroundColor: selected
+                            ? colors.surfaceAlt
+                            : colors.surface,
+                          borderColor: selected
+                            ? category.color
+                            : colors.border,
+                          borderWidth: selected ? 2 : 1,
+                        },
                       ]}
                     >
-                      <View
-                        style={[
-                          styles.categoryManagerIcon,
-                          { backgroundColor: category.color },
-                        ]}
+                      <Ionicons
+                        name={category.icon as keyof typeof Ionicons.glyphMap}
+                        size={23}
+                        color={category.color}
+                      />
+                      <AppText
+                        variant="label"
+                        color={selected ? category.color : colors.text}
                       >
-                        <Ionicons
-                          name={category.icon as keyof typeof Ionicons.glyphMap}
-                          size={20}
-                          color="#FFFFFF"
-                        />
-                      </View>
-
-                      <View style={styles.categoryManagerInfo}>
-                        <AppText>{category.name}</AppText>
-                        <AppText variant="caption" color="textSecondary">
-                          {isUsed ? 'Used in transactions' : 'Custom category'}
-                        </AppText>
-                      </View>
-
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Edit ${category.name}`}
-                        onPress={() => openEditCategoryForm(category)}
-                        style={styles.categoryRowAction}
-                      >
-                        <Ionicons
-                          name="create-outline"
-                          size={21}
-                          color={colors.primary}
-                        />
-                      </Pressable>
-
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Delete ${category.name}`}
-                        onPress={() => requestDeleteCategory(category)}
-                        style={styles.categoryRowAction}
-                      >
-                        <Ionicons
-                          name="trash-outline"
-                          size={20}
-                          color={colors.danger}
-                        />
-                      </Pressable>
-                    </View>
+                        {category.name}
+                      </AppText>
+                    </Pressable>
                   );
                 })
               )}
             </ScrollView>
+
+            {kindCategories
+              .filter((category) => category.id === selectedManagerCategoryId)
+              .map((category) => (
+                <View key={category.id} style={styles.sharedCategoryActions}>
+                  <FinanceActionButtons
+                    label={category.name}
+                    onEdit={() => openEditCategoryForm(category)}
+                    onDelete={() => requestDeleteCategory(category)}
+                  />
+                </View>
+              ))}
 
             <View style={styles.categoryManagerActions}>
               <Pressable
@@ -968,6 +1588,61 @@ export function AddTransactionModal({
         </View>
       </Modal>
 
+      <FormModal visible={visible && typePickerOpen} title="TYPE" onClose={() => setTypePickerOpen(false)}>
+        {(['expense', 'income', 'refund'] as const).map(option => (
+          <Pressable key={option} onPress={() => { handleEntryModeChange(option); setTypePickerOpen(false); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+            <Ionicons name={option === 'expense' ? 'arrow-down-circle-outline' : option === 'income' ? 'arrow-up-circle-outline' : 'return-down-back-outline'} size={20} color={option === 'expense' ? '#EF4444' : option === 'income' ? '#10B981' : '#3B82F6'} />
+            <AppText>{option === 'expense' ? 'Expense' : option === 'income' ? 'Income' : 'Refund'}</AppText>
+          </Pressable>
+        ))}
+      </FormModal>
+      <FormModal visible={visible && categoryPickerOpen} title="CATEGORY" onClose={() => setCategoryPickerOpen(false)}>
+        <ScrollView style={{ maxHeight: 340 }} keyboardShouldPersistTaps="handled">
+          {kindCategories.map(category => (
+            <Pressable key={category.id} onPress={() => { setCategoryId(category.id); setCategoryPickerOpen(false); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+              <Ionicons name={category.icon as keyof typeof Ionicons.glyphMap} size={20} color={category.color} />
+              <AppText style={{ flex: 1 }}>{category.name}</AppText>
+              {activeCategoryId === category.id ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
+            </Pressable>
+          ))}
+          <Pressable onPress={() => { setCategoryPickerOpen(false); openNewCategoryForm(); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+            <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
+            <AppText color={colors.primary}>Add New Category</AppText>
+          </Pressable>
+          <Pressable onPress={() => { setCategoryPickerOpen(false); openCategoryManager(); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+            <Ionicons name="settings-outline" size={20} color={colors.primary} />
+            <AppText color={colors.primary}>Manage Categories</AppText>
+          </Pressable>
+        </ScrollView>
+      </FormModal>
+      <FormModal visible={visible && attachPickerOpen} title="ATTACH (OPTIONAL)" onClose={() => setAttachPickerOpen(false)}>
+        {([['camera', '📷 Camera'], ['gallery', '🖼 Gallery'], ['file', '📄 PDF']] as const).map(([source, label]) => (
+          <Pressable key={source} onPress={() => { setAttachPickerOpen(false); setScanSource(source); }} style={[styles.pickerRow, { borderColor: colors.border }]}>
+            <AppText>{label}</AppText>
+          </Pressable>
+        ))}
+        <Pressable onPress={() => { setScanSource(null); setAttachPickerOpen(false); }} style={[styles.pickerRow, { borderColor: colors.border }]}><AppText>— None</AppText></Pressable>
+      </FormModal>
+      <Modal visible={visible && !!confirmUnusedDeleteCategory} transparent animationType="fade" onRequestClose={() => setConfirmUnusedDeleteCategory(null)}>
+        <View style={styles.replacementBackdrop}>
+          <View style={[styles.replacementCard, { backgroundColor: colors.surface, borderRadius: radius.xl }]}>
+            <AppText variant="h2">Delete category?</AppText>
+            <AppText color="textSecondary">Are you sure you want to delete "{confirmUnusedDeleteCategory?.name}"?</AppText>
+            <View style={styles.categoryModalActions}>
+              <Pressable style={[styles.categoryActionButton, { backgroundColor: colors.surfaceAlt }]} onPress={() => setConfirmUnusedDeleteCategory(null)}><AppText>Cancel</AppText></Pressable>
+              <Pressable style={[styles.categoryActionButton, { backgroundColor: colors.danger }]} onPress={() => {
+                const target = confirmUnusedDeleteCategory;
+                if (!target) return;
+                const deleted = deleteCategory(target.id);
+                setConfirmUnusedDeleteCategory(null);
+                if (!deleted) { Alert.alert('Could not delete category', 'Please try again.'); return; }
+                if (categoryId === target.id) setCategoryId('');
+              }}><AppText color="onPrimary">Delete</AppText></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Replacement category picker */}
       <Modal
         visible={visible && !!pendingDeleteCategory}
@@ -991,9 +1666,12 @@ export function AddTransactionModal({
             <AppText variant="h2">Choose replacement</AppText>
 
             <AppText color="textSecondary">
-              The category "{pendingDeleteCategory?.name}" is used by existing
-              transactions. Choose another category of the same type to move
-              those transactions before deleting it.
+              The category "{pendingDeleteCategory?.name}" is linked to{' '}
+              {transactions.filter(
+                (item) => item.categoryId === pendingDeleteCategory?.id,
+              ).length}{' '}
+              transaction(s). Choose another category of the same type to
+              move those transactions before deleting it.
             </AppText>
 
             {replacementCategories.length === 0 ? (
@@ -1105,6 +1783,23 @@ interface AddTransactionModalProps {
 }
 
 const styles = StyleSheet.create({
+  dropdownButton: { height: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pickerRow: { minHeight: 48, paddingVertical: 12, borderBottomWidth: 1 },
+  compactGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  compactGridTile: {
+    width: '31%',
+    minHeight: 72,
+    borderRadius: 12,
+    paddingHorizontal: 5,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
   categoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1140,8 +1835,15 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   categoryManagerList: {
-    gap: 9,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     paddingBottom: 8,
+  },
+  sharedCategoryActions: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
   },
   categoryManagerRow: {
     minHeight: 58,
@@ -1162,13 +1864,6 @@ const styles = StyleSheet.create({
   categoryManagerInfo: {
     flex: 1,
     gap: 3,
-  },
-  categoryRowAction: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 9,
   },
   categoryNameInput: {
     minHeight: 48,

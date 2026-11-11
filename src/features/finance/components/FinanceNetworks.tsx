@@ -9,6 +9,7 @@ import { useTheme } from '@/theme';
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
 export type FinanceNetworkKey =
+  | 'debts'
   | 'accounts'
   | 'assets'
   | 'receivable'
@@ -46,20 +47,7 @@ const NETWORKS: NetworkItem[] = [
     color: '#A78BFA',
     background: '#3B246B',
   },
-  {
-    key: 'receivable',
-    title: 'Receivable',
-    icon: 'arrow-down-circle-outline',
-    color: '#60A5FA',
-    background: '#1E3A5F',
-  },
-  {
-    key: 'payable',
-    title: 'Payable',
-    icon: 'arrow-up-circle-outline',
-    color: '#F87171',
-    background: '#7F1D1D',
-  },
+  { key: 'debts', title: 'Debts', icon: 'people-outline', color: '#60A5FA', background: '#1E3A5F' },
   {
     key: 'income',
     title: 'Income',
