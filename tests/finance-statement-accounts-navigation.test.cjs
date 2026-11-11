@@ -17,3 +17,10 @@ test('Accounts statement uses the same reconciled report and transfer legs witho
   assert.match(screen, /Credit-card repayments are transfer legs/);
   assert.doesNotMatch(screen, /addTransaction|updateTransaction|deleteTransaction|addTransfer|setState/);
 });
+
+test('Statement rejects malformed or repeated selection filters', () => {
+  const screen = read('app/finance/statement-accounts.tsx');
+  assert.match(screen, /const filterValid =/);
+  assert.match(screen, /params\.accountId\.length > 0/);
+  assert.match(screen, /const selectionValid = filterValid &&/);
+});
