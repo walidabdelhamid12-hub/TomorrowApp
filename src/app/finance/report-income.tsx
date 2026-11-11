@@ -10,6 +10,58 @@ import { aggregateMonthlyOperatingComparison } from '@/features/finance/utils/re
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { moduleColors, useTheme } from '@/theme';
 
+function shiftMonth(month: string, offset: number): string {
+  const [year, number] = month.split('-').map(Number);
+  const date = new Date(year, number - 1 + offset, 1);
+  const nextYear = date.getFullYear();
+  const nextMonth = date.getMonth() + 1;
+  if (nextYear < 100 || nextYear > 9999 ||
+      (nextYear === 100 && nextMonth < 2)) {
+    return month;
+  }
+  return `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+}
+
+function monthPeriod(month: string): { from: string; to: string; label: string } {
+  const [year, number] = month.split('-').map(Number);
+  const from = `${month}-01`;
+  const to = `${month}-${String(new Date(year, number, 0).getDate()).padStart(2, '0')}`;
+  const label = new Date(year, number - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  return { from, to, label };
+}
+
+function FilterPicker({ title, value, options, onSelect, colors }: {
+  title: string;
+  value: string;
+  options: { id: string; label: string }[];
+  onSelect: (value: string) => void;
+  colors: { surface: string; border: string; text: string };
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const selected = options.find(option => option.id === value);
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <AppText color="textSecondary">{title}</AppText>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${title}: ${selected?.label ?? 'All'}`}
+        onPress={() => setExpanded(!expanded)}
+        style={{ minHeight: 44, padding: 12, borderWidth: 1, borderColor: colors.border,
+          borderRadius: 10, backgroundColor: colors.surface, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <AppText>{selected?.label ?? 'All'}</AppText>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.text} />
+      </Pressable>
+      {expanded && options.map(option => (
+        <Pressable key={option.id} accessibilityRole="button" accessibilityState={{ selected: option.id === value }}
+          onPress={() => { onSelect(option.id); setExpanded(false); }}
+          style={{ minHeight: 44, padding: 12, borderBottomWidth: 1, borderColor: colors.border,
+            flexDirection: 'row', justifyContent: 'space-between' }}>
+          <AppText>{option.label}</AppText>
+          {option.id === value && <Ionicons name="checkmark" size={18} color={colors.text} />}
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 function currentMonth(): { from: string; to: string; label: string } {
   const date = new Date();
   const year = date.getFullYear();
@@ -20,7 +72,7 @@ function currentMonth(): { from: string; to: string; label: string } {
   return { from, to, label: date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) };
 }
 
-/** Read-only Income report. Current month only; other filters will be added separately. */
+/** Read-only Income report with month, account and category filters. */
 export default function IncomeReportScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
@@ -34,22 +86,35 @@ export default function IncomeReportScreen() {
   const debts = useFinanceStore(s => s.debts);
   const loans = useFinanceStore(s => s.loans);
   const cheques = useFinanceStore(s => s.cheques);
-  const [period] = useState(currentMonth);
+  const [month, setMonth] = useState(() => currentMonth().from.slice(0, 7));
+  const [accountId, setAccountId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const period = useMemo(() => monthPeriod(month), [month]);
+  const filtersActive = accountId !== '' || categoryId !== '';
+  const accountOptions = useMemo(() => [
+    { id: '', label: 'All accounts' },
+    ...accounts.map(account => ({ id: account.id, label: `${account.name} (${account.currencyCode})${account.archived ? ' - Archived' : ''}` })),
+  ], [accounts]);
+  const categoryOptions = useMemo(() => [
+    { id: '', label: 'All income categories' },
+    ...categories.filter(category => category.kind === 'income').map(category => ({ id: category.id, label: category.name })),
+  ], [categories]);
   const report = useMemo(() => {
     if (!ledgerReady || !financeReady) return null;
     return aggregateOperatingReport(
       { ledger: { accounts, categories, transactions, transfers }, finance: { assets, debts, loans, cheques } },
       { from: period.from, to: period.to },
+      { ...(accountId ? { accountId } : {}), ...(categoryId ? { categoryId } : {}) },
     );
-  }, [ledgerReady, financeReady, accounts, categories, transactions, transfers, assets, debts, loans, cheques, period]);
+  }, [ledgerReady, financeReady, accounts, categories, transactions, transfers, assets, debts, loans, cheques, period, accountId, categoryId]);
 
   const comparison = useMemo(() => {
-    if (!ledgerReady || !financeReady) return null;
+    if (!ledgerReady || !financeReady || filtersActive) return null;
     return aggregateMonthlyOperatingComparison(
       { ledger: { accounts, categories, transactions, transfers }, finance: { assets, debts, loans, cheques } },
       period.from.slice(0, 7),
     );
-  }, [ledgerReady, financeReady, accounts, categories, transactions, transfers, assets, debts, loans, cheques, period]);
+  }, [ledgerReady, financeReady, accounts, categories, transactions, transfers, assets, debts, loans, cheques, period, filtersActive]);
   return (
     <Screen scroll>
       <Pressable accessibilityRole="button" accessibilityLabel="Back to Reports"
@@ -62,6 +127,24 @@ export default function IncomeReportScreen() {
       <AppText color="textSecondary" style={{ marginTop: spacing.xs, marginBottom: spacing.md }}>
         {period.label} | {period.from} to {period.to}
       </AppText>
+      <View style={{ marginBottom: spacing.md }}>
+        <AppText variant="h3">Filters</AppText>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: spacing.sm }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Previous month"
+            onPress={() => setMonth(value => shiftMonth(value, -1))}
+            style={{ minHeight: 44, minWidth: 44, justifyContent: 'center' }}>
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
+          </Pressable>
+          <AppText variant="bodyStrong">{period.label}</AppText>
+          <Pressable accessibilityRole="button" accessibilityLabel="Next month"
+            onPress={() => setMonth(value => shiftMonth(value, 1))}
+            style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' }}>
+            <Ionicons name="chevron-forward" size={24} color={colors.text} />
+          </Pressable>
+        </View>
+        <FilterPicker title="Account" value={accountId} options={accountOptions} onSelect={setAccountId} colors={colors} />
+        <FilterPicker title="Income category" value={categoryId} options={categoryOptions} onSelect={setCategoryId} colors={colors} />
+      </View>
       {!ledgerReady || !financeReady || !report ? (
         <ActivityIndicator color={moduleColors.finance} />
       ) : (
@@ -85,9 +168,12 @@ export default function IncomeReportScreen() {
             </View>
           ))}
           <AppText variant="h3" style={{ marginTop: spacing.lg }}>Compared with previous month</AppText>
-          <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-            Ordinary income by account currency. Change is current month minus previous month.
-          </AppText>
+          {filtersActive && <AppText color="textSecondary">Comparison is shown for all accounts and categories only. Clear the filters to see it.</AppText>}
+          {!filtersActive && (
+            <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
+              Ordinary income by account currency. Change is current month minus previous month.
+            </AppText>
+          )}
           {comparison?.currencies.length === 0 && (
             <AppText color="textSecondary">No account currencies available for comparison.</AppText>
           )}
@@ -133,7 +219,7 @@ export default function IncomeReportScreen() {
             </View>
           )}
           <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.lg }}>
-            Period selection, category insights, charts, View Statement and exports are pending.
+            Category insights, charts, View Statement and exports are pending.
           </AppText>
         </>
       )}
