@@ -41,6 +41,7 @@ import {
   roundMoney,
 } from '@/features/finance/utils/finance';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
+import { aggregateAccountsReport } from '@/features/finance/utils/reportAccounts';
 
 /* -------------------------------------------------------------------------- */
 /* Store contract                                                             */
@@ -52,6 +53,8 @@ interface LedgerActions {
   // Accounts
   addAccount: (input: NewAccountInput) => EntityId;
   updateAccount: (id: EntityId, patch: AccountPatch) => void;
+  /** Explicit metadata-only verification; never edits financial balances. */
+  verifyAccountOpeningBalanceDate: (id: EntityId, date: string) => boolean;
   setAccountArchived: (id: EntityId, archived: boolean) => void;
   deleteAccount: (id: EntityId) => boolean;
   clearAccountsAndTransactions: () => boolean;
@@ -525,6 +528,30 @@ export const useLedgerStore = create<LedgerStore>()(
         return account.id;
       },
 
+      verifyAccountOpeningBalanceDate: (id, date) => {
+        if (!useLedgerStore.persist.hasHydrated() || !isValidISODate(date)) return false;
+        const state = get();
+        if (state.accounts.filter(account => account.id === id).length !== 1) return false;
+        try {
+          const rows = aggregateAccountsReport(state, { from: date, to: date },
+            [{ accountId: id, openingBalanceDate: date }]);
+          const verified = rows.find(row => row.accountId === id);
+          if (!verified || verified.status !== 'available' || !verified.reconciled) return false;
+        } catch {
+          return false;
+        }
+        // Recheck against the latest snapshot inside the setter to avoid stale writes.
+        let saved = false;
+        set(current => {
+          if (current !== state && (current.accounts !== state.accounts
+            || current.transactions !== state.transactions || current.transfers !== state.transfers)) return current;
+          saved = true;
+          return { accounts: current.accounts.map(account => account.id === id
+            ? { ...account, openingBalanceDate: date, updatedAt: now() } : account) };
+        });
+        return saved;
+      },
+
       updateAccount: (id, patch) =>
         set((state) => {
           const clean = definedOnly(patch);
@@ -576,10 +603,21 @@ export const useLedgerStore = create<LedgerStore>()(
                 }
               : clean;
 
+          const financialBasisChanged =
+            (safePatch.initialBalance !== undefined
+              && safePatch.initialBalance !== currentAccount.initialBalance)
+            || (safePatch.currencyCode !== undefined
+              && safePatch.currencyCode !== currentAccount.currencyCode);
+
           return {
             accounts: state.accounts.map((account) =>
               account.id === id
-                ? { ...account, ...safePatch, updatedAt: now() }
+                ? {
+                    ...account,
+                    ...safePatch,
+                    ...(financialBasisChanged ? { openingBalanceDate: undefined } : {}),
+                    updatedAt: now(),
+                  }
                 : account
             ),
           };
