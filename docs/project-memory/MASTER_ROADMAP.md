@@ -12,7 +12,7 @@ Estimated overall Finance scope progress: **~65% (planning estimate, not measure
 5. **Currencies/rates:** base currency, rates and historical FX, conversion direction, native and base-currency display, missing/stale rates, historical-vs-current valuation. Substantial implementation; comprehensive audit open.
 6. **Assets/liabilities/debts/loans/installments:** asset movements, gold/silver valuation, receivables/payables, cheques, loans, installments, net worth, linked payments and recovery. Substantial implementation; installments schedules-only, safe posting activation deferred, cheques and final acceptance open.
 7. **Calculator/amount entry:** arithmetic, precision, zero division, invalid results, native keyboard and optional calculator, field integration, consistent money display. Substantial implementation; end-to-end UI acceptance open.
-8. **Analytics/reports:** monthly income/expense; comparison; category breakdown; weekly and monthly trends; account history; date/account/category filters; exclude internal transfers; reconcile with known examples. In progress: classification **8.2A** and read-only aggregation **8.2B** committed; reporting UI, charts, filters and remaining acceptance open.
+8. **Analytics/reports:** monthly income/expense; comparison; category breakdown; weekly and monthly trends; account history; date/account/category filters; exclude internal transfers; reconcile with known examples. In progress: read-only classification **8.2A**, aggregation **8.2B**, monthly comparison **8.2C**, and account/category filters **8.2D** completed and pushed; report UI, charts, further trends and final acceptance remain open. Proposed 8.2E monthly operating trend series is **not yet approved**.
 9. **Smart documents/receipts:** capture/import, file links, permissions, QR, OCR, extracted fields with confirmation, search, duplicate detection, image cleanup, sharing/export, backup and restore. Planned.
 10. **Smart voice entry:** Arabic speech-to-text, draft transaction parsing, account/category suggestion, clarification and explicit confirmation. Planned.
 11. **Backup/sync:** local export/import, complete restore, attachments, cloud sync, encryption, conflict handling, offline operation, restore tests. Planned.
@@ -33,3 +33,8 @@ Estimated overall Finance scope progress: **~65% (planning estimate, not measure
 
 ## Sequencing
 Finish Finance Phase 8 in approved increments; close open foundational safety dependencies before any posting activation; continue Phases 9–12; complete Finance V1 acceptance; plan other modules separately. Preserve one canonical roadmap and update status rather than recreating plans.
+
+## Approved future design reference (documentation only)
+- See [FUTURE_MODULES_AND_ZAKAT.md](FUTURE_MODULES_AND_ZAKAT.md) for the approved Finance visual navigation, Zakat placement, and Spiritual/Health/Growth future requirements.
+- **Exactly four top-level app modules:** Finance, Spiritual, Health, Growth. Reports belongs **inside Finance**; Zakat is under Finance → Reports → Annual Reports. Finance home retains eight tiles and Financial Planning (Trips / Events / Budget).
+- These requirements do not add a Finance phase, activate posting, or authorize implementation. The Finance 12-phase scope and separate future module planning remain intact.
