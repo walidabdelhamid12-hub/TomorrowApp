@@ -171,3 +171,12 @@ test('invalid stored dates are not presented as verified in account details', ()
   assert.match(source, /storedDateStatus\?\.valid/);
   assert.match(source, /Stored date needs review/);
 });
+
+test('account creation rejects runtime injection of historical date metadata', () => {
+  const source = fs.readFileSync(path.join(__dirname,
+    '../src/features/finance/store/useLedgerStore.ts'), 'utf8');
+  const create = source.slice(source.indexOf('addAccount: (input) => {'),
+    source.indexOf('verifyAccountOpeningBalanceDate: (id, date) =>'));
+  assert.match(create, /hasOwnProperty\.call\(input, 'openingBalanceDate'\)/);
+  assert.match(create, /return ''/);
+});
