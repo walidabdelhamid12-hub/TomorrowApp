@@ -10,8 +10,12 @@ test('Installments report forwards month to schedule statement', () => {
 });
 test('Installments statement only projects scheduled due dates', () => {
   const screen = read('app/finance/statement-installments.tsx');
-  assert.match(screen, /aggregateSavedInstallmentsReport\(saved\.contracts, period\.from, period\.to\)/);
-  assert.match(screen, /item\.dueDate >= period\.from && item\.dueDate <= period\.to/);
+  assert.match(screen, /buildScheduledInstallmentsStatement\(saved\.contracts, period\.from, period\.to\)/);
+  assert.match(screen, /!statement\.reconciled/);
+  const utility = read('features/finance/utils/statementScheduledInstallments.ts');
+  assert.match(utility, /item\.dueDate >= from && item\.dueDate <= to/);
+  assert.match(utility, /aggregateSavedInstallmentsReport\(records, from, to\)/);
+  assert.match(utility, /BigInt\(whole \+ fraction\.padEnd\(decimals, '0'\)\)/);
   assert.match(screen, /Paid, overdue and remaining balances are not verified/);
   assert.doesNotMatch(screen, /createContract|updateContract|deleteContract|setState|postingAllowed\s*=\s*true/);
 });
