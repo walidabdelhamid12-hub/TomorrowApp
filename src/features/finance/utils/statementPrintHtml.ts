@@ -2,7 +2,7 @@
  * Offline, read-only HTML document for PDF printing. This function does not
  * print, write a file, or imply that a PDF was generated.
  */
-import type { StatementCsvRow } from './statementCsv';
+import { serializeStatementCsv, type StatementCsvRow } from './statementCsv';
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -14,17 +14,10 @@ export function buildStatementPrintHtml(
   rows: readonly StatementCsvRow[],
   options: { title: string; from: string; to: string },
 ): string {
-  if (!options.title.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(options.from)
-    || !/^\d{4}-\d{2}-\d{2}$/.test(options.to) || options.from > options.to) {
-    throw new Error('Invalid statement print metadata');
-  }
+  // Reuse the CSV calendar, currency, and amount checks for both formats.
+  // No file is written; this is validation only.
+  serializeStatementCsv(rows, options);
   const body = rows.map(row => {
-    if (row.date < options.from || row.date > options.to
-      || !/^\d{4}-\d{2}-\d{2}$/.test(row.date)
-      || !/^-?\d+(?:\.\d+)?$/.test(row.amount)
-      || !/^[A-Z]{3}$/.test(row.currency)) {
-      throw new Error('Invalid statement print row');
-    }
     return '<tr>' + [row.date, row.account, row.category, row.note ?? '', row.amount, row.currency]
       .map(value => '<td>' + escapeHtml(value) + '</td>').join('') + '</tr>';
   }).join('');
