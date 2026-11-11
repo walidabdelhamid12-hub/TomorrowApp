@@ -19,7 +19,14 @@ function money(value: bigint, decimals: number): string {
 export function aggregateSavedInstallmentsReport(
   records: readonly StoredInstallmentContract[], from: string, to: string,
 ): SavedInstallmentReportRow[] {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) throw new Error('Invalid period');
+  const validDate = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const [year, month, day] = value.split('-').map(Number);
+    if (year < 100 || month < 1 || month > 12) return false;
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return day >= 1 && day <= lastDay;
+  };
+  if (!validDate(from) || !validDate(to) || from > to) throw new Error('Invalid period');
   const ids = new Set<string>();
   return records.map(record => {
     const contract = record.contract;
