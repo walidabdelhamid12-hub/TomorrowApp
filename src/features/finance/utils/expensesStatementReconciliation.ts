@@ -58,7 +58,7 @@ export function buildExpensesStatement(
   }
   for (const [currency, units] of sums) {
     if (!report.currencies.some(total => total.currencyCode === currency
-      && total.minorUnits?.income === units)) safe = false;
+      && total.minorUnits?.expenses === units)) safe = false;
   }
   rows.sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
   return { report, rows: safe ? rows : [], reconciled: safe };
