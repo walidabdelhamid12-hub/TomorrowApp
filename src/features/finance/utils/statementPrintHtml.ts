@@ -77,43 +77,43 @@ export function buildStatementPrintHtml(
   return `<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-@page{size:A4;margin:15mm 13mm 17mm}
+@page{size:A4;margin:12mm 10mm 14mm}
 *{box-sizing:border-box}
 html,body{direction:ltr;text-align:left}
-body{font-family:Arial,Helvetica,sans-serif;color:#203149;margin:0;font-size:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.header{background:#142b49;color:#fff;border-radius:9px;padding:19px 22px 18px;page-break-inside:avoid}
+body{font-family:Arial,Helvetica,sans-serif;color:#203149;margin:0;font-size:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.header{background:#142b49;color:#fff;border-radius:9px;padding:26px 25px 25px;page-break-inside:avoid}
 .brand-row,.heading-row{display:flex;justify-content:space-between;align-items:flex-start}
-.brand{font-weight:800;letter-spacing:1.2px;font-size:12px}
+.brand{font-weight:800;letter-spacing:1.2px;font-size:16px}
 .brand span{color:#83d9d0}
-.eyebrow{font-size:9px;letter-spacing:1.4px;color:#dce8f5}
-.rule{height:1px;background:#506783;margin:12px 0 15px}
-h1{font-size:23px;line-height:1.2;color:${accent};margin:0 0 6px}
-.subtitle{color:#dce8f5;font-size:10px}
+.eyebrow{font-size:11px;letter-spacing:1.4px;color:#dce8f5}
+.rule{height:1px;background:#506783;margin:17px 0 19px}
+h1{font-size:30px;line-height:1.2;color:${accent};margin:0 0 6px}
+.subtitle{color:#dce8f5;font-size:13px}
 .period{text-align:right;white-space:nowrap;padding-left:12px}
-.period .value{font-size:11px;font-weight:bold;color:white;margin-top:7px}
-.summary{display:flex;gap:10px;margin:15px 0 22px;page-break-inside:avoid}
-.summary-card{background:#f1f5f9;border:1px solid #e2e9f0;border-radius:7px;padding:12px 14px;flex:1;min-width:0}
-.summary-label{font-size:9px;color:#64748b;margin-bottom:7px}
-.summary-value{font-size:18px;font-weight:bold;color:#142b49;overflow-wrap:anywhere}
+.period .value{font-size:13px;font-weight:bold;color:white;margin-top:7px}
+.summary{display:flex;direction:ltr;gap:12px;margin:19px 0 28px;page-break-inside:avoid}
+.summary-card{direction:ltr;text-align:left;background:#f1f5f9;border:1px solid #e2e9f0;border-radius:7px;padding:17px 16px;flex:1;min-width:0}
+.summary-label{font-size:12px;color:#64748b;margin-bottom:7px}
+.summary-value{font-size:24px;font-weight:bold;color:#142b49;overflow-wrap:anywhere}
 .summary-value.accent{color:${accentDark}}
-.summary-value.currencies{font-size:12px;line-height:1.6}
-.section{font-size:14px;font-weight:bold;color:#142b49;margin:0 0 10px}
-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px}
+.summary-value.currencies{font-size:15px;line-height:1.6}
+.section{font-size:19px;font-weight:bold;color:#142b49;margin:0 0 14px}
+table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
 thead{display:table-header-group}
 tr{break-inside:avoid;page-break-inside:avoid}
-th{background:#e9f0f7;color:#142b49;font-size:9px;text-align:left;padding:10px 8px;border-bottom:2px solid #b9cadb}
-td{padding:10px 8px;border-bottom:1px solid #e2e9f0;vertical-align:top;overflow-wrap:anywhere}
+th{background:#e9f0f7;color:#142b49;font-size:12px;text-align:left;padding:14px 7px;border-bottom:2px solid #b9cadb}
+td{padding:15px 7px;border-bottom:1px solid #e2e9f0;vertical-align:top;overflow-wrap:anywhere}
 tr.alternate{background:#f7f9fc}
-th:nth-child(1){width:15%}th:nth-child(2){width:17%}th:nth-child(3){width:21%}
-th:nth-child(4){width:23%}th:nth-child(5){width:14%}th:nth-child(6){width:10%}
+th:nth-child(1){width:16%}th:nth-child(2){width:16%}th:nth-child(3){width:19%}
+th:nth-child(4){width:22%}th:nth-child(5){width:15%}th:nth-child(6){width:12%}
 .amount{text-align:right;font-weight:bold;font-variant-numeric:tabular-nums;white-space:nowrap}
 th.amount{text-align:right}
 .currency{white-space:nowrap}
 .category-mark{color:${accentDark};font-weight:bold;margin-right:6px}
-.inline-icon{width:15px;height:15px;display:inline-block;vertical-align:-3px;margin-right:5px;color:#64748b}.category-mark .inline-icon{color:${accentDark}}.currency-separator{padding:0 4px}
+.inline-icon{width:18px;height:18px;display:inline-block;vertical-align:-3px;margin-right:5px;color:#64748b}.category-mark .inline-icon{color:${accentDark}}.currency-separator{padding:0 4px}
 .note{color:#56657a}
 .empty{text-align:center;color:#64748b;padding:24px}
-.footer{margin-top:22px;padding-top:10px;border-top:1px solid #e2e9f0;display:flex;justify-content:space-between;color:#64748b;font-size:9px}
+.footer{margin-top:28px;padding-top:14px;border-top:1px solid #e2e9f0;display:flex;justify-content:space-between;color:#64748b;font-size:11px}
 </style></head><body>
 <section class="header">
   <div class="brand-row"><div class="brand">TOMORROW <span>FINANCE</span></div><div class="eyebrow">FINANCIAL STATEMENT</div></div>
