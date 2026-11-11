@@ -24,6 +24,7 @@ import {
 } from '@/features/finance/store/useLedgerStore';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
+import { isValidISODate } from '@/features/finance/utils/input';
 import { moduleColors, useTheme } from '@/theme';
 
 export default function AccountsScreen() {
@@ -38,6 +39,7 @@ export default function AccountsScreen() {
   const transfers = useLedgerStore((state) => state.transfers);
 
   const addAccount = useLedgerStore((state) => state.addAccount);
+  const verifyOpeningDate = useLedgerStore((state) => state.verifyAccountOpeningBalanceDate);
   const updateAccount = useLedgerStore((state) => state.updateAccount);
   const deleteAccount = useLedgerStore((state) => state.deleteAccount);
 
@@ -111,7 +113,19 @@ export default function AccountsScreen() {
       }
       updateAccount(editingAccount.id, accountInput);
     } else {
-      addAccount(accountInput);
+      if (data.openingBalanceDate && !isValidISODate(data.openingBalanceDate)) {
+        Alert.alert('Invalid opening date', 'Enter a real calendar date in YYYY-MM-DD format.');
+        return;
+      }
+      const newAccountId = addAccount(accountInput);
+      if (!newAccountId) {
+        Alert.alert('Account not saved', 'Check the starting balance and currency.');
+        return;
+      }
+      if (data.openingBalanceDate && !verifyOpeningDate(newAccountId, data.openingBalanceDate)) {
+        Alert.alert('Opening date not verified',
+          'The account was created, but its opening date could not be verified. Open account details to review and verify it.');
+      }
     }
 
     closeModal();
