@@ -62,6 +62,11 @@ export default function AssetsReportScreen() {
       style={{ minHeight: 44, justifyContent: 'center' }}>
       <AppText>{asset.name} {assetId === asset.id ? '✓' : ''}</AppText>
     </Pressable>)}
+    {ready && rows && <Pressable accessibilityRole="button" accessibilityLabel="View Assets Statement"
+      onPress={() => router.push({ pathname: '/finance/statement-assets', params: { month, ...(assetId ? { assetId } : {}) } })}
+      style={{ minHeight: 44, justifyContent: 'center', marginVertical: spacing.sm }}>
+      <AppText color="primary">View Statement · {month}</AppText>
+    </Pressable>}
     {!ready || !rows ? <ActivityIndicator color={moduleColors.finance} /> : rows
       .filter(row => assetId === null || row.assetId === assetId).map((row, index) => {
         const matches = assets.filter(asset => asset.id === row.assetId);
