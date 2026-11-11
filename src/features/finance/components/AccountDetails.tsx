@@ -20,8 +20,9 @@ export function AccountDetails({ accountId, onClose, amountsVisible = true }: { 
   const account = matches.length === 1 ? matches[0] : undefined;
   const submitOpeningDate = () => {
     if (!account) return;
+    const requestedDate = openingDateDraft.trim();
     const result = validateAccountOpeningDate(
-      { accounts, transactions, transfers, categories: [] }, account.id, openingDateDraft.trim(),
+      { accounts, transactions, transfers, categories: [] }, account.id, requestedDate,
     );
     if (!result.valid) {
       Alert.alert('Cannot verify opening date', result.reason);
@@ -32,7 +33,7 @@ export function AccountDetails({ accountId, onClose, amountsVisible = true }: { 
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Verify', onPress: () => {
-          if (verifyOpeningDate(account.id, openingDateDraft.trim())) {
+          if (verifyOpeningDate(account.id, requestedDate)) {
             setOpeningDateDraft('');
             Alert.alert('Verified', 'Opening balance date saved.');
           } else {
