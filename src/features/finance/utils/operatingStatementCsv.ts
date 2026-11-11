@@ -1,7 +1,7 @@
 import type { IncomeStatementResult } from './incomeStatementReconciliation';
 import type { ExpensesStatementResult } from './expensesStatementReconciliation';
 import { formatAmount } from './amountFormat';
-import { serializeStatementCsv } from './statementCsv';
+import { serializeStatementCsv, type StatementCsvRow } from './statementCsv';
 
 export interface StatementExportNames {
   readonly accounts: ReadonlyMap<string, string>;
@@ -13,12 +13,11 @@ export interface StatementExportNames {
  * Unknown transactions are deliberately a hard stop for export, even when
  * known-only figures reconcile with the report.
  */
-export function buildOperatingStatementCsv(
+export function buildVerifiedOperatingStatementRows(
   statement: IncomeStatementResult | ExpensesStatementResult,
   kind: 'income' | 'expenses',
-  period: { from: string; to: string },
   names: StatementExportNames,
-): string {
+): StatementCsvRow[] {
   if (!statement.reconciled || statement.report.unknown.length > 0) {
     throw new Error('Statement export requires fully verified transactions');
   }
@@ -34,7 +33,16 @@ export function buildOperatingStatementCsv(
       amount, currency: row.currencyCode,
     };
   });
-  return serializeStatementCsv(rows, {
+  return rows;
+}
+
+export function buildOperatingStatementCsv(
+  statement: IncomeStatementResult | ExpensesStatementResult,
+  kind: 'income' | 'expenses',
+  period: { from: string; to: string },
+  names: StatementExportNames,
+): string {
+  return serializeStatementCsv(buildVerifiedOperatingStatementRows(statement, kind, names), {
     ...period, title: kind === 'income' ? 'Income Statement' : 'Expenses Statement',
   });
 }
