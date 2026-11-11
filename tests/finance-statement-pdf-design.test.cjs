@@ -27,7 +27,7 @@ test('English printable PDF explicitly uses LTR, branded header and same-line da
   assert.match(html, /<html lang="en" dir="ltr">/);
   assert.match(html, /TOMORROW <span>FINANCE<\/span>/);
   assert.match(html, /class="heading-row"/);
-  assert.match(html, /12px;page-break-inside:avoid/);
+  assert.match(html, /\.header\{[^}]*page-break-inside:avoid/);
   assert.match(html, /01 Nov 2026 – 30 Nov 2026/);
   assert.match(html, /#f28b82/);
   assert.match(html, /<h2 class="section">Transactions<\/h2>/);
