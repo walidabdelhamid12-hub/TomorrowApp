@@ -1,6 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Alert } from 'react-native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { buildOperatingStatementPrintHtml } from '@/features/finance/utils/operatingStatementPrintHtml';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { AppText, Screen } from '@/components/ui';
 import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
@@ -24,6 +28,7 @@ function validDate(value: string | undefined): value is string {
 /** Read-only ordinary-income statement. No ledger writes or posting. */
 export default function IncomeStatementScreen() {
   const router = useRouter();
+  const [exporting, setExporting] = useState(false);
   const { colors, spacing } = useTheme();
   const params = useLocalSearchParams<{
     from?: string; to?: string; accountId?: string; categoryId?: string;
@@ -58,6 +63,26 @@ export default function IncomeStatementScreen() {
     );
   }, [valid, ledgerReady, financeReady, from, to, accountId, categoryId,
     accounts, categories, transactions, transfers, assets, debts, loans, cheques]);
+  const exportPdf = async () => {
+    if (exporting || !statement || !statement.reconciled || statement.report.unknown.length > 0 || !from || !to) return;
+    setExporting(true);
+    try {
+      const html = buildOperatingStatementPrintHtml(statement, 'income', { from, to }, {
+        accounts: new Map(accounts.map(account => [account.id, account.name])),
+        categories: new Map(categories.map(category => [category.id, category.name])),
+      });
+      const { uri } = await Print.printToFileAsync({ html });
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('PDF created', 'File sharing is not available on this device.');
+        return;
+      }
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
+    } catch (error) {
+      Alert.alert('Export failed', error instanceof Error ? error.message : 'Unable to create PDF.');
+    } finally {
+      setExporting(false);
+    }
+  };
   return (
     <Screen scroll>
       <Pressable accessibilityRole="button" accessibilityLabel="Back to Income Report"
@@ -127,8 +152,17 @@ export default function IncomeStatementScreen() {
               ))}
             </>
           )}
-          <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.lg }}>
-            Read-only statement. PDF and Excel exports are pending.
+          {statement.reconciled && statement.report.unknown.length === 0 && (
+            <Pressable accessibilityRole="button" accessibilityLabel="Export Income Statement PDF"
+              disabled={exporting} onPress={exportPdf}
+              style={{ minHeight: 48, marginTop: spacing.lg, borderRadius: 10,
+                backgroundColor: moduleColors.finance, alignItems: 'center', justifyContent: 'center',
+                opacity: exporting ? 0.6 : 1 }}>
+              <AppText style={{ color: '#FFFFFF' }}>{exporting ? 'Creating PDF...' : 'Export PDF'}</AppText>
+            </Pressable>
+          )}
+          <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.md }}>
+            Read-only statement. Excel export is pending.
           </AppText>
         </View>
       )}
