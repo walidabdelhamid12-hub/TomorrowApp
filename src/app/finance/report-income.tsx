@@ -6,6 +6,7 @@ import { AppText, Screen } from '@/components/ui';
 import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import { aggregateOperatingReport } from '@/features/finance/utils/reportAggregation';
+import { aggregateMonthlyOperatingComparison } from '@/features/finance/utils/reportMonthlyComparison';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { moduleColors, useTheme } from '@/theme';
 
@@ -42,6 +43,13 @@ export default function IncomeReportScreen() {
     );
   }, [ledgerReady, financeReady, accounts, categories, transactions, transfers, assets, debts, loans, cheques, period]);
 
+  const comparison = useMemo(() => {
+    if (!ledgerReady || !financeReady) return null;
+    return aggregateMonthlyOperatingComparison(
+      { ledger: { accounts, categories, transactions, transfers }, finance: { assets, debts, loans, cheques } },
+      period.from.slice(0, 7),
+    );
+  }, [ledgerReady, financeReady, accounts, categories, transactions, transfers, assets, debts, loans, cheques, period]);
   return (
     <Screen scroll>
       <Pressable accessibilityRole="button" accessibilityLabel="Back to Reports"
@@ -52,7 +60,7 @@ export default function IncomeReportScreen() {
       </Pressable>
       <AppText variant="h1">Income Report</AppText>
       <AppText color="textSecondary" style={{ marginTop: spacing.xs, marginBottom: spacing.md }}>
-        {period.label} Â· {period.from} to {period.to}
+        {period.label} | {period.from} to {period.to}
       </AppText>
       {!ledgerReady || !financeReady || !report ? (
         <ActivityIndicator color={moduleColors.finance} />
@@ -76,6 +84,45 @@ export default function IncomeReportScreen() {
               </AppText>
             </View>
           ))}
+          <AppText variant="h3" style={{ marginTop: spacing.lg }}>Compared with previous month</AppText>
+          <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
+            Ordinary income by account currency. Change is current month minus previous month.
+          </AppText>
+          {comparison?.currencies.length === 0 && (
+            <AppText color="textSecondary">No account currencies available for comparison.</AppText>
+          )}
+          {comparison?.currencies.map(row => {
+            const metric = row.income;
+            const incomplete = row.currentStatus === 'incomplete' || row.previousStatus === 'incomplete';
+            return (
+              <View key={row.currencyCode} style={{
+                backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1,
+                borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm,
+              }}>
+                <AppText variant="bodyStrong">{row.currencyCode}</AppText>
+                <AppText color="textSecondary">Previous: {metric.previous === null ? 'Unavailable' : formatAmount(metric.previous, row.currencyCode)}</AppText>
+                <AppText color="textSecondary">Current: {metric.current === null ? 'Unavailable' : formatAmount(metric.current, row.currencyCode)}</AppText>
+                <AppText variant="bodyStrong">
+                  Change: {metric.difference === null ? 'Unavailable' : formatAmount(metric.difference, row.currencyCode)}
+                </AppText>
+                {metric.percentageChange !== null && Number.isFinite(metric.percentageChange) && (
+                  <AppText color="textSecondary">{metric.percentageChange.toFixed(1)}% vs previous month</AppText>
+                )}
+                {incomplete && (
+                  <AppText color="textSecondary">Incomplete data: comparison unavailable, not zero.</AppText>
+                )}
+                {!incomplete && metric.reason === 'zero_baseline' && (
+                  <AppText color="textSecondary">Percentage unavailable: previous month was zero.</AppText>
+                )}
+                {!incomplete && metric.reason === 'negative_baseline' && (
+                  <AppText color="textSecondary">Percentage unavailable: negative baseline.</AppText>
+                )}
+                {!incomplete && (metric.reason === 'unsafe_amount' || metric.reason === 'unsafe_difference') && (
+                  <AppText color="textSecondary">Comparison unavailable: unsafe monetary precision.</AppText>
+                )}
+              </View>
+            );
+          })}
           {report.unknown.length > 0 && (
             <View style={{ borderWidth: 1, borderColor: '#D97706', borderRadius: 12,
               padding: spacing.md, marginTop: spacing.md }}>
