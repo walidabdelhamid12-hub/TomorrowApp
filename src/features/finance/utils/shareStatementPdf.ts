@@ -6,13 +6,13 @@ import * as Sharing from 'expo-sharing';
  * Materialize Print's PDF bytes in the Expo app cache for local-file sharing.
  * No ledger writes or persistent document storage.
  */
-export async function shareStatementPdf(html: string): Promise<void> {
+export async function shareStatementPdf(html: string, page?: { width: number; height: number; textZoom: number }): Promise<void> {
   if (!(await Sharing.isAvailableAsync())) {
     throw new Error('File sharing is not available on this device.');
   }
   // Use the PDF bytes returned by expo-print instead of trying to read its
   // temporary URI, which may be inaccessible to expo-file-system on Android.
-  const { base64 } = await Print.printToFileAsync({ html, base64: true });
+  const { base64 } = await Print.printToFileAsync({ html, base64: true, ...page });
   if (!base64 || !base64.startsWith('JVBERi0')) {
     throw new Error('PDF generation did not return valid PDF data.');
   }

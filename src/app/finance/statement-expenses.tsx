@@ -1,16 +1,15 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Alert } from 'react-native';
-import { shareStatementPdf } from '@/features/finance/utils/shareStatementPdf';
-import { buildOperatingStatementPrintHtml } from '@/features/finance/utils/operatingStatementPrintHtml';
+import { useMemo } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppText, Screen } from '@/components/ui';
-import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
-import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useLedgerStore';
+import { moduleColors } from '@/theme';
+import { useExpenseLedger } from '@/features/finance/hooks/useExpenseLedger';
+import { useExpenseExports } from '@/features/finance/hooks/useExpenseExports';
 import { buildExpensesStatement } from '@/features/finance/utils/expensesStatementReconciliation';
+import { selectExpenseCurrency } from '@/features/finance/utils/expenseReportPresentation';
+import { isSupportedCurrency } from '@/features/finance/constants/currencies';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
-import { moduleColors, useTheme } from '@/theme';
+import { ReportHeader, ReportTransactionRows, ReportExportActions, currencyLabel } from '@/features/finance/components/reporting/ReportPrimitives';
 
 function single(value: string | string[] | undefined): string | undefined {
   return typeof value === 'string' ? value : undefined;
@@ -24,142 +23,48 @@ function validDate(value: string | undefined): value is string {
     && date.getUTCDate() === day;
 }
 
-/** Read-only ordinary-expenses statement. No ledger writes or posting. */
+/** Read-only filtered Expenses Statement. */
 export default function ExpensesStatementScreen() {
   const router = useRouter();
-  const [exporting, setExporting] = useState(false);
-  const { colors, spacing } = useTheme();
-  const params = useLocalSearchParams<{
-    from?: string; to?: string; accountId?: string; categoryId?: string;
-  }>();
+  const params = useLocalSearchParams<{ from?: string; to?: string; accountId?: string; categoryId?: string; currencyCode?: string }>();
   const from = single(params.from);
   const to = single(params.to);
   const accountId = single(params.accountId);
   const categoryId = single(params.categoryId);
+  const currencyCode = single(params.currencyCode);
   const valid = validDate(from) && validDate(to) && from <= to
     && (params.accountId === undefined || (typeof params.accountId === 'string' && params.accountId.length > 0))
     && (params.categoryId === undefined || (typeof params.categoryId === 'string' && params.categoryId.length > 0))
+    && (params.currencyCode === undefined || (typeof params.currencyCode === 'string' && /^[A-Z]{3}$/.test(params.currencyCode) && isSupportedCurrency(params.currencyCode)))
     && (!accountId || !/[\s\u0000-\u001f\u007f]/u.test(accountId))
     && (!categoryId || !/[\s\u0000-\u001f\u007f]/u.test(categoryId));
 
-  const ledgerReady = useLedgerHydrated();
-  const financeReady = useFinanceHydrated();
-  const accounts = useLedgerStore(s => s.accounts);
-  const categories = useLedgerStore(s => s.categories);
-  const transactions = useLedgerStore(s => s.transactions);
-  const transfers = useLedgerStore(s => s.transfers);
-  const assets = useFinanceStore(s => s.assets);
-  const debts = useFinanceStore(s => s.debts);
-  const loans = useFinanceStore(s => s.loans);
-  const cheques = useFinanceStore(s => s.cheques);
-
+  const ledgerReady = useExpenseLedger();
+  const { ready, context, accounts, categories } = ledgerReady;
   const statement = useMemo(() => {
-    if (!valid || !ledgerReady || !financeReady || !from || !to) return null;
-    return buildExpensesStatement(
-      { ledger: { accounts, categories, transactions, transfers }, finance: { assets, debts, loans, cheques } },
-      { from, to },
-      { ...(accountId ? { accountId } : {}), ...(categoryId ? { categoryId } : {}) },
-    );
-  }, [valid, ledgerReady, financeReady, from, to, accountId, categoryId,
-    accounts, categories, transactions, transfers, assets, debts, loans, cheques]);
-  const exportPdf = async () => {
-    if (exporting || !statement || !statement.reconciled || statement.report.unknown.length > 0 || !from || !to) return;
-    setExporting(true);
-    try {
-      const html = buildOperatingStatementPrintHtml(statement, 'expenses', { from, to }, {
-        accounts: new Map(accounts.map(account => [account.id, account.name])),
-        categories: new Map(categories.map(category => [category.id, category.name])),
-      });
-      await shareStatementPdf(html);
-    } catch (error) {
-      Alert.alert('Export failed', error instanceof Error ? error.message : 'Unable to create PDF.');
-    } finally {
-      setExporting(false);
-    }
-  };
-  return (
-    <Screen scroll>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to Expenses Report"
-        onPress={() => router.back()}
-        style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }}>
-        <Ionicons name="arrow-back" size={23} color={colors.text} />
-        <AppText style={{ marginLeft: spacing.sm }}>Expenses Report</AppText>
-      </Pressable>
-      <AppText variant="h1">Expenses Statement</AppText>
-      {!valid ? (
-        <AppText color="textSecondary" style={{ marginTop: spacing.md }}>
-          Invalid or missing statement filters. Return to the Expenses Report.
-        </AppText>
-      ) : !ledgerReady || !financeReady || !statement ? (
-        <ActivityIndicator color={moduleColors.finance} />
-      ) : (
-        <View style={{ marginTop: spacing.md }}>
-          <AppText color="textSecondary">{from} to {to}</AppText>
-          <AppText color="textSecondary">
-            Account: {accountId ? accounts.find(a => a.id === accountId)?.name ?? 'Unknown account' : 'All accounts'}
-          </AppText>
-          <AppText color="textSecondary">
-            Category: {categoryId ? categories.find(c => c.id === categoryId)?.name ?? 'Unknown category' : 'All expense categories'}
-          </AppText>
-          {statement.report.unknown.length > 0 && (
-            <AppText style={{ color: '#D97706', marginTop: spacing.md }}>
-              Incomplete: {statement.report.unknown.length} unverified transaction(s).
-              Totals represent known expenses only.
-            </AppText>
-          )}
-          {!statement.reconciled ? (
-            <AppText style={{ color: '#D97706', marginTop: spacing.md }}>
-              Statement cannot be reconciled with the report. Transaction details are hidden to avoid misleading totals.
-            </AppText>
-          ) : (
-            <>
-              <AppText variant="h3" style={{ marginTop: spacing.lg }}>Expenses by currency</AppText>
-              {statement.report.currencies.filter(c => c.expenses !== 0).map(total => (
-                <View key={total.currencyCode} style={{
-                  flexDirection: 'row', justifyContent: 'space-between',
-                  paddingVertical: spacing.sm,
-                }}>
-                  <AppText>{total.currencyCode}</AppText>
-                  <AppText variant="bodyStrong">{formatAmount(total.expenses, total.currencyCode)}</AppText>
-                </View>
-              ))}
-              <AppText variant="h3" style={{ marginTop: spacing.lg }}>Transactions ({statement.rows.length})</AppText>
-              {statement.rows.length === 0 && (
-                <AppText color="textSecondary" style={{ marginTop: spacing.sm }}>
-                  No verified ordinary expenses for this selection.
-                </AppText>
-              )}
-              {statement.rows.map(row => (
-                <View key={row.id} style={{
-                  borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
-                  borderRadius: 12, padding: spacing.md, marginTop: spacing.sm,
-                }}>
-                  <AppText variant="bodyStrong">
-                    {categories.find(c => c.id === row.categoryId)?.name ?? 'Uncategorized'}
-                  </AppText>
-                  <AppText color="textSecondary">{row.date} · {accounts.find(a => a.id === row.accountId)?.name ?? 'Unknown account'}</AppText>
-                  {!!row.note && <AppText color="textSecondary">{row.note}</AppText>}
-                  <AppText variant="bodyStrong" style={{ color: moduleColors.finance, marginTop: spacing.xs }}>
-                    {row.amount < 0 ? '-' : ''}{formatAmount(Math.abs(row.amount), row.currencyCode)} {row.currencyCode}
-                  </AppText>
-                </View>
-              ))}
-            </>
-          )}
-          {statement.reconciled && statement.report.unknown.length === 0 && (
-            <Pressable accessibilityRole="button" accessibilityLabel="Export Expenses Statement PDF"
-              disabled={exporting} onPress={exportPdf}
-              style={{ minHeight: 48, marginTop: spacing.lg, borderRadius: 10,
-                backgroundColor: moduleColors.finance, alignItems: 'center', justifyContent: 'center',
-                opacity: exporting ? 0.6 : 1 }}>
-              <AppText style={{ color: '#FFFFFF' }}>{exporting ? 'Creating PDF...' : 'Export PDF'}</AppText>
-            </Pressable>
-          )}
-          <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.md }}>
-            Read-only statement. Excel export is pending.
-          </AppText>
-        </View>
-      )}
-    </Screen>
-  );
+    if (!valid || !ready || !from || !to) return null;
+    const result = buildExpensesStatement(context, { from, to },
+      { ...(accountId ? { accountId } : {}), ...(categoryId ? { categoryId } : {}) });
+    return selectExpenseCurrency(result, currencyCode ?? '');
+  }, [valid, ready, context, from, to, accountId, categoryId, currencyCode]);
+  const names = useMemo(() => ({ accounts: new Map(accounts.map(account => [account.id, account.name])),
+    categories: new Map(categories.map(category => [category.id, category.name])) }), [accounts, categories]);
+  const exports = useExpenseExports(statement, { from: from ?? '', to: to ?? '' }, names);
+  const rows = statement?.reconciled ? statement.rows.map(row => ({ id: row.id, date: row.date,
+    category: names.categories.get(row.categoryId) ?? (row.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category'),
+    description: [row.note, names.accounts.get(row.accountId)].filter(Boolean).join(' · '), amount: row.amount, currency: row.currencyCode })) : [];
+  return <Screen scroll>
+    <Pressable accessibilityRole="button" accessibilityLabel="Back to Expenses Report" onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}><AppText>‹ Expenses Report</AppText></Pressable>
+    <ReportHeader title="Expenses Statement" period={from && to ? from.slice(0, 7) : ''} />
+    {!valid ? <AppText accessibilityRole="alert">Invalid or missing statement filters. Return to the Expenses Report.</AppText>
+      : !ready || !statement ? <ActivityIndicator color={moduleColors.finance} /> : <View>
+        <AppText variant="caption" color="textSecondary">{from} – {to}</AppText>
+        <AppText variant="caption" color="textSecondary">{accountId ? names.accounts.get(accountId) ?? 'Unknown account' : 'All accounts'} · {categoryId ? names.categories.get(categoryId) ?? 'Unknown category' : 'All expense categories'} · {currencyCode ? currencyLabel(currencyCode) : 'All currencies (separate)'}</AppText>
+        {statement.report.unknown.length > 0 && <AppText accessibilityRole="alert">Incomplete: {statement.report.unknown.length} unverified transaction(s). Known expenses only; exports unavailable.</AppText>}
+        {statement.report.currencies.map(total => <AppText key={total.currencyCode} variant="bodyStrong" style={{ marginVertical: 6 }}>{currencyLabel(total.currencyCode)} · {formatAmount(total.expenses, total.currencyCode)}</AppText>)}
+        {!statement.reconciled ? <AppText accessibilityRole="alert">Statement cannot be reconciled. Transaction details are hidden.</AppText>
+          : <><ReportTransactionRows rows={rows} />{!rows.length && <AppText>No verified ordinary expenses for this selection.</AppText>}</>}
+        <ReportExportActions busy={exports.exporting} disabled={!exports.canExport} pdf={exports.exportPdf} excel={exports.exportExcel} share={exports.share} />
+      </View>}
+  </Screen>;
 }

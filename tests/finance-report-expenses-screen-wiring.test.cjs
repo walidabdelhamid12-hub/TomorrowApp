@@ -13,9 +13,9 @@ test('Expenses Report is reachable from Reports while retaining the eight implem
 test('Expenses Report uses expense categories and expense aggregates', () => {
   const screen = read('src/app/finance/report-expenses.tsx');
   assert.match(screen, /category\.kind === 'expense'/);
-  assert.match(screen, /report\.expenseCategories/);
+  assert.match(screen, /report\?\.expenseCategories/);
   assert.match(screen, /item\.expenses/);
-  assert.match(screen, /row\.expenses/);
+  assert.match(screen, /comparisonRow\?\.expenses/);
   assert.doesNotMatch(screen, /report\.incomeCategories|row\.income|item\.income/);
 });
 test('Expenses Statement retains report filters and is read-only', () => {

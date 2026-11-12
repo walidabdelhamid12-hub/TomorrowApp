@@ -28,7 +28,9 @@ function categoryIcon(category: string): string {
   }
   return svgIcon('<circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/>');
 }
-function currencyFlag(code: string): string {
+function currencyFlag(code: string, oman = false): string {
+  if (oman && code === 'OMR') return '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="14" class="inline-icon" viewBox="0 0 30 20" aria-label="Oman"><path fill="#fff" d="M0 0h30v20H0z"/><path fill="#db161b" d="M0 0h8v20H0zM8 7h22v6H8z"/><path fill="#008148" d="M8 13h22v7H8z"/></svg>';
+
   if (code === 'EGP') return svgIcon('<rect width="24" height="16" y="4" rx="1" fill="#fff"/>'
     + '<path fill="#ce1126" d="M0 4h24v5.33H0z"/><path fill="#000" d="M0 14.67h24V20H0z"/>'
     + '<path fill="#c6a348" d="M11 10h2v4h-2z"/>');
@@ -41,8 +43,8 @@ function currencyFlag(code: string): string {
     + '<circle cx="6.5" cy="9" r=".6"/></g>');
   return '';
 }
-function currencyLabel(code: string): string {
-  return currencyFlag(code) + '<span>' + escapeHtml(code) + '</span>';
+function currencyLabel(code: string, oman = false, fullName = false): string {
+  return currencyFlag(code, oman) + '<span>' + escapeHtml(oman && fullName && code === 'OMR' ? 'OMR · Omani Rial' : code) + '</span>';
 }
 
 function formatPeriod(date: string): string {
@@ -54,10 +56,11 @@ function formatPeriod(date: string): string {
 
 export function buildStatementPrintHtml(
   rows: readonly StatementCsvRow[],
-  options: { title: string; from: string; to: string },
+  options: { title: string; from: string; to: string; presentation?: 'expenses' },
 ): string {
   // Keep exactly the existing validated CSV row and period contract.
   serializeStatementCsv(rows, options);
+  const brandedExpenses = options.presentation === 'expenses';
   const expense = /expense/i.test(options.title);
   const accent = expense ? '#f28b82' : '#65d6a3';
   const accentDark = expense ? '#b54b43' : '#167b57';
@@ -67,13 +70,13 @@ export function buildStatementPrintHtml(
     + '<td>' + escapeHtml(row.account) + '</td>'
     + '<td><span class="category-mark">' + categoryIcon(row.category) + '</span>'
     + escapeHtml(row.category) + '</td>'
-    + '<td class="note">' + escapeHtml(row.note ?? '') + '</td>'
+    + '<td class="note"' + (brandedExpenses ? ' dir="auto"' : '') + '>' + escapeHtml(row.note ?? '') + '</td>'
     + '<td class="amount">' + escapeHtml(row.amount) + '</td>'
-    + '<td class="currency">' + currencyLabel(row.currency) + '</td>'
+    + '<td class="currency">' + currencyLabel(row.currency, brandedExpenses) + '</td>'
     + '</tr>').join('');
   const heading = escapeHtml(options.title);
   const period = escapeHtml(formatPeriod(options.from) + ' – ' + formatPeriod(options.to));
-  const currencyLabels = currencies.length ? currencies.map(currencyLabel).join('<span class="currency-separator"> · </span>') : '—';
+  const currencyLabels = currencies.length ? currencies.map(code => currencyLabel(code, brandedExpenses, true)).join('<span class="currency-separator"> · </span>') : '—';
   return `<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -114,6 +117,20 @@ th.amount{text-align:right}
 .note{color:#56657a}
 .empty{text-align:center;color:#64748b;padding:24px}
 .footer{margin-top:28px;padding-top:14px;border-top:1px solid #e2e9f0;display:flex;justify-content:space-between;color:#64748b;font-size:11px}
+${brandedExpenses ? `
+/* Expenses-only print sizing: physical A4 width, readable point sizes, bounded cells. */
+@page{size:A4 portrait;margin:10mm}
+html,body{width:190mm;max-width:100%;margin:0;padding:0}
+body{font-size:11pt;line-height:1.35;text-size-adjust:100%;-webkit-text-size-adjust:100%}
+.header{padding:18px 20px;border-radius:8px}.rule{margin:12px 0}.heading-row{gap:8px}
+h1{font-size:24pt}.period{white-space:normal;max-width:45%}.period .value{font-size:10pt}
+.summary{margin:14px 0 18px;gap:9px}.summary-card{padding:11px 12px}.summary-label{font-size:10pt}.summary-value{font-size:20pt}.summary-value.currencies{font-size:10pt}
+table{width:100%;font-size:10.5pt;line-height:1.35}th{font-size:10pt;padding:9px 5px}td{padding:9px 5px;word-break:normal;overflow-wrap:anywhere}
+th:nth-child(1){width:15%}th:nth-child(2){width:16%}th:nth-child(3){width:18%}th:nth-child(4){width:22%}th:nth-child(5){width:15%}th:nth-child(6){width:14%}
+.amount,.currency{white-space:normal;overflow-wrap:anywhere}.note{unicode-bidi:plaintext;white-space:pre-wrap}
+.inline-icon{width:18px;height:16px;max-width:18px;flex-shrink:0}.section{font-size:14pt;margin-bottom:10px}
+.footer{font-size:9pt;margin-top:18px;padding-top:10px}
+` : ''}
 </style></head><body>
 <section class="header">
   <div class="brand-row"><div class="brand">TOMORROW <span>FINANCE</span></div><div class="eyebrow">FINANCIAL STATEMENT</div></div>

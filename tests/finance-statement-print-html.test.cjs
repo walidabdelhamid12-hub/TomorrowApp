@@ -25,7 +25,7 @@ test('Printable statement escapes HTML and preserves numeric values', () => {
   assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
   assert.ok(!html.includes('<script>'));
   assert.ok(html.includes('A&amp;B &quot;quote&quot;'));
-  assert.ok(html.includes('<td>-125.50</td>'));
+  assert.match(html, /<td\b[^>]*>-125\.50<\/td>/);
 });
 test('Printable statement rejects malformed rows and period', () => {
   assert.throws(() => buildStatementPrintHtml([row], { ...period, from: '2026-02-01' }), /metadata/);
