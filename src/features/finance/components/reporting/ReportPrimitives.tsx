@@ -69,15 +69,15 @@ export function ReportPicker({ label, value, options, onSelect }: {
       style={{ minHeight: 44, justifyContent: 'center', padding: 8, borderBottomWidth: 1, borderColor: colors.border }}><AppText variant="caption">{item.label}</AppText></Pressable>)}
   </View>;
 }
-export function ReportSummaryCards({ cards, currency, compact = false }: { cards: { label: string; value: number | null; detail?: string }[]; currency: string; compact?: boolean }) {
+export function ReportSummaryCards({ cards, currency, compact = false, denseCentered = false }: { cards: { label: string; value: number | null; detail?: string }[]; currency: string; compact?: boolean; denseCentered?: boolean }) {
   const { colors } = useTheme();
   return <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'stretch', gap: 6, marginVertical: 6 }}>
     {cards.map(card => <View key={card.label} style={{ flexGrow: 1, flexBasis: 100, minWidth: 0, borderRadius: 10,
-      borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 8, paddingVertical: 5, gap: 2 }}>
-      <AppText variant="caption" color="textSecondary" numberOfLines={compact ? 1 : undefined} adjustsFontSizeToFit={compact} minimumFontScale={0.72} style={{ fontWeight: '600', minHeight: 0, fontSize: compact ? 10 : undefined }}>{card.label}</AppText>
-      <AppText variant="bodyStrong" style={{ fontSize: 16, lineHeight: 20, fontVariant: ['tabular-nums'], textAlign: 'left' }}>{card.value !== null && Number.isFinite(card.value) ? formatAmount(card.value, currency) : 'Unavailable'}</AppText>
-      <AppText variant="caption" color="textSecondary" style={{ fontSize: 10 }}>{currencyLabel(currency)}</AppText>
-      {card.detail && <AppText variant="caption" color="textSecondary" style={{ fontSize: 10, lineHeight: 12 }}>{card.detail}</AppText>}
+      borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: denseCentered ? 5 : 8, paddingVertical: denseCentered ? 3 : 5, gap: denseCentered ? 0 : 2 }}>
+      <AppText variant="caption" color="textSecondary" numberOfLines={compact ? 1 : undefined} adjustsFontSizeToFit={compact} minimumFontScale={0.72} style={{ fontWeight: '600', minHeight: 0, fontSize: compact ? 10 : undefined, textAlign: denseCentered ? 'center' : 'left' }}>{card.label}</AppText>
+      <AppText variant="bodyStrong" style={{ fontSize: denseCentered ? 14 : 16, lineHeight: denseCentered ? 18 : 20, fontVariant: ['tabular-nums'], textAlign: denseCentered ? 'center' : 'left' }}>{card.value !== null && Number.isFinite(card.value) ? formatAmount(card.value, currency) : 'Unavailable'}</AppText>
+      <AppText variant="caption" color="textSecondary" style={{ fontSize: 10, textAlign: denseCentered ? 'center' : 'left' }}>{currencyLabel(currency)}</AppText>
+      {card.detail && <AppText variant="caption" color="textSecondary" style={{ fontSize: 10, lineHeight: 12, textAlign: denseCentered ? 'center' : 'left' }}>{card.detail}</AppText>}
     </View>)}
   </View>;
 }
