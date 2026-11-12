@@ -24,7 +24,8 @@ class File {
 }
 Module._load = function(id, parent, main) {
   if (id === 'react') return hooks;
-  if (id === 'react-native') return { View: 'View', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', Alert: { alert: (...args) => alerts.push(args) } };
+  if (id === '@react-native-community/datetimepicker') return { __esModule: true, default: 'DateTimePicker' };
+  if (id === 'react-native') return { Platform: { OS: 'android' }, View: 'View', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', Alert: { alert: (...args) => alerts.push(args) } };
   if (id === '@expo/vector-icons') return { Ionicons: 'Ionicons' };
   if (id === 'expo-router') return { useRouter: () => ({ push: value => calls.push(value), back: () => calls.push('back') }), useLocalSearchParams: () => params };
   if (id === '@/components/ui') return { Screen: 'Screen', AppText: 'AppText' };
@@ -51,7 +52,7 @@ function expand(node) {
   if (typeof node.type === 'function') return expand(node.type(node.props));
   return { type: node.type, props: { ...node.props, children: expand(node.props.children) } };
 }
-function render(component = Report) { cursor = 0; if (component === Report && !states.length) states[0] = '2026-11'; tree = expand(React.createElement(component)); }
+function render(component = Report) { cursor = 0; if (component === Report && !states.length) states[0] = { from: '2026-11-01', to: '2026-11-30' }; tree = expand(React.createElement(component)); }
 function nodes(type, node) {
   if (arguments.length === 1) node = tree;
   if (Array.isArray(node)) return node.flatMap(value => nodes(type, value));
@@ -76,7 +77,7 @@ beforeEach(() => {
 });
 
 test('compact Expenses has eight real report tabs, one chart, three per-currency summaries and signed refund rows', () => {
-  render(); assert.match(allText(), /Nov 2026/); assert.match(allText(), /Net Expenses/);
+  render(); assert.match(allText(), /2026-11-01/); assert.match(allText(), /Net Expenses/);
   assert.match(allText(), /80\.00/); press('View all Expenses transactions'); render(); assert.match(allText(), /-20\.00 EGP/);
   for (const name of ['Income','Expenses','Accounts','Assets','Installments','Loans','Receivable','Payable']) assert.ok(button(`Open ${name} report`));
   assert.equal(nodes('View').filter(node => node.props.testID?.startsWith('chart-')).length, 1);
@@ -107,11 +108,11 @@ test('month/account/category controls retain full refund context and preserve ar
   assert.equal(calls.length, 0);
   assert.deepEqual(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).map(node => node.props.testID), ['report-transaction-omr']);
   assert.match(allText(), /1\.237 OMR/);
-  press('Previous month'); render(); assert.match(allText(), /Oct 2026/);
-  assert.match(allText(), /No verified ordinary expense transactions/);
+  press('From date: 2026-11-01'); render();
+  assert.equal(nodes('DateTimePicker').length, 1);
 });
 
-test('Expenses exports exact selected OMR rows to readable A4 PDF and Excel CSV without mutation', async () => {
+test('Expenses exports exact selected OMR rows to readable A4 PDF and Excel XLSX without mutation', async () => {
   const before = structuredClone({ ledger, finance }); freeze(ledger); freeze(finance);
   render(); press('Select OMR'); render();
   press('Export PDF'); press('Export PDF'); await flush();
@@ -119,8 +120,8 @@ test('Expenses exports exact selected OMR rows to readable A4 PDF and Excel CSV 
   assert.match(html[0], /size:A4 portrait;margin:10mm/); assert.match(html[0], /OMR · Omani Rial/);
   assert.match(html[0], /aria-label="Oman"/); assert.match(html[0], /1\.237/);
   assert.doesNotMatch(html[0], /Groceries|100\.00/);
-  render(); press('Export Excel CSV'); await flush();
-  const csv = files.find(file => file.uri.endsWith('.csv'));
+  render(); press('Export Excel XLSX'); await flush();
+  const csv = files.find(file => file.uri.endsWith('.xlsx'));
   assert.ok(csv); assert.match(csv.content, /"1\.237","OMR"/); assert.match(csv.content, /Taxi in Muscat/);
   assert.doesNotMatch(csv.content, /Groceries/); assert.equal(alerts.length, 0);
   assert.deepEqual({ ledger, finance }, before);
@@ -128,7 +129,7 @@ test('Expenses exports exact selected OMR rows to readable A4 PDF and Excel CSV 
 
 test('Share offers functional format choices and incomplete data blocks every export', async () => {
   render(); press('Export Share');
-  const choice = alerts.at(-1)[2].find(item => item.text === 'Excel-compatible CSV');
+  const choice = alerts.at(-1)[2].find(item => item.text === 'Excel XLSX');
   choice.onPress(); await flush(); assert.ok(files.some(file => file.uri.endsWith('.csv')));
   ledger.transactions.push(tx('bad', 0.001)); states = []; render();
   assert.match(allText(), /Incomplete report/);
