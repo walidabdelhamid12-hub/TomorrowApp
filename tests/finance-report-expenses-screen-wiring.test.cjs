@@ -18,10 +18,12 @@ test('Expenses Report uses expense categories and expense aggregates', () => {
   assert.match(screen, /comparisonRow\?\.expenses/);
   assert.doesNotMatch(screen, /report\.incomeCategories|row\.income|item\.income/);
 });
-test('Expenses Statement retains report filters and is read-only', () => {
+test('Expenses inline transactions preserve report filters and Statement remains read-only', () => {
   const report = read('src/app/finance/report-expenses.tsx');
   const statement = read('src/app/finance/statement-expenses.tsx');
-  assert.match(report, /pathname: '\/finance\/statement-expenses'/);
+  assert.match(report, /setTransactionsExpanded\(value => !value\)/);
+  assert.match(report, /transactionsExpanded && <ReportTransactionRows rows=\{transactions\}/);
+  assert.doesNotMatch(report, /pathname: '\/finance\/statement-expenses'/);
   for (const key of ['from', 'to', 'accountId', 'categoryId']) {
     assert.match(report, new RegExp('\\b' + key + '\\b'));
     assert.match(statement, new RegExp('\\b' + key + '\\b'));
