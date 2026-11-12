@@ -121,19 +121,23 @@ test('Expenses exports exact selected OMR rows to readable A4 PDF and Excel XLSX
   assert.match(html[0], /aria-label="Oman"/); assert.match(html[0], /1\.237/);
   assert.doesNotMatch(html[0], /Groceries|100\.00/);
   render(); press('Export Excel XLSX'); await flush();
-  const csv = files.find(file => file.uri.endsWith('.xlsx'));
-  assert.ok(csv); assert.match(csv.content, /"1\.237","OMR"/); assert.match(csv.content, /Taxi in Muscat/);
-  assert.doesNotMatch(csv.content, /Groceries/); assert.equal(alerts.length, 0);
+  const workbook = files.find(file => file.uri.endsWith('.xlsx'));
+  assert.ok(workbook); assert.equal(workbook.options.encoding, 'base64');
+  const bytes = Buffer.from(workbook.content, 'base64');
+  assert.equal(bytes.subarray(0, 4).toString('hex'), '504b0304');
+  assert.ok(bytes.includes(Buffer.from('Taxi in Muscat')));
+  assert.ok(bytes.includes(Buffer.from('<v>1.237</v>')));
+  assert.equal(alerts.length, 0);
   assert.deepEqual({ ledger, finance }, before);
 });
 
 test('Share offers functional format choices and incomplete data blocks every export', async () => {
   render(); press('Export Share');
   const choice = alerts.at(-1)[2].find(item => item.text === 'Excel XLSX');
-  choice.onPress(); await flush(); assert.ok(files.some(file => file.uri.endsWith('.csv')));
+  choice.onPress(); await flush(); assert.ok(files.some(file => file.uri.endsWith('.xlsx')));
   ledger.transactions.push(tx('bad', 0.001)); states = []; render();
   assert.match(allText(), /Incomplete report/);
-  for (const label of ['Export PDF','Export Excel CSV','Export Share']) assert.equal(button(label).props.disabled, true);
+  for (const label of ['Export PDF','Export Excel XLSX','Export Share']) assert.equal(button(label).props.disabled, true);
 });
 
 test('statement rejects repeated/unsupported currency parameters and keeps exports unavailable before hydration', () => {
@@ -196,7 +200,7 @@ test('polished Expenses keeps comparison in summaries, View all beside Transacti
   assert.match(allText(), /All Categories/); assert.doesNotMatch(allText(), /Previous-period comparison|View Statement/);
   assert.ok(nodes('Ionicons').filter(node => node.props.name === 'trending-down-outline').length >= 2);
   assert.deepEqual(nodes('Pressable').filter(node => node.props.accessibilityLabel?.startsWith('Export ')).map(node => node.props.accessibilityLabel),
-    ['Export PDF', 'Export Excel CSV', 'Export Share']);
+    ['Export PDF', 'Export Excel XLSX', 'Export Share']);
   press('Accounts: All accounts'); render(); press('Oman (OMR) · Archived'); render();
   assert.match(allText(), /Clear filters to compare/);
 });
