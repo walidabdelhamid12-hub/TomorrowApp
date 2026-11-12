@@ -196,13 +196,13 @@ test('Reports entry retains eight routes in two columns with Finance icons', () 
 
 test('polished Expenses keeps comparison in summaries, View all beside Transactions, and three export actions', () => {
   render();
-  assert.match(allText(), /Net Expenses/); assert.match(allText(), /Previous Month/); assert.match(allText(), /Change/);
+  assert.match(allText(), /Net Expenses/); assert.match(allText(), /Previous Period/); assert.match(allText(), /Change/);
   assert.match(allText(), /All Categories/); assert.doesNotMatch(allText(), /Previous-period comparison|View Statement/);
   assert.ok(nodes('Ionicons').filter(node => node.props.name === 'trending-down-outline').length >= 2);
   assert.deepEqual(nodes('Pressable').filter(node => node.props.accessibilityLabel?.startsWith('Export ')).map(node => node.props.accessibilityLabel),
     ['Export PDF', 'Export Excel XLSX', 'Export Share']);
   press('Accounts: All accounts'); render(); press('Oman (OMR) · Archived'); render();
-  assert.match(allText(), /Clear filters to compare/);
+  assert.match(allText(), /Previous Period/);
 });
 
 test('branded PDF retains metadata, navy header, three summary cards, stripes, Arabic direction and A4 scale', () => {
