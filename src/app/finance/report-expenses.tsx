@@ -98,7 +98,7 @@ export default function ExpensesReportScreen() {
       </View>
       {!visible.reconciled ? <AppText accessibilityRole="alert">Statement cannot be reconciled; details are hidden.</AppText>
         : <>{transactionsExpanded && <ReportTransactionRows compact rows={transactions} />}{!transactions.length && <AppText color="textSecondary">No verified expenses for this currency.</AppText>}</>}
-      <ReportExportActions busy={exports.exporting} disabled={!exports.canExport} pdf={exports.exportPdf} excel={exports.exportExcel} share={exports.share} />
+      <ReportExportActions excelLabel="Excel XLSX" busy={exports.exporting} disabled={!exports.canExport} pdf={exports.exportPdf} excel={exports.exportExcel} share={exports.share} />
     </>}
   </Screen>;
 }
