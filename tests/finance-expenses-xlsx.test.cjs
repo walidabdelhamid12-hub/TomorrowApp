@@ -45,7 +45,7 @@ test('XLSX has valid ZIP/OOXML parts, escaped text and numeric amount', () => {
     'xl/_rels/workbook.xml.rels', 'xl/worksheets/sheet1.xml']) assert.ok(files.has(name), name);
   const sheet = files.get('xl/worksheets/sheet1.xml');
   assert.match(sheet, /Lunch &amp; &lt;coffee&gt; وصف/);
-  assert.match(sheet, /<c r="E2"><v>123\.45<\/v><\/c>/);
+  assert.match(sheet, /<c r="E11" s="4"><v>123\.45<\/v><\/c>/);
   assert.equal(Buffer.from(bytesToBase64(bytes), 'base64').equals(Buffer.from(bytes)), true);
 });
 test('XLSX refuses unreconciled or unknown statements', () => {

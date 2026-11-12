@@ -16,12 +16,12 @@ export function ReportChart({ data, currency }: { data: { id: string; label: str
   const slices = positive.map((_, index) => ({ end: positive.slice(0, index + 1).reduce((sum, item) => sum + item.amount / maximum / total, 0), color: CATEGORY_COLORS[index % CATEGORY_COLORS.length] }));
   return <View style={{ marginVertical: 8 }}>
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-      <AppText variant="bodyStrong">Category analysis · {currency}</AppText>
+      <AppText variant="bodyStrong">Category analysis</AppText>
       <View style={{ flexDirection: 'row' }}>{([{ id: 'donut', icon: 'pie-chart-outline', label: 'Donut' },
         { id: 'vertical', icon: 'bar-chart-outline', label: 'Vertical Bar' }, { id: 'horizontal', icon: 'reorder-three-outline', label: 'Horizontal Bar' }] as const)
         .map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.label} accessibilityState={{ selected: mode === item.id }}
           onPress={() => setMode(item.id)} style={{ minWidth: 40, minHeight: 44, justifyContent: 'center', alignItems: 'center' }}>
-          <Ionicons name={item.icon} size={21} color={mode === item.id ? moduleColors.finance : colors.text} /></Pressable>)}</View>
+          <Ionicons name={item.icon} size={21} color={moduleColors.finance} /></Pressable>)}</View>
     </View>
     <AppText variant="caption" color="textSecondary">Positive net categories; refunds shown below.</AppText>
     {!positive.length ? <AppText color="textSecondary">No positive net expenses to chart.</AppText> : mode === 'donut' ? (
