@@ -77,7 +77,7 @@ beforeEach(() => {
 
 test('compact Expenses has eight real report tabs, one chart, three per-currency summaries and signed refund rows', () => {
   render(); assert.match(allText(), /Nov 2026/); assert.match(allText(), /Net Expenses/);
-  assert.match(allText(), /80\.00/); assert.match(allText(), /-20\.00 EGP/);
+  assert.match(allText(), /80\.00/); press('View all Expenses transactions'); render(); assert.match(allText(), /-20\.00 EGP/);
   for (const name of ['Income','Expenses','Accounts','Assets','Installments','Loans','Receivable','Payable']) assert.ok(button(`Open ${name} report`));
   assert.equal(nodes('View').filter(node => node.props.testID?.startsWith('chart-')).length, 1);
   press('Vertical Bar'); render(); assert.ok(nodes('View').some(node => node.props.testID === 'chart-vertical'));
@@ -89,20 +89,24 @@ test('Expenses currency selection never combines EGP and OMR and statement prese
   render(); press('Select OMR'); render();
   assert.match(allText(), /1\.237/); assert.match(allText(), /🇴🇲/);
   assert.doesNotMatch(allText(), /report-transaction-a/);
+  assert.equal(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).length, 0);
+  press('View all Expenses transactions'); render();
   assert.deepEqual(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).map(node => node.props.testID), ['report-transaction-omr']);
-  press('View all Expenses transactions'); const route = calls.at(-1);
-  assert.equal(route.pathname, '/finance/statement-expenses');
-  assert.deepEqual(route.params, { from: '2026-11-01', to: '2026-11-30', currencyCode: 'OMR' });
-  params = route.params; states = []; render(Statement);
+  assert.equal(calls.length, 0, 'Inline expansion must not navigate');
+  assert.match(allText(), /Taxi in Muscat/);
+  press('View all Expenses transactions'); render();
+  assert.equal(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).length, 0);
+  params = { from: '2026-11-01', to: '2026-11-30', currencyCode: 'OMR' }; states = []; render(Statement);
   assert.match(allText(), /1\.237 OMR/); assert.match(allText(), /Taxi in Muscat/); assert.doesNotMatch(allText(), /100\.00 EGP/);
 });
 
 test('month/account/category controls retain full refund context and preserve archived filters', () => {
   render(); press('Accounts: All accounts'); render(); press('Oman (OMR) · Archived'); render();
   press('Category: All Categories'); render(); press('Travel'); render();
-  press('View all Expenses transactions'); const route = calls.at(-1);
-  assert.equal(route.params.accountId, 'oman'); assert.equal(route.params.categoryId, 'travel');
-  assert.equal(route.params.currencyCode, 'OMR');
+  press('View all Expenses transactions'); render();
+  assert.equal(calls.length, 0);
+  assert.deepEqual(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).map(node => node.props.testID), ['report-transaction-omr']);
+  assert.match(allText(), /1\.237 OMR/);
   press('Previous month'); render(); assert.match(allText(), /Oct 2026/);
   assert.match(allText(), /No verified ordinary expense transactions/);
 });
@@ -143,7 +147,8 @@ test('statement rejects repeated/unsupported currency parameters and keeps expor
 
 test('negative-only categories have no chart segments and retain actual signed rows', () => {
   ledger.transactions = [tx('purchase', 100, { date: '2026-10-01' }), tx('r', 20, { entryType: 'refund', relatedTransactionId: 'purchase' })];
-  render(); assert.match(allText(), /No positive net expenses to chart/); assert.match(allText(), /-20\.00 EGP/);
+  render(); assert.match(allText(), /No positive net expenses to chart/);
+  press('View all Expenses transactions'); render(); assert.match(allText(), /-20\.00 EGP/);
   assert.equal(nodes('View').some(node => node.props.testID?.startsWith('chart-')), false);
 });
 
