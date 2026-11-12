@@ -154,6 +154,12 @@ export default function AccountsReportScreen() {
           <AppText>{option.label}</AppText>
         </Pressable>
       ))}
+      {ready && rows && validSelection && <Pressable accessibilityRole="button" accessibilityLabel="View Accounts Statement"
+        onPress={() => router.push({ pathname: '/finance/statement-accounts',
+          params: { month, ...(accountId ? { accountId } : {}) } })}
+        style={{ minHeight: 44, justifyContent: 'center', marginBottom: spacing.sm }}>
+        <AppText color="primary">View Statement · {month}</AppText>
+      </Pressable>}
       {!ready || !rows ? <ActivityIndicator accessibilityLabel="Loading accounts report" color={moduleColors.finance} /> : (
         <>
           <AppText variant="caption" color="textSecondary" style={{ marginBottom: spacing.sm }}>

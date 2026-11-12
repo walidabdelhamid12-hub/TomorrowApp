@@ -3,13 +3,14 @@ import { useRouter, type Href } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { AppText, Screen } from '@/components/ui';
 import { moduleColors, useTheme } from '@/theme';
+import { REPORT_ITEMS } from '@/features/finance/components/reporting/ReportPrimitives';
 
 const REPORTS = [
   'Income', 'Expenses', 'Accounts', 'Assets',
   'Installments', 'Loans', 'Debts Receivable', 'Debts Payable',
 ] as const;
 
-/** Reports navigation. Income, Expenses, Accounts and Assets are available; other reports and exports remain pending. */
+/** Reports navigation. Income, Expenses, Accounts, Assets, Installments and Loans are available; exports and statements remain pending. */
 export default function FinanceReportsScreen() {
   const router = useRouter();
   const { colors, spacing } = useTheme();
@@ -23,24 +24,28 @@ export default function FinanceReportsScreen() {
       </Pressable>
       <AppText variant="h1">Reports</AppText>
       <AppText color="textSecondary" style={{ marginTop: spacing.xs, marginBottom: spacing.lg }}>
-        Income, Expenses, Accounts and Assets reports are available. Additional reports and exports are coming next.
+        Choose a report to explore your finances.
       </AppText>
+      <View testID="reports-grid" style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.sm }}>
       {REPORTS.map((name) => (
-        <Pressable key={name} disabled={name !== 'Income' && name !== 'Expenses' && name !== 'Accounts' && name !== 'Assets'}
+        <Pressable key={name} disabled={name !== 'Income' && name !== 'Expenses' && name !== 'Accounts' && name !== 'Assets' && name !== 'Installments' && name !== 'Loans' && name !== 'Debts Receivable' && name !== 'Debts Payable'}
           accessibilityRole="button"
           accessibilityLabel={`Open ${name} report`}
-          onPress={() => router.push((name === 'Expenses' ? '/finance/report-expenses' : name === 'Accounts' ? '/finance/report-accounts' : name === 'Assets' ? '/finance/report-assets' : '/finance/report-income') as Href)} style={{
-          padding: spacing.md, marginBottom: spacing.sm, borderRadius: 12,
+          onPress={() => router.push((name === 'Expenses' ? '/finance/report-expenses' : name === 'Accounts' ? '/finance/report-accounts' : name === 'Assets' ? '/finance/report-assets' : name === 'Installments' ? '/finance/report-installments' : name === 'Loans' ? '/finance/report-loans' : name === 'Debts Receivable' ? '/finance/report-receivable' : name === 'Debts Payable' ? '/finance/report-payable' : '/finance/report-income') as Href)} style={{
+          width: '48%', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: 12, gap: 4,
           borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
-          flexDirection: 'row', alignItems: 'center',
+          alignItems: 'center', justifyContent: 'center', minHeight: 86,
         }}>
-          <Ionicons name="bar-chart-outline" size={20} color={moduleColors.finance} />
-          <View style={{ marginLeft: spacing.sm, flex: 1 }}>
-            <AppText variant="bodyStrong">{name}</AppText>
-            <AppText variant="caption" color="textSecondary">{name === 'Income' || name === 'Expenses' || name === 'Accounts' || name === 'Assets' ? 'View report' : 'Integration pending'}</AppText>
+          <View style={{ width: 32, height: 32, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+            <Ionicons name={REPORT_ITEMS.find(item => item.label === name.replace('Debts ', ''))?.icon ?? 'bar-chart-outline'} size={21} color={moduleColors.finance} />
+          </View>
+          <View style={{ alignItems: 'center' }}>
+            <AppText variant="bodyStrong" style={{ textAlign: 'center' }}>{name}</AppText>
+            <AppText variant="caption" color="textSecondary">{name === 'Income' || name === 'Expenses' || name === 'Accounts' || name === 'Assets' || name === 'Installments' || name === 'Loans' || name === 'Debts Receivable' || name === 'Debts Payable' ? 'View report' : 'Integration pending'}</AppText>
           </View>
         </Pressable>
       ))}
+      </View>
     </Screen>
   );
 }

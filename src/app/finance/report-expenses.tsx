@@ -1,330 +1,83 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { AppText, Screen } from '@/components/ui';
-import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
-import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useLedgerStore';
-import { aggregateOperatingReport } from '@/features/finance/utils/reportAggregation';
+import { Ionicons } from '@expo/vector-icons';
+import { moduleColors } from '@/theme';
+import { useExpenseLedger } from '@/features/finance/hooks/useExpenseLedger';
+import { useExpenseExports } from '@/features/finance/hooks/useExpenseExports';
+import { buildExpensesStatement } from '@/features/finance/utils/expensesStatementReconciliation';
 import { aggregateMonthlyOperatingComparison } from '@/features/finance/utils/reportMonthlyComparison';
+import { expenseMonthPeriod, shiftExpenseMonth, selectExpenseCurrency } from '@/features/finance/utils/expenseReportPresentation';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
-import { moduleColors, useTheme } from '@/theme';
+import { ReportNavigation, ReportHeader, ReportPicker, ReportSummaryCards, ReportTransactionRows, ReportExportActions, currencyLabel } from '@/features/finance/components/reporting/ReportPrimitives';
+import { ReportChart } from '@/features/finance/components/reporting/ReportChart';
 
-function shiftMonth(month: string, offset: number): string {
-  const [year, number] = month.split('-').map(Number);
-  const date = new Date(year, number - 1 + offset, 1);
-  const nextYear = date.getFullYear();
-  const nextMonth = date.getMonth() + 1;
-  if (nextYear < 100 || nextYear > 9999 ||
-      (nextYear === 100 && nextMonth < 2)) {
-    return month;
-  }
-  return `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
-}
-
-function monthPeriod(month: string): { from: string; to: string; label: string } {
-  const [year, number] = month.split('-').map(Number);
-  const from = `${month}-01`;
-  const to = `${month}-${String(new Date(year, number, 0).getDate()).padStart(2, '0')}`;
-  const label = new Date(year, number - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-  return { from, to, label };
-}
-
-function FilterPicker({ title, value, options, onSelect, colors }: {
-  title: string;
-  value: string;
-  options: { id: string; label: string }[];
-  onSelect: (value: string) => void;
-  colors: { surface: string; border: string; text: string };
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const selected = options.find(option => option.id === value);
-  return (
-    <View style={{ marginBottom: 10 }}>
-      <AppText color="textSecondary">{title}</AppText>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${title}: ${selected?.label ?? 'All'}`}
-        onPress={() => setExpanded(!expanded)}
-        style={{ minHeight: 44, padding: 12, borderWidth: 1, borderColor: colors.border,
-          borderRadius: 10, backgroundColor: colors.surface, flexDirection: 'row', justifyContent: 'space-between' }}>
-        <AppText>{selected?.label ?? 'All'}</AppText>
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.text} />
-      </Pressable>
-      {expanded && options.map(option => (
-        <Pressable key={option.id} accessibilityRole="button" accessibilityState={{ selected: option.id === value }}
-          onPress={() => { onSelect(option.id); setExpanded(false); }}
-          style={{ minHeight: 44, padding: 12, borderBottomWidth: 1, borderColor: colors.border,
-            flexDirection: 'row', justifyContent: 'space-between' }}>
-          <AppText>{option.label}</AppText>
-          {option.id === value && <Ionicons name="checkmark" size={18} color={colors.text} />}
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
-function currentMonth(): { from: string; to: string; label: string } {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-  return { from, to, label: date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) };
-}
-
-/** Read-only Expenses report with month, account and category filters. */
+/** Expenses presentation only; all monetary rows come from the existing report engine. */
 export default function ExpensesReportScreen() {
-  const router = useRouter();
-  const { colors, spacing } = useTheme();
-  const ledgerReady = useLedgerHydrated();
-  const financeReady = useFinanceHydrated();
-  const accounts = useLedgerStore(s => s.accounts);
-  const categories = useLedgerStore(s => s.categories);
-  const transactions = useLedgerStore(s => s.transactions);
-  const transfers = useLedgerStore(s => s.transfers);
-  const assets = useFinanceStore(s => s.assets);
-  const debts = useFinanceStore(s => s.debts);
-  const loans = useFinanceStore(s => s.loans);
-  const cheques = useFinanceStore(s => s.cheques);
-  const [month, setMonth] = useState(() => currentMonth().from.slice(0, 7));
-  const [accountId, setAccountId] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const period = useMemo(() => monthPeriod(month), [month]);
+  const { ready, context, accounts, categories } = useExpenseLedger();
+  const [month, setMonth] = useState(() => { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`; });
+  const [accountId, setAccountId] = useState(''); const [categoryId, setCategoryId] = useState('');
+  const [currencyCode, setCurrencyCode] = useState(''); const [filtersOpen, setFiltersOpen] = useState(true);
+  const [transactionsExpanded, setTransactionsExpanded] = useState(false);
+  const period = useMemo(() => expenseMonthPeriod(month), [month]);
   const filtersActive = accountId !== '' || categoryId !== '';
-  const accountOptions = useMemo(() => [
-    { id: '', label: 'All accounts' },
-    ...accounts.map(account => ({ id: account.id, label: `${account.name} (${account.currencyCode})${account.archived ? ' - Archived' : ''}` })),
-  ], [accounts]);
-  const categoryOptions = useMemo(() => [
-    { id: '', label: 'All expense categories' },
-    ...categories.filter(category => category.kind === 'expense').map(category => ({ id: category.id, label: category.name })),
-  ], [categories]);
-  const report = useMemo(() => {
-    if (!ledgerReady || !financeReady) return null;
-    return aggregateOperatingReport(
-      { ledger: { accounts, categories, transactions, transfers }, finance: { assets, debts, loans, cheques } },
-      { from: period.from, to: period.to },
-      { ...(accountId ? { accountId } : {}), ...(categoryId ? { categoryId } : {}) },
-    );
-  }, [ledgerReady, financeReady, accounts, categories, transactions, transfers, assets, debts, loans, cheques, period, accountId, categoryId]);
-
-  const comparison = useMemo(() => {
-    if (!ledgerReady || !financeReady || filtersActive) return null;
-    return aggregateMonthlyOperatingComparison(
-      { ledger: { accounts, categories, transactions, transfers }, finance: { assets, debts, loans, cheques } },
-      period.from.slice(0, 7),
-    );
-  }, [ledgerReady, financeReady, accounts, categories, transactions, transfers, assets, debts, loans, cheques, period, filtersActive]);
-  return (
-    <Screen scroll>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to Reports"
-        onPress={() => router.back()}
-        style={{ flexDirection: 'row', alignItems: 'center', minHeight: 44, marginBottom: spacing.md }}>
-        <Ionicons name="arrow-back" size={23} color={colors.text} />
-        <AppText style={{ marginLeft: spacing.sm }}>Reports</AppText>
-      </Pressable>
-      <AppText variant="h1">Expenses Report</AppText>
-      <AppText color="textSecondary" style={{ marginTop: spacing.xs, marginBottom: spacing.md }}>
-        {period.label} | {period.from} to {period.to}
-      </AppText>
-      <View style={{ marginBottom: spacing.md }}>
-        <AppText variant="h3">Filters</AppText>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: spacing.sm }}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Previous month"
-            onPress={() => setMonth(value => shiftMonth(value, -1))}
-            style={{ minHeight: 44, minWidth: 44, justifyContent: 'center' }}>
-            <Ionicons name="chevron-back" size={24} color={colors.text} />
-          </Pressable>
-          <AppText variant="bodyStrong">{period.label}</AppText>
-          <Pressable accessibilityRole="button" accessibilityLabel="Next month"
-            onPress={() => setMonth(value => shiftMonth(value, 1))}
-            style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' }}>
-            <Ionicons name="chevron-forward" size={24} color={colors.text} />
-          </Pressable>
-        </View>
-        <FilterPicker title="Account" value={accountId} options={accountOptions} onSelect={setAccountId} colors={colors} />
-        <FilterPicker title="Expense category" value={categoryId} options={categoryOptions} onSelect={setCategoryId} colors={colors} />
+  const statement = useMemo(() => ready ? buildExpensesStatement(context, { from: period.from, to: period.to },
+    { ...(accountId ? { accountId } : {}), ...(categoryId ? { categoryId } : {}) }) : null,
+  [ready, context, period, accountId, categoryId]);
+  const report = statement?.report;
+  const comparison = useMemo(() => ready && !filtersActive ? aggregateMonthlyOperatingComparison(context, month) : null, [ready, context, filtersActive, month]);
+  const activeCurrency = currencyCode || report?.currencies[0]?.currencyCode || accounts[0]?.currencyCode || '';
+  const visible = useMemo(() => statement ? selectExpenseCurrency(statement, activeCurrency) : null, [statement, activeCurrency]);
+  const names = useMemo(() => ({ accounts: new Map(accounts.map(account => [account.id, account.name])),
+    categories: new Map(categories.map(category => [category.id, category.name])) }), [accounts, categories]);
+  const exports = useExpenseExports(visible, { from: period.from, to: period.to }, names);
+  const comparisonRow = comparison?.currencies.find(row => row.currencyCode === activeCurrency);
+  const metric = comparisonRow?.expenses;
+  const netExpenses = report?.currencies.find(item => item.currencyCode === activeCurrency)?.expenses ?? null;
+  const chartData = (report?.expenseCategories ?? []).filter(item => item.currencyCode === activeCurrency)
+    .sort((a, b) => b.amount - a.amount).map(item => ({ id: item.categoryId,
+      label: categories.find(category => category.id === item.categoryId)?.name ?? (item.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category'), amount: item.amount }));
+  const transactions = visible?.reconciled ? visible.rows.map(row => ({ id: row.id, date: row.date,
+    category: names.categories.get(row.categoryId) ?? (row.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category'), description: [row.note, names.accounts.get(row.accountId)].filter(Boolean).join(' · '),
+    amount: row.amount, currency: row.currencyCode })) : [];
+  return <Screen scroll>
+    <ReportNavigation active="expenses" />
+    <ReportHeader title="Expenses Report" icon="trending-down-outline" compact period={period.label.replace(/^(.{3})[^ ]*/, '$1')} previous={() => setMonth(value => shiftExpenseMonth(value, -1))}
+      next={() => setMonth(value => shiftExpenseMonth(value, 1))} previousDisabled={month === '0100-02'} nextDisabled={month === '9999-12'} />
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
+      <AppText variant="caption" color="textSecondary">{period.from} – {period.to}</AppText>
+      <Pressable accessibilityRole="button" accessibilityLabel="Filters" accessibilityState={{ expanded: filtersOpen }} onPress={() => setFiltersOpen(value => !value)}
+        style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}><AppText variant="caption" style={{ color: moduleColors.finance, fontWeight: '600' }}>Filters {filtersActive ? '•' : ''}</AppText></Pressable>
+    </View>
+    {filtersOpen && <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+      <ReportPicker label="Accounts" value={accountId} onSelect={setAccountId} options={[{ id: '', label: 'All accounts' },
+        ...accounts.map(account => ({ id: account.id, label: `${account.name} (${account.currencyCode})${account.archived ? ' · Archived' : ''}` }))]} />
+      <ReportPicker label="Category" value={categoryId} onSelect={setCategoryId} options={[{ id: '', label: 'All Categories' },
+        ...categories.filter(category => category.kind === 'expense').map(category => ({ id: category.id, label: category.name }))]} />
+    </View>}
+    {!ready || !report || !visible ? <ActivityIndicator color={moduleColors.finance} /> : <>
+      <ReportPicker label="Currency" value={activeCurrency} onSelect={setCurrencyCode} options={report.currencies.map(item => ({ id: item.currencyCode, label: currencyLabel(item.currencyCode) }))} />
+      <ReportSummaryCards compact currency={activeCurrency} cards={[{ label: report.unknown.length ? 'Known Expenses' : 'Net Expenses', value: netExpenses },
+        { label: 'Previous Month', value: metric?.previous ?? null, detail: filtersActive ? 'All accounts/categories only' : undefined }, { label: 'Change', value: metric?.difference ?? null, detail: filtersActive ? 'Clear filters to compare' : metric?.reason === 'incomplete_data' ? 'Incomplete data' : metric?.percentageChange !== null && metric?.percentageChange !== undefined ? `${metric.percentageChange.toFixed(1)}% vs previous` : metric?.reason === 'zero_baseline' ? 'Zero baseline' : metric?.reason === 'negative_baseline' ? 'Negative baseline' : metric?.difference === null ? 'Unsafe precision' : undefined }]} />
+      {report.unknown.length > 0 && <AppText accessibilityRole="alert" color="textSecondary">Incomplete report · {report.unknown.length} unverified transaction(s). Known subtotals only; exports unavailable.</AppText>}
+      {report.currencies.length === 0 && <AppText>No verified ordinary expense transactions for this period.</AppText>}
+      <ReportChart data={chartData} currency={activeCurrency} />
+      <AppText variant="bodyStrong">Currency analysis</AppText>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{report.currencies.map(item => <Pressable key={item.currencyCode}
+        accessibilityRole="button" accessibilityLabel={`Select ${item.currencyCode}`} accessibilityState={{ selected: item.currencyCode === activeCurrency }}
+        onPress={() => setCurrencyCode(item.currencyCode)} style={{ minHeight: 44, paddingVertical: 6, paddingRight: 10 }}>
+        <AppText variant="caption">{currencyLabel(item.currencyCode)} · {formatAmount(item.expenses, item.currencyCode)}</AppText>
+      </Pressable>)}</View>
+      {chartData.map(item => <View key={item.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 }}>
+        <AppText variant="caption" style={{ flex: 1 }}>{item.label}</AppText><AppText variant="caption">{formatAmount(item.amount, activeCurrency)} {activeCurrency}</AppText>
+      </View>)}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <AppText variant="bodyStrong">Transactions ({transactions.length})</AppText>
+        <Pressable accessibilityRole="button" accessibilityLabel="View all Expenses transactions" onPress={() => setTransactionsExpanded(value => !value)} accessibilityState={{ expanded: transactionsExpanded }} style={{ minHeight: 44, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 }}><AppText variant="caption" style={{ color: moduleColors.finance, fontWeight: '600' }}>{transactionsExpanded ? 'Show less' : 'View all'}</AppText><Ionicons name={transactionsExpanded ? 'chevron-up' : 'chevron-down'} size={15} color={moduleColors.finance} /></Pressable>
       </View>
-      {!ledgerReady || !financeReady || !report ? (
-        <ActivityIndicator color={moduleColors.finance} />
-      ) : (
-        <>
-          <AppText variant="h3">Expenses by currency</AppText>
-          <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-            Ordinary expenses only. Transfers, loan payments and debt settlements are excluded. Verified refunds reduce expenses. Currencies are never combined.
-          </AppText>
-          {report.currencies.length === 0 ? (
-            <AppText color="textSecondary">No verified ordinary expense transactions for this period.</AppText>
-          ) : report.currencies.map(item => (
-            <View key={item.currencyCode} style={{
-              backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1,
-              borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm,
-              flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-            }}>
-              <AppText variant="bodyStrong">{item.currencyCode}</AppText>
-              <AppText variant="bodyStrong" style={{ color: moduleColors.finance }}>
-                {formatAmount(item.expenses, item.currencyCode)}
-              </AppText>
-            </View>
-          ))}
-          <AppText variant="h3" style={{ marginTop: spacing.lg }}>Expenses by Category</AppText>
-          <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-            Expense categories are grouped by account currency. Figures reflect the selected filters.
-          </AppText>
-          {report.expenseCategories.length === 0 ? (
-            <AppText color="textSecondary">No classified expense categories for this selection.</AppText>
-          ) : (
-            [...new Set(report.expenseCategories.map(item => item.currencyCode))]
-              .sort()
-              .map(currencyCode => {
-                const rows = report.expenseCategories
-                  .filter(item => item.currencyCode === currencyCode)
-                  .sort((a, b) => b.amount - a.amount || a.categoryId.localeCompare(b.categoryId));
-                const top = rows.find(item => item.amount > 0);
-                return (
-                  <View key={currencyCode} style={{
-                    backgroundColor: colors.surface, borderColor: colors.border,
-                    borderWidth: 1, borderRadius: 12, padding: spacing.md,
-                    marginBottom: spacing.sm,
-                  }}>
-                    <AppText variant="bodyStrong" style={{ marginBottom: spacing.sm }}>
-                      {currencyCode}
-                    </AppText>
-                    {top && (
-                      <AppText color="textSecondary" style={{ marginBottom: spacing.sm }}>
-                        Top category: {categories.find(category => category.id === top.categoryId)?.name
-                          ?? (top.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category')}
-                      </AppText>
-                    )}
-                    <AppText color="textSecondary" style={{ marginBottom: spacing.sm }}>
-                      Category distribution (positive net expenses only)
-                    </AppText>
-                    {rows.some(item => item.amount > 0) ? (
-                      rows.filter(item => item.amount > 0).map(item => {
-                        const maxAmount = Math.max(...rows.map(row => row.amount));
-                        const ratio = maxAmount > 0 ? Math.min(1, item.amount / maxAmount) : 0;
-                        const label = categories.find(category => category.id === item.categoryId)?.name
-                          ?? (item.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category');
-                        return (
-                          <View key={`chart-${item.categoryId}`} style={{ marginBottom: spacing.sm }}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                              <AppText style={{ flex: 1, marginRight: spacing.sm }}>{label}</AppText>
-                              <AppText>{formatAmount(item.amount, currencyCode)}</AppText>
-                            </View>
-                            <View
-                              accessibilityLabel={`${label}: ${formatAmount(item.amount, currencyCode)} ${currencyCode}`}
-                              style={{ height: 12, borderRadius: 6, backgroundColor: colors.border, overflow: 'hidden' }}>
-                              <View style={{
-                                width: `${ratio * 100}%`, height: 12,
-                                backgroundColor: moduleColors.finance, borderRadius: 6,
-                              }} />
-                            </View>
-                          </View>
-                        );
-                      })
-                    ) : (
-                      <AppText color="textSecondary">No positive net expenses to chart.</AppText>
-                    )}
-                    {rows.map(item => (
-                      <View key={item.categoryId} style={{
-                        flexDirection: 'row', justifyContent: 'space-between',
-                        alignItems: 'center', marginBottom: spacing.sm,
-                      }}>
-                        <View style={{ flex: 1, marginRight: spacing.sm }}>
-                          <AppText>
-                            {categories.find(category => category.id === item.categoryId)?.name
-                              ?? (item.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category')}
-                          </AppText>
-                        </View>
-                        <AppText variant="bodyStrong">
-                          {formatAmount(item.amount, currencyCode)}
-                        </AppText>
-                      </View>
-                    ))}
-                  </View>
-                );
-              })
-          )}
-          {report.unknown.length > 0 && (
-            <AppText color="textSecondary">
-              Category figures are known subtotals only; unverified transactions are excluded.
-            </AppText>
-          )}
-          <AppText variant="h3" style={{ marginTop: spacing.lg }}>Compared with previous month</AppText>
-          {filtersActive && <AppText color="textSecondary">Comparison is shown for all accounts and categories only. Clear the filters to see it.</AppText>}
-          {!filtersActive && (
-            <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-              Ordinary expenses by account currency. Change is current month minus previous month.
-            </AppText>
-          )}
-          {comparison?.currencies.length === 0 && (
-            <AppText color="textSecondary">No account currencies available for comparison.</AppText>
-          )}
-          {comparison?.currencies.map(row => {
-            const metric = row.expenses;
-            const incomplete = row.currentStatus === 'incomplete' || row.previousStatus === 'incomplete';
-            return (
-              <View key={row.currencyCode} style={{
-                backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1,
-                borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm,
-              }}>
-                <AppText variant="bodyStrong">{row.currencyCode}</AppText>
-                <AppText color="textSecondary">Previous: {metric.previous === null ? 'Unavailable' : formatAmount(metric.previous, row.currencyCode)}</AppText>
-                <AppText color="textSecondary">Current: {metric.current === null ? 'Unavailable' : formatAmount(metric.current, row.currencyCode)}</AppText>
-                <AppText variant="bodyStrong">
-                  Change: {metric.difference === null ? 'Unavailable' : formatAmount(metric.difference, row.currencyCode)}
-                </AppText>
-                {metric.percentageChange !== null && Number.isFinite(metric.percentageChange) && (
-                  <AppText color="textSecondary">{metric.percentageChange.toFixed(1)}% vs previous month</AppText>
-                )}
-                {incomplete && (
-                  <AppText color="textSecondary">Incomplete data: comparison unavailable, not zero.</AppText>
-                )}
-                {!incomplete && metric.reason === 'zero_baseline' && (
-                  <AppText color="textSecondary">Percentage unavailable: previous month was zero.</AppText>
-                )}
-                {!incomplete && metric.reason === 'negative_baseline' && (
-                  <AppText color="textSecondary">Percentage unavailable: negative baseline.</AppText>
-                )}
-                {!incomplete && (metric.reason === 'unsafe_amount' || metric.reason === 'unsafe_difference') && (
-                  <AppText color="textSecondary">Comparison unavailable: unsafe monetary precision.</AppText>
-                )}
-              </View>
-            );
-          })}
-          {report.unknown.length > 0 && (
-            <View style={{ borderWidth: 1, borderColor: '#D97706', borderRadius: 12,
-              padding: spacing.md, marginTop: spacing.md }}>
-              <AppText style={{ color: '#D97706', fontWeight: '700' }}>Incomplete report</AppText>
-              <AppText color="textSecondary">
-                {report.unknown.length} transaction(s) could not be classified or verified. Shown figures are known subtotals, not complete expense totals.
-              </AppText>
-            </View>
-          )}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="View Expenses Statement"
-            onPress={() => router.push({
-              pathname: '/finance/statement-expenses',
-              params: {
-                from: period.from,
-                to: period.to,
-                ...(accountId ? { accountId } : {}),
-                ...(categoryId ? { categoryId } : {}),
-              },
-            } as Href)}
-            style={{
-              minHeight: 48, marginTop: spacing.lg, borderRadius: 12,
-              backgroundColor: moduleColors.finance, alignItems: 'center',
-              justifyContent: 'center', padding: spacing.sm,
-            }}>
-            <AppText style={{ color: '#FFFFFF', fontWeight: '700' }}>View Statement</AppText>
-          </Pressable>
-          <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.lg }}>
-            PDF and Excel exports are pending.
-          </AppText>
-        </>
-      )}
-    </Screen>
-  );
+      {!visible.reconciled ? <AppText accessibilityRole="alert">Statement cannot be reconciled; details are hidden.</AppText>
+        : <>{transactionsExpanded && <ReportTransactionRows compact rows={transactions} />}{!transactions.length && <AppText color="textSecondary">No verified expenses for this currency.</AppText>}</>}
+      <ReportExportActions busy={exports.exporting} disabled={!exports.canExport} pdf={exports.exportPdf} excel={exports.exportExcel} share={exports.share} />
+    </>}
+  </Screen>;
 }

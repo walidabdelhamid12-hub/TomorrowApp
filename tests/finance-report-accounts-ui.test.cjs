@@ -144,7 +144,8 @@ test('8.3B verified fixture renders compact balances and separate currencies wit
   render();
   assert.match(allText(), /1,000\.00 EGP/); assert.match(allText(), /1\.237 KWD/);
   assert.match(allText(), /Opening Balance/); assert.match(allText(), /Closing Balance/); assert.match(allText(), /Net Change/);
-  assert.doesNotMatch(allText(), /Total balance|View Statement/i);
+  assert.doesNotMatch(allText(), /Total balance/i);
+  assert.match(allText(), /View Statement/);
   assert.equal(nodes('View').filter(n => n.props.testID?.startsWith('account-report-')).length, 2);
   assert.ok(nodes('View').some(n => n.props.style.flexWrap === 'wrap'));
   assert.ok(nodes('View').every(n => n.props.style.height === undefined));
@@ -182,19 +183,20 @@ test('8.3B engine diagnostics remain visible and unsafe row figures are hidden',
   assert.doesNotMatch(allText(), /1,000\.00/);
 });
 
-test('Reports enables the four implemented routes', () => {
+test('Reports enables the eight implemented routes', () => {
   render(Reports);
-  for (const [name, route] of [['Income','income'], ['Expenses','expenses'], ['Accounts','accounts'], ['Assets','assets']]) {
+  for (const [name, route] of [['Income','income'], ['Expenses','expenses'], ['Accounts','accounts'], ['Assets','assets'], ['Installments','installments'], ['Loans','loans'], ['Debts Receivable','receivable'], ['Debts Payable','payable']]) {
     press(`Open ${name} report`); assert.equal(calls.at(-1), `/finance/report-${route}`);
   }
-  for (const name of ['Installments','Loans','Debts Receivable','Debts Payable']) {
-    assert.equal(nodes('Pressable').find(n => n.props.accessibilityLabel === `Open ${name} report`).props.disabled, true);
+  for (const name of ['Loans','Debts Receivable','Debts Payable']) {
+    assert.equal(nodes('Pressable').find(n => n.props.accessibilityLabel === `Open ${name} report`).props.disabled, false);
   }
 });
 
 test('8.3B wiring never adds history fields, writes, FX conversion or a statement route', () => {
   const source = fs.readFileSync(path.join(root, 'src/app/finance/report-accounts.tsx'), 'utf8');
-  assert.doesNotMatch(source, /createdAt|AsyncStorage|useFinanceStore|useCurrencyStore|statement-accounts|View Statement/);
+  assert.doesNotMatch(source, /createdAt|AsyncStorage|useFinanceStore|useCurrencyStore/);
+  assert.match(source, /pathname: '\/finance\/statement-accounts'/);
   assert.match(source, /account\.openingBalanceDate/);
   assert.doesNotMatch(source, /\b(addAccount|updateAccount|addTransaction|updateTransaction|addTransfer|setState|setItem)\s*\(/);
 });
