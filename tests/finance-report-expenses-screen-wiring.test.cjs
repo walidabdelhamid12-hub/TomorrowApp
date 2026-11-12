@@ -22,7 +22,7 @@ test('Expenses inline transactions preserve report filters and Statement remains
   const report = read('src/app/finance/report-expenses.tsx');
   const statement = read('src/app/finance/statement-expenses.tsx');
   assert.match(report, /setTransactionsExpanded\(value => !value\)/);
-  assert.match(report, /transactionsExpanded && <ReportTransactionRows rows=\{transactions\}/);
+  assert.match(report, /transactionsExpanded && <ReportTransactionRows compact rows=\{transactions\}/);
   assert.doesNotMatch(report, /pathname: '\/finance\/statement-expenses'/);
   for (const key of ['from', 'to', 'accountId', 'categoryId']) {
     assert.match(report, new RegExp('\\b' + key + '\\b'));
