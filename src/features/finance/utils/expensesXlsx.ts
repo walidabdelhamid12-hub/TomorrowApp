@@ -84,7 +84,7 @@ export function buildExpensesXlsx(
     `<row r="1">${['A','B','C','D','E','F'].map((col, i) => cell(col, 1, header[i])).join('')}</row>`,
     ...rows.map((row, index) => {
       const r = index + 2;
-      return `<row r="${r}">${cell('A', r, row.date)}${cell('B', r, row.account)}${cell('C', r, row.category)}${cell('D', r, row.note)}${cell('E', r, row.amount, true)}${cell('F', r, row.currency)}</row>`;
+      return `<row r="${r}">${cell('A', r, row.date)}${cell('B', r, row.account)}${cell('C', r, row.category)}${cell('D', r, row.note ?? '')}${cell('E', r, row.amount, true)}${cell('F', r, row.currency)}</row>`;
     }),
   ];
   const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"/></sheetViews><cols><col min="1" max="1" width="15" customWidth="1"/><col min="2" max="4" width="24" customWidth="1"/><col min="5" max="5" width="18" customWidth="1"/><col min="6" max="6" width="12" customWidth="1"/></cols><sheetData>${lines.join('')}</sheetData><autoFilter ref="A1:F${Math.max(1, rows.length + 1)}"/></worksheet>`;
