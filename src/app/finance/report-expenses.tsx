@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
 import { AppText, Screen } from '@/components/ui';
 import { moduleColors } from '@/theme';
 import { useExpenseLedger } from '@/features/finance/hooks/useExpenseLedger';
@@ -14,10 +13,11 @@ import { ReportChart } from '@/features/finance/components/reporting/ReportChart
 
 /** Expenses presentation only; all monetary rows come from the existing report engine. */
 export default function ExpensesReportScreen() {
-  const router = useRouter(); const { ready, context, accounts, categories } = useExpenseLedger();
+  const { ready, context, accounts, categories } = useExpenseLedger();
   const [month, setMonth] = useState(() => { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`; });
   const [accountId, setAccountId] = useState(''); const [categoryId, setCategoryId] = useState('');
   const [currencyCode, setCurrencyCode] = useState(''); const [filtersOpen, setFiltersOpen] = useState(true);
+  const [transactionsExpanded, setTransactionsExpanded] = useState(false);
   const period = useMemo(() => expenseMonthPeriod(month), [month]);
   const filtersActive = accountId !== '' || categoryId !== '';
   const statement = useMemo(() => ready ? buildExpensesStatement(context, { from: period.from, to: period.to },
@@ -41,12 +41,12 @@ export default function ExpensesReportScreen() {
     amount: row.amount, currency: row.currencyCode })) : [];
   return <Screen scroll>
     <ReportNavigation active="expenses" />
-    <ReportHeader title="Expenses Report" icon="trending-down-outline" period={period.label} previous={() => setMonth(value => shiftExpenseMonth(value, -1))}
+    <ReportHeader title="Expenses Report" icon="trending-down-outline" period={period.label.replace(/^(.{3})[^ ]*/, '$1')} previous={() => setMonth(value => shiftExpenseMonth(value, -1))}
       next={() => setMonth(value => shiftExpenseMonth(value, 1))} previousDisabled={month === '0100-02'} nextDisabled={month === '9999-12'} />
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
       <AppText variant="caption" color="textSecondary">{period.from} – {period.to}</AppText>
       <Pressable accessibilityRole="button" accessibilityLabel="Filters" accessibilityState={{ expanded: filtersOpen }} onPress={() => setFiltersOpen(value => !value)}
-        style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}><AppText variant="caption">Filters {filtersActive ? '•' : ''}</AppText></Pressable>
+        style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}><AppText variant="caption" style={{ color: moduleColors.finance, fontWeight: '600' }}>Filters {filtersActive ? '•' : ''}</AppText></Pressable>
     </View>
     {filtersOpen && <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
       <ReportPicker label="Accounts" value={accountId} onSelect={setAccountId} options={[{ id: '', label: 'All accounts' },
@@ -72,13 +72,10 @@ export default function ExpensesReportScreen() {
       </View>)}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <AppText variant="bodyStrong">Transactions ({transactions.length})</AppText>
-        <Pressable accessibilityRole="button" accessibilityLabel="View all Expenses transactions" onPress={() => router.push({
-          pathname: '/finance/statement-expenses', params: { from: period.from, to: period.to,
-            ...(accountId ? { accountId } : {}), ...(categoryId ? { categoryId } : {}), ...(activeCurrency ? { currencyCode: activeCurrency } : {}) },
-        } as Href)} style={{ minHeight: 44, justifyContent: 'center' }}><AppText variant="caption" style={{ color: moduleColors.finance, fontWeight: '600' }}>View all</AppText></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="View all Expenses transactions" onPress={() => setTransactionsExpanded(value => !value)} accessibilityState={{ expanded: transactionsExpanded }} style={{ minHeight: 44, justifyContent: 'center' }}><AppText variant="caption" style={{ color: moduleColors.finance, fontWeight: '600' }}>{transactionsExpanded ? 'Show less' : 'View all'}</AppText></Pressable>
       </View>
       {!visible.reconciled ? <AppText accessibilityRole="alert">Statement cannot be reconciled; details are hidden.</AppText>
-        : <><ReportTransactionRows rows={transactions} />{!transactions.length && <AppText color="textSecondary">No verified expenses for this currency.</AppText>}</>}
+        : <>{transactionsExpanded && <ReportTransactionRows rows={transactions} />}{!transactions.length && <AppText color="textSecondary">No verified expenses for this currency.</AppText>}</>}
       <ReportExportActions busy={exports.exporting} disabled={!exports.canExport} pdf={exports.exportPdf} excel={exports.exportExcel} share={exports.share} />
     </>}
   </Screen>;
