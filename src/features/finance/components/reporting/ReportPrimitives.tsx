@@ -71,13 +71,13 @@ export function ReportPicker({ label, value, options, onSelect }: {
 }
 export function ReportSummaryCards({ cards, currency }: { cards: { label: string; value: number | null; detail?: string }[]; currency: string }) {
   const { colors } = useTheme();
-  return <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'stretch', gap: 8, marginVertical: 10 }}>
+  return <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'stretch', gap: 6, marginVertical: 6 }}>
     {cards.map(card => <View key={card.label} style={{ flexGrow: 1, flexBasis: 100, minWidth: 0, borderRadius: 10,
-      borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 10, paddingVertical: 12, gap: 7 }}>
-      <AppText variant="caption" color="textSecondary" style={{ fontWeight: '600', minHeight: 30 }}>{card.label}</AppText>
-      <AppText variant="bodyStrong" style={{ fontSize: 18, lineHeight: 24, fontVariant: ['tabular-nums'], textAlign: 'left' }}>{card.value !== null && Number.isFinite(card.value) ? formatAmount(card.value, currency) : 'Unavailable'}</AppText>
-      <AppText variant="caption" color="textSecondary" style={{ fontSize: 11 }}>{currencyLabel(currency)}</AppText>
-      {card.detail && <AppText variant="caption" color="textSecondary" style={{ fontSize: 11 }}>{card.detail}</AppText>}
+      borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 8, paddingVertical: 5, gap: 2 }}>
+      <AppText variant="caption" color="textSecondary" style={{ fontWeight: '600', minHeight: 0 }}>{card.label}</AppText>
+      <AppText variant="bodyStrong" style={{ fontSize: 16, lineHeight: 20, fontVariant: ['tabular-nums'], textAlign: 'left' }}>{card.value !== null && Number.isFinite(card.value) ? formatAmount(card.value, currency) : 'Unavailable'}</AppText>
+      <AppText variant="caption" color="textSecondary" style={{ fontSize: 10 }}>{currencyLabel(currency)}</AppText>
+      {card.detail && <AppText variant="caption" color="textSecondary" style={{ fontSize: 10, lineHeight: 12 }}>{card.detail}</AppText>}
     </View>)}
   </View>;
 }
