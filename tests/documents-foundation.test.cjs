@@ -1,7 +1,7 @@
 // Standalone tests: compile TS to temporary JS before running, as described in README.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createDocumentRepository, createUnconfirmedDraft, transitionDocument, DOCUMENTS_NAMESPACE } = require('../../tomorrow-phase9-build/index.js');
+const { createDocumentRepository, createUnconfirmedDraft, transitionDocument, DOCUMENTS_NAMESPACE } = require('./documents-local-loader.cjs').foundation;
 const date = '2026-11-12T12:00:00.000Z';
 const record = {id:'doc_1',category:'receipt',status:'stored',source:'picker',name:'receipt.pdf',mimeType:'application/pdf',byteSize:100,vaultPath:'documents/doc_1.pdf',sha256:null,createdAt:date,updatedAt:date};
 function backend() { const map = new Map([['tomorrow:ledger','KEEP']]); const writes=[]; return {map,writes,getItem:async k=>map.get(k)??null,setItem:async(k,v)=>{writes.push(k);map.set(k,v)}}; }
