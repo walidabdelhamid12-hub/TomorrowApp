@@ -87,7 +87,7 @@ test('compact Expenses has eight real report tabs, one chart, three per-currency
 });
 
 test('Expenses currency selection never combines EGP and OMR and statement preserves exact filters', () => {
-  render(); press('Select OMR'); render();
+  render(); press('Currency: 🇪🇬 EGP'); render(); press('🇴🇲 OMR'); render();
   assert.match(allText(), /1\.237/); assert.match(allText(), /🇴🇲/);
   assert.doesNotMatch(allText(), /report-transaction-a/);
   assert.equal(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).length, 0);
@@ -102,8 +102,8 @@ test('Expenses currency selection never combines EGP and OMR and statement prese
 });
 
 test('month/account/category controls retain full refund context and preserve archived filters', () => {
-  render(); press('Accounts: All accounts'); render(); press('Oman (OMR) · Archived'); render();
-  press('Category: All Categories'); render(); press('Travel'); render();
+  render(); press('Acc.: All accounts'); render(); press('Oman 🇴🇲 OMR · Archived'); render();
+  press('Cat.: All Categories'); render(); press('Travel'); render();
   press('View all Expenses transactions'); render();
   assert.equal(calls.length, 0);
   assert.deepEqual(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).map(node => node.props.testID), ['report-transaction-omr']);
@@ -114,7 +114,7 @@ test('month/account/category controls retain full refund context and preserve ar
 
 test('Expenses exports exact selected OMR rows to readable A4 PDF and Excel XLSX without mutation', async () => {
   const before = structuredClone({ ledger, finance }); freeze(ledger); freeze(finance);
-  render(); press('Select OMR'); render();
+  render(); press('Currency: 🇪🇬 EGP'); render(); press('🇴🇲 OMR'); render();
   press('Export PDF'); press('Export PDF'); await flush();
   assert.equal(html.length, 1, 'Synchronous export lock blocks rapid double-tap');
   assert.match(html[0], /size:A4 portrait;margin:10mm/); assert.match(html[0], /OMR · Omani Rial/);
@@ -201,7 +201,7 @@ test('polished Expenses keeps comparison in summaries, View all beside Transacti
   assert.ok(nodes('Ionicons').filter(node => node.props.name === 'trending-down-outline').length >= 2);
   assert.deepEqual(nodes('Pressable').filter(node => node.props.accessibilityLabel?.startsWith('Export ')).map(node => node.props.accessibilityLabel),
     ['Export PDF', 'Export Excel XLSX', 'Export Share']);
-  press('Accounts: All accounts'); render(); press('Oman (OMR) · Archived'); render();
+  press('Acc.: All accounts'); render(); press('Oman 🇴🇲 OMR · Archived'); render();
   assert.match(allText(), /Previous Period/);
 });
 

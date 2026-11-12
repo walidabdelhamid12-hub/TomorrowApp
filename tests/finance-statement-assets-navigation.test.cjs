@@ -6,7 +6,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '../src/', file), 'utf
 test('Assets report forwards month and optional asset filter', () => {
   const report = read('app/finance/report-assets.tsx');
   assert.match(report, /pathname: '\/finance\/statement-assets'/);
-  assert.match(report, /params: \{ month, \.\.\.\(assetId \? \{ assetId \} : \{\}\) \}/);
+  assert.match(report, /params: \{ month, from: period\.from, to: period\.to, \.\.\.\(assetId \? \{ assetId \} : \{\}\) \}/);
 });
 test('Assets statement lists only recorded movements in selected period without valuations', () => {
   const screen = read('app/finance/statement-assets.tsx');

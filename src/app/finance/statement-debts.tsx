@@ -1,3 +1,4 @@
+import { reportRoutePeriod, reportRouteCurrency } from '@/features/finance/utils/reportRoutePeriod';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable } from 'react-native';
@@ -10,22 +11,25 @@ import { useTheme } from '@/theme';
 /** Detailed read-only payment register for the selected debt report and month. */
 export default function DebtStatementScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ direction?: string; month?: string }>();
+  const params = useLocalSearchParams<{ direction?: string; currencyCode?: string; from?: string; to?: string; month?: string }>();
   const { spacing } = useTheme();
   const hydrated = useFinanceHydrated();
   const debts = useFinanceStore(state => state.debts);
   const direction = params.direction === 'receivable' || params.direction === 'payable' ? params.direction : null;
   const month = typeof params.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month) ? params.month : null;
+  const currencyCode = reportRouteCurrency(params.currencyCode);
   const period = useMemo(() => {
+    if (currencyCode === null) return null;
+    if (params.from !== undefined || params.to !== undefined) return reportRoutePeriod(params.from, params.to);
     if (!month) return null;
     const [year, number] = month.split('-').map(Number);
     if (year < 100) return null;
     return { from: month + '-01', to: month + '-' + String(new Date(year, number, 0).getDate()).padStart(2, '0') };
-  }, [month]);
+  }, [month, params.from, params.to, currencyCode]);
   const rows = useMemo(() => {
     if (!hydrated || !direction || !period) return null;
-    try { return aggregateDebtsReport(debts, period, direction); } catch { return null; }
-  }, [hydrated, direction, period, debts]);
+    try { return aggregateDebtsReport(debts, period, direction).filter(row => !currencyCode || row.currencyCode === currencyCode); } catch { return null; }
+  }, [hydrated, direction, period, debts, currencyCode]);
   const entries = useMemo(() => {
     if (!rows || !period) return [];
     const valid = new Set(rows.filter(row => row.status === 'available' && row.totalAmount !== null && row.periodPaid !== null).map(row => row.debtId));
@@ -42,13 +46,13 @@ export default function DebtStatementScreen() {
     </Pressable>
     <AppText variant="h1">{direction === 'receivable' ? 'Receivable' : 'Payable'} Statement</AppText>
     <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-      {month ?? 'Invalid month'} · Recorded payments only. These entries do not independently prove bank or ledger posting.
+      {period ? period.from + ' to ' + period.to : 'Invalid period'} · Recorded payments only. These entries do not independently prove bank or ledger posting.
     </AppText>
     {!direction || !period ? <Card><AppText>Invalid statement filters.</AppText></Card> :
       !hydrated ? <Card><AppText>Loading finance data...</AppText></Card> :
       rows === null ? <Card><AppText>Statement data unavailable.</AppText></Card> :
       rows.some(row => row.status !== 'available') ? <Card><AppText color="textSecondary">Historical data is unverified for one or more records. Payment details are withheld to avoid misleading totals.</AppText></Card> :
-      entries.length === 0 ? <Card><AppText>No recorded payments in this month.</AppText></Card> :
+      entries.length === 0 ? <Card><AppText>No recorded payments in this period.</AppText></Card> :
       entries.map(item => <Card key={item.id} style={{ marginBottom: spacing.sm }}>
         <AppText variant="bodyStrong">{item.person}</AppText>
         <AppText>{item.date} · {item.amount.toFixed(getCurrencyDecimals(item.currency))} {item.currency}</AppText>

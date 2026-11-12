@@ -5,8 +5,8 @@ const path = require('node:path');
 const read = file => fs.readFileSync(path.join(__dirname, '../src/', file), 'utf8');
 test('Installments report forwards month to schedule statement', () => {
   const report = read('app/finance/report-installments.tsx');
-  assert.match(report, /pathname: '\/finance\/statement-installments', params: \{ month \}/);
-  assert.match(report, /accessibilityLabel="View Statement"/);
+  assert.match(report, /pathname: '\/finance\/statement-installments', params: \{ month, from: dates\.from, to: dates\.to, currencyCode: activeCurrency \}/);
+  assert.match(report, /<ReportStatementLink/);
 });
 test('Installments statement only projects scheduled due dates', () => {
   const screen = read('app/finance/statement-installments.tsx');

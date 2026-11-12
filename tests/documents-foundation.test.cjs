@@ -1,0 +1,14 @@
+// Standalone tests: compile TS to temporary JS before running, as described in README.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { createDocumentRepository, createUnconfirmedDraft, transitionDocument, DOCUMENTS_NAMESPACE } = require('../../tomorrow-phase9-build/index.js');
+const date = '2026-11-12T12:00:00.000Z';
+const record = {id:'doc_1',category:'receipt',status:'stored',source:'picker',name:'receipt.pdf',mimeType:'application/pdf',byteSize:100,vaultPath:'documents/doc_1.pdf',sha256:null,createdAt:date,updatedAt:date};
+function backend() { const map = new Map([['tomorrow:ledger','KEEP']]); const writes=[]; return {map,writes,getItem:async k=>map.get(k)??null,setItem:async(k,v)=>{writes.push(k);map.set(k,v)}}; }
+test('creates, reads and lists only document keys', async()=>{const b=backend(),repo=createDocumentRepository(b); assert.equal((await repo.create(record)).ok,true); assert.equal((await repo.read(record.id)).value.id,record.id);assert.equal((await repo.list()).value.length,1);assert.equal(b.map.get('tomorrow:ledger'),'KEEP');assert.ok(b.writes.every(k=>k.startsWith(DOCUMENTS_NAMESPACE)));});
+test('rejects duplicate and invalid records',async()=>{const repo=createDocumentRepository(backend());assert.equal((await repo.create({...record,vaultPath:'../bad'})).ok,false);assert.equal((await repo.create(record)).ok,true);assert.equal((await repo.create(record)).error,'duplicate');});
+test('blocks invalid state transitions',()=>{assert.throws(()=>transitionDocument(record,'resolved','2026-11-12T13:00:00.000Z'));assert.equal(transitionDocument(record,'extracting','2026-11-12T13:00:00.000Z').status,'extracting');});
+test('draft never posts',()=>{const field={value:null,confidence:0,needsReview:true};const c={id:'c1',documentId:'doc_1',date:field,amountRaw:field,currencyCode:field,merchant:field,description:field,paymentStatus:'unconfirmed',state:'approved_for_draft'};const draft=createUnconfirmedDraft(c);assert.equal(draft.postingAllowed,false);assert.equal(draft.paymentStatus,'unconfirmed');assert.throws(()=>createUnconfirmedDraft({...c,paymentStatus:'confirmed'}));});
+test('corrupt index fails closed',async()=>{const b=backend();b.map.set(DOCUMENTS_NAMESPACE+'index','{');assert.equal((await createDocumentRepository(b).list()).ok,false);});
+test('failed write reports failure without touching Finance',async()=>{const b=backend();b.setItem=async()=>{throw Error('disk failure')};assert.equal((await createDocumentRepository(b).create(record)).error,'storage_error');assert.equal(b.map.get('tomorrow:ledger'),'KEEP');});
+test('failed index write never claims success',async()=>{const b=backend(),base=b.setItem;b.setItem=async(k,v)=>{if(k.endsWith('index'))throw Error('failed');return base(k,v)};assert.equal((await createDocumentRepository(b).create(record)).ok,false);assert.equal(b.map.get('tomorrow:ledger'),'KEEP');});

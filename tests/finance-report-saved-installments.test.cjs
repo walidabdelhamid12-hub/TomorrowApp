@@ -22,10 +22,10 @@ test('report rejects impossible calendar dates and repeated contract identities'
   assert.match(source, /if \(ids\.has\(contract\.id\)\) throw/);
 });
 test('month navigation uses device-local calendar and has year bounds', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../src/app/finance/report-installments.tsx'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/finance/components/reporting/ReportLayout.tsx'), 'utf8');
   assert.match(source, /getFullYear\(\)/);
   assert.match(source, /getMonth\(\)/);
-  assert.match(source, /date\.getFullYear\(\) < 100/);
+  assert.match(source, /minimumDate=\{new Date\(100, 1, 1\)\}/);
   assert.doesNotMatch(source, /toISOString\(\)\.slice\(0, 7\)/);
 });
 
@@ -34,11 +34,11 @@ test('report contract cards open details and label both monetary and count metri
   assert.match(source, /accessibilityLabel=\{"Open installment contract " \+ row\.name\}/);
   assert.match(source, /pathname: '\/finance\/installment-contract'/);
   assert.match(source, /mode: 'details'/);
-  assert.match(source, /Contract total \(all scheduled\): \{row\.totalScheduled\}/);
-  assert.match(source, /Due this month: \{row\.dueInPeriod\}/);
-  assert.match(source, /Installments scheduled this month: \{row\.dueCount\}/);
-  assert.match(source, /accessibilityLabel="Previous month"/);
-  assert.match(source, /accessibilityLabel="Next month"/);
+  assert.match(source, /label: 'Contract total \(all scheduled\)', value: row\.totalScheduled/);
+  assert.match(source, /label: 'Due in period', value: row\.dueInPeriod/);
+  assert.match(source, /label: 'Installments scheduled in period', value: row\.dueCount/);
+  assert.match(source, /<ReportDates period=\{dates\} onChange=\{setPeriod\}/);
+
   assert.doesNotMatch(source, /\\\\n\s*<Pressable/);
 });
 
@@ -51,7 +51,7 @@ test('currency summary remains read-only and never combines currencies', () => {
   assert.match(utility, /current\.total \+= units\(row\.totalScheduled, decimals\)/);
   assert.match(utility, /current\.due \+= units\(row\.dueInPeriod, decimals\)/);
   assert.match(screen, /summarizeSavedInstallmentsByCurrency\(rows\)/);
-  assert.match(screen, /Summary by currency/);
-  assert.match(screen, /All scheduled contracts: \{item\.totalScheduled\}/);
+  assert.match(screen, /<ReportCurrencyAnalysis/);
+  assert.match(screen, /label: 'All scheduled contracts', value: total\.totalScheduled/);
   assert.doesNotMatch(utility, /setState|createContract\(|updateContract\(|deleteContract\(/);
 });

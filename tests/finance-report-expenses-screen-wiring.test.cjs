@@ -14,7 +14,7 @@ test('Expenses Report uses expense categories and expense aggregates', () => {
   const screen = read('src/app/finance/report-expenses.tsx');
   assert.match(screen, /category\.kind === 'expense'/);
   assert.match(screen, /report\?\.expenseCategories/);
-  assert.match(screen, /item\.expenses/);
+  assert.match(screen, /netExpenses/);
   assert.match(screen, /compareExpenseRange\(/);
   assert.doesNotMatch(screen, /report\.incomeCategories|row\.income|item\.income/);
 });

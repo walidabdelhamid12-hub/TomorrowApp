@@ -1,10 +1,10 @@
+import { reportRouteCurrency } from '@/features/finance/utils/reportRoutePeriod';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert } from 'react-native';
 import { shareStatementPdf } from '@/features/finance/utils/shareStatementPdf';
 import { buildOperatingStatementPrintHtml } from '@/features/finance/utils/operatingStatementPrintHtml';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { Alert, ActivityIndicator, Pressable, View } from 'react-native';
 import { AppText, Screen } from '@/components/ui';
 import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerHydrated, useLedgerStore } from '@/features/finance/store/useLedgerStore';
@@ -30,13 +30,14 @@ export default function IncomeStatementScreen() {
   const [exporting, setExporting] = useState(false);
   const { colors, spacing } = useTheme();
   const params = useLocalSearchParams<{
-    from?: string; to?: string; accountId?: string; categoryId?: string;
+    currencyCode?: string; from?: string; to?: string; accountId?: string; categoryId?: string;
   }>();
   const from = single(params.from);
   const to = single(params.to);
   const accountId = single(params.accountId);
   const categoryId = single(params.categoryId);
-  const valid = validDate(from) && validDate(to) && from <= to
+  const currencyCode = reportRouteCurrency(params.currencyCode);
+  const valid = currencyCode !== null && validDate(from) && validDate(to) && from <= to
     && (params.accountId === undefined || (typeof params.accountId === 'string' && params.accountId.length > 0))
     && (params.categoryId === undefined || (typeof params.categoryId === 'string' && params.categoryId.length > 0))
     && (!accountId || !/[\s\u0000-\u001f\u007f]/u.test(accountId))
@@ -55,12 +56,13 @@ export default function IncomeStatementScreen() {
 
   const statement = useMemo(() => {
     if (!valid || !ledgerReady || !financeReady || !from || !to) return null;
-    return buildIncomeStatement(
+    const full = buildIncomeStatement(
       { ledger: { accounts, categories, transactions, transfers }, finance: { assets, debts, loans, cheques } },
       { from, to },
       { ...(accountId ? { accountId } : {}), ...(categoryId ? { categoryId } : {}) },
     );
-  }, [valid, ledgerReady, financeReady, from, to, accountId, categoryId,
+    return !currencyCode ? full : { ...full, rows: full.rows.filter(row => row.currencyCode === currencyCode), report: { ...full.report, currencies: full.report.currencies.filter(row => row.currencyCode === currencyCode), incomeCategories: full.report.incomeCategories.filter(row => row.currencyCode === currencyCode) } };
+  }, [currencyCode, valid, ledgerReady, financeReady, from, to, accountId, categoryId,
     accounts, categories, transactions, transfers, assets, debts, loans, cheques]);
   const exportPdf = async () => {
     if (exporting || !statement || !statement.reconciled || statement.report.unknown.length > 0 || !from || !to) return;
@@ -156,7 +158,7 @@ export default function IncomeStatementScreen() {
             </Pressable>
           )}
           <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.md }}>
-            Read-only statement. Excel export is pending.
+            Read-only statement. Excel XLSX is available from the Income Report.
           </AppText>
         </View>
       )}

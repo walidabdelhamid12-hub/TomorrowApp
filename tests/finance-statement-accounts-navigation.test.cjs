@@ -6,7 +6,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '../src/', file), 'utf
 test('Accounts report preserves month and optional account in statement navigation', () => {
   const report = read('app/finance/report-accounts.tsx');
   assert.match(report, /pathname: '\/finance\/statement-accounts'/);
-  assert.match(report, /params: \{ month, \.\.\.\(accountId \? \{ accountId \} : \{\}\) \}/);
+  assert.match(report, /params: \{ month, from: period\.from, to: period\.to, \.\.\.\(accountId \? \{ accountId \} : \{\}\), currencyCode: activeCurrency \}/);
 });
 test('Accounts statement uses the same reconciled report and transfer legs without writes', () => {
   const screen = read('app/finance/statement-accounts.tsx');

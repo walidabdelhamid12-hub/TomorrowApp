@@ -63,7 +63,7 @@ export default function ExpensesStatementScreen() {
         {statement.report.unknown.length > 0 && <AppText accessibilityRole="alert">Incomplete: {statement.report.unknown.length} unverified transaction(s). Known expenses only; exports unavailable.</AppText>}
         {statement.report.currencies.map(total => <AppText key={total.currencyCode} variant="bodyStrong" style={{ marginVertical: 6 }}>{currencyLabel(total.currencyCode)} · {formatAmount(total.expenses, total.currencyCode)}</AppText>)}
         {!statement.reconciled ? <AppText accessibilityRole="alert">Statement cannot be reconciled. Transaction details are hidden.</AppText>
-          : <><ReportTransactionRows rows={rows} />{!rows.length && <AppText>No verified ordinary expenses for this selection.</AppText>}</>}
+          : <><ReportTransactionRows compact={false} rows={rows} />{!rows.length && <AppText>No verified ordinary expenses for this selection.</AppText>}</>}
         <ReportExportActions busy={exports.exporting} disabled={!exports.canExport} pdf={exports.exportPdf} excel={exports.exportExcel} share={exports.share} />
       </View>}
   </Screen>;

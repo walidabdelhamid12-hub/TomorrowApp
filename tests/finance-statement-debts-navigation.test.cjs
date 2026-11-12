@@ -5,8 +5,8 @@ const path = require('node:path');
 const read = file => fs.readFileSync(path.join(__dirname, '../src/', file), 'utf8');
 test('debt reports preserve direction and month when opening statement', () => {
   const report = read('features/finance/components/DebtReportScreen.tsx');
-  assert.match(report, /pathname: '\/finance\/statement-debts', params: \{ direction, month \}/);
-  assert.match(report, /accessibilityLabel="View Statement"/);
+  assert.match(report, /pathname: '\/finance\/statement-debts', params: \{ direction, month, from: period\.from, to: period\.to, currencyCode: activeCurrency \}/);
+  assert.match(report, /<ReportStatementLink/);
 });
 test('statement lists period-filtered recorded payments and never writes', () => {
   const statement = read('app/finance/statement-debts.tsx');

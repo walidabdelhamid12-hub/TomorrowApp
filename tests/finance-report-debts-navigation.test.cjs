@@ -13,7 +13,7 @@ test('both debt directions have dedicated enabled routes', () => {
 test('shared report is read-only and distinguishes period from current remaining', () => {
   const screen = read('features/finance/components/DebtReportScreen.tsx');
   assert.match(screen, /aggregateDebtsReport\(debts, period, direction\)/);
-  assert.match(screen, /Remaining at month end/);
+  assert.match(screen, /Remaining at period end/);
   assert.match(screen, /Current remaining/);
   assert.doesNotMatch(screen, /addDebtPayment|updateDebt|deleteDebt|setState/);
 });

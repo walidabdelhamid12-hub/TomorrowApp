@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
+require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText, filename);
+const { reportRouteCurrency } = require('../src/features/finance/utils/reportRoutePeriod.ts');
 // Execute each screen's actual pure validation before hooks/store access.
 for (const kind of ['income', 'expenses']) {
   const source = fs.readFileSync(path.join(__dirname, '../src/app/finance/statement-' + kind + '.tsx'), 'utf8');
@@ -11,12 +13,14 @@ for (const kind of ['income', 'expenses']) {
   const js = ts.transpileModule(helpers + '\n' + selection + '\nreturn valid;', {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
-  const valid = new Function('params', js);
+  const evaluate = new Function('params', 'reportRouteCurrency', js);
+  const valid = params => evaluate(params, reportRouteCurrency);
   const dates = { from: '2026-11-01', to: '2026-11-30' };
   test(kind + ': valid omitted and exact filters accepted', () => {
     assert.equal(valid(dates), true);
     assert.equal(valid({ ...dates, accountId: 'bank', categoryId: 'food' }), true);
   });
+  if (kind === 'income') test('income: currency is exact, supported and never repeated', () => { assert.equal(valid({ ...dates, currencyCode: 'OMR' }), true); for (const currencyCode of ['', ' OMR', 'omr', 'XXX', ['OMR'], ['OMR','USD']]) assert.equal(valid({ ...dates, currencyCode }), false); });
   for (const key of ['from', 'to', 'accountId', 'categoryId']) {
     test(kind + ': rejects ambiguous/empty ' + key + ' without broadening scope', () => {
       for (const value of [[], ['bank'], ['bank', 'other'], '', ' ']) {

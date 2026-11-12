@@ -1,3 +1,4 @@
+import { reportRoutePeriod, reportRouteCurrency } from '@/features/finance/utils/reportRoutePeriod';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable } from 'react-native';
@@ -11,7 +12,7 @@ import { useTheme } from '@/theme';
 export default function AccountsStatementScreen() {
   const router = useRouter();
   const { spacing } = useTheme();
-  const params = useLocalSearchParams<{ month?: string; accountId?: string }>();
+  const params = useLocalSearchParams<{ currencyCode?: string; from?: string; to?: string; month?: string; accountId?: string }>();
   const ready = useLedgerHydrated();
   const accounts = useLedgerStore(s => s.accounts);
   const categories = useLedgerStore(s => s.categories);
@@ -20,13 +21,16 @@ export default function AccountsStatementScreen() {
   const month = typeof params.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month) ? params.month : null;
   const accountId = typeof params.accountId === 'string' ? params.accountId : '';
   const filterValid = params.accountId === undefined || (typeof params.accountId === 'string'
-    && params.accountId.length > 0 && !/[\\s\\u0000-\\u001f\\u007f]/u.test(params.accountId));
+    && params.accountId.length > 0 && !/[\s\u0000-\u001f\u007f]/u.test(params.accountId));
+  const currencyCode = reportRouteCurrency(params.currencyCode);
   const period = useMemo(() => {
+    if (currencyCode === null) return null;
+    if (params.from !== undefined || params.to !== undefined) return reportRoutePeriod(params.from, params.to);
     if (!month) return null;
     const [year, number] = month.split('-').map(Number);
     if (year < 100) return null;
     return { from: month + '-01', to: month + '-' + String(new Date(year, number, 0).getDate()).padStart(2, '0') };
-  }, [month]);
+  }, [month, params.from, params.to, currencyCode]);
   const rows = useMemo(() => {
     if (!ready || !period) return null;
     try {
@@ -35,7 +39,7 @@ export default function AccountsStatementScreen() {
           .map(account => ({ accountId: account.id, openingBalanceDate: account.openingBalanceDate! })));
     } catch { return null; }
   }, [ready, period, accounts, categories, transactions, transfers]);
-  const selected = useMemo(() => rows?.filter(row => !accountId || row.accountId === accountId) ?? [], [rows, accountId]);
+  const selected = useMemo(() => rows?.filter(row => (!accountId || row.accountId === accountId) && (!currencyCode || row.currencyCode === currencyCode)) ?? [], [rows, accountId, currencyCode]);
   const entries = useMemo(() => {
     if (!rows || !period) return [];
     const valid = new Set(selected.filter(row => row.status === 'available' && row.reconciled
@@ -65,14 +69,14 @@ export default function AccountsStatementScreen() {
     </Pressable>
     <AppText variant="h1">Accounts Statement</AppText>
     <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-      {month ?? 'Invalid month'} · Account-currency movements only. Credit-card repayments are transfer legs, never additional expenses.
+      {period ? period.from + ' to ' + period.to : 'Invalid period'} · Account-currency movements only. Credit-card repayments are transfer legs, never additional expenses.
     </AppText>
     {!period || !selectionValid ? <Card><AppText>Invalid statement filters.</AppText></Card> :
       !ready ? <Card><AppText>Loading accounts...</AppText></Card> :
       rows === null ? <Card><AppText>Statement unavailable.</AppText></Card> :
       selected.some(row => row.status !== 'available' || !row.reconciled || row.minorUnits === null)
         ? <Card><AppText color="textSecondary">Incomplete account history. Movement details are unavailable until reconciled.</AppText></Card> :
-      entries.length === 0 ? <Card><AppText>No reconciled account movements in this month.</AppText></Card> :
+      entries.length === 0 ? <Card><AppText>No reconciled account movements in this period.</AppText></Card> :
       entries.map(item => {
         const account = names.get(item.accountId);
         return <Card key={item.id + ':' + item.accountId} style={{ marginBottom: spacing.sm }}>

@@ -24,7 +24,7 @@ function crc32(bytes: Uint8Array): number {
 }
 function write16(data: Uint8Array, at: number, n: number) { data[at] = n & 255; data[at + 1] = (n >>> 8) & 255; }
 function write32(data: Uint8Array, at: number, n: number) { write16(data, at, n); write16(data, at + 2, n >>> 16); }
-function zip(files: { name: string; content: string }[]): Uint8Array {
+export function zip(files: { name: string; content: string }[]): Uint8Array {
   const entries = files.map(file => {
     const content = file.name === 'xl/worksheets/sheet1.xml'
       ? file.content.replace(/(<mergeCells\b[^>]*>[\s\S]*?<\/mergeCells>)(<autoFilter\b[^>]*\/>)/g, '$2$1')
@@ -72,7 +72,7 @@ export function bytesToBase64(data: Uint8Array): string {
   }
   return out;
 }
-function cell(col: string, row: number, value: string, numeric = false, style = 0): string {
+export function cell(col: string, row: number, value: string, numeric = false, style = 0): string {
   const s = style ? ` s="${style}"` : '';
   if (numeric) {
     if (!/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value))) throw new Error('Invalid numeric export value');

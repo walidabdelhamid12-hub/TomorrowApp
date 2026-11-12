@@ -1,3 +1,4 @@
+import { reportRoutePeriod } from '@/features/finance/utils/reportRoutePeriod';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable } from 'react-native';
@@ -11,19 +12,20 @@ import { useTheme } from '@/theme';
 export default function AssetsStatementScreen() {
   const router = useRouter();
   const { spacing } = useTheme();
-  const params = useLocalSearchParams<{ month?: string; assetId?: string }>();
+  const params = useLocalSearchParams<{ from?: string; to?: string; month?: string; assetId?: string }>();
   const hydrated = useFinanceHydrated();
   const assets = useFinanceStore(state => state.assets);
   const month = typeof params.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month) ? params.month : null;
   const assetId = typeof params.assetId === 'string' ? params.assetId : '';
   const filterValid = params.assetId === undefined || (typeof params.assetId === 'string'
-    && params.assetId.length > 0 && !/[\\s\\u0000-\\u001f\\u007f]/u.test(params.assetId));
+    && params.assetId.length > 0 && !/[\s\u0000-\u001f\u007f]/u.test(params.assetId));
   const period = useMemo(() => {
+    if (params.from !== undefined || params.to !== undefined) return reportRoutePeriod(params.from, params.to);
     if (!month) return null;
     const [year, number] = month.split('-').map(Number);
     if (year < 100) return null;
     return { from: month + '-01', to: month + '-' + String(new Date(year, number, 0).getDate()).padStart(2, '0') };
-  }, [month]);
+  }, [month, params.from, params.to]);
   const rows = useMemo(() => {
     if (!hydrated || !period) return null;
     try { return aggregateAssetsReport(assets, period); } catch { return null; }
@@ -56,7 +58,7 @@ export default function AssetsStatementScreen() {
     </Pressable>
     <AppText variant="h1">Assets Statement</AppText>
     <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-      {month ?? 'Invalid month'} · Recorded quantity movements only. Historical market valuations and unverified balances are unavailable.
+      {period ? period.from + ' to ' + period.to : 'Invalid period'} · Recorded quantity movements only. Historical market valuations and unverified balances are unavailable.
     </AppText>
     {!period || !selectionValid ? <Card><AppText>Invalid statement filters.</AppText></Card> :
       !hydrated ? <Card><AppText>Loading assets...</AppText></Card> :
