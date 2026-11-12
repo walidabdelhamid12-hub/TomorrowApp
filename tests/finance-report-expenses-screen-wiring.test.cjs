@@ -15,7 +15,7 @@ test('Expenses Report uses expense categories and expense aggregates', () => {
   assert.match(screen, /category\.kind === 'expense'/);
   assert.match(screen, /report\?\.expenseCategories/);
   assert.match(screen, /item\.expenses/);
-  assert.match(screen, /comparisonRow\?\.expenses/);
+  assert.match(screen, /compareExpenseRange\(/);
   assert.doesNotMatch(screen, /report\.incomeCategories|row\.income|item\.income/);
 });
 test('Expenses inline transactions preserve report filters and Statement remains read-only', () => {
