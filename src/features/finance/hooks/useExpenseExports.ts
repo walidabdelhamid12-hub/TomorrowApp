@@ -20,5 +20,5 @@ export function useExpenseExports(statement: ExpensesStatementResult | null, per
   };
   return { exporting, canExport, exportPdf: () => { void run('pdf'); }, exportExcel: () => { void run('xlsx'); },
     share: () => Alert.alert('Share Expenses', 'Choose a format', [{ text: 'PDF', onPress: () => { void run('pdf'); } },
-      { text: 'Excel XLSX', onPress: () => { void run('csv'); } }, { text: 'Cancel', style: 'cancel' }]) };
+      { text: 'Excel XLSX', onPress: () => { void run('xlsx'); } }, { text: 'Cancel', style: 'cancel' }]) };
 }
