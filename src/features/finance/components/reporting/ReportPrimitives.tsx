@@ -112,12 +112,12 @@ export function ReportTransactionRows({ rows, compact = false }: { rows: { id: s
     </View>
   </ScrollView>;
 }
-export function ReportExportActions({ busy, disabled, pdf, excel, share }: {
-  busy: boolean; disabled: boolean; pdf: () => void; excel: () => void; share: () => void;
+export function ReportExportActions({ busy, disabled, pdf, excel, share, excelLabel = 'Excel CSV' }: {
+  busy: boolean; disabled: boolean; pdf: () => void; excel: () => void; share: () => void; excelLabel?: string;
 }) {
   const { colors } = useTheme();
   return <View style={{ flexDirection: 'row', gap: 8, marginVertical: 12 }}>
-    {([{ label: 'PDF', icon: 'document-text-outline', action: pdf }, { label: 'Excel CSV', icon: 'grid-outline', action: excel },
+    {([{ label: 'PDF', icon: 'document-text-outline', action: pdf }, { label: excelLabel, icon: 'grid-outline', action: excel },
       { label: 'Share', icon: 'share-outline', action: share }] as const).map(item => <Pressable key={item.label}
       accessibilityRole="button" accessibilityLabel={`Export ${item.label}`} disabled={disabled || busy} onPress={item.action}
       style={{ flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: 8,
