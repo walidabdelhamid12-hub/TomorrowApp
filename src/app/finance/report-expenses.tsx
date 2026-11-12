@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { AppText, Screen } from '@/components/ui';
+import { Ionicons } from '@expo/vector-icons';
 import { moduleColors } from '@/theme';
 import { useExpenseLedger } from '@/features/finance/hooks/useExpenseLedger';
 import { useExpenseExports } from '@/features/finance/hooks/useExpenseExports';
@@ -41,7 +42,7 @@ export default function ExpensesReportScreen() {
     amount: row.amount, currency: row.currencyCode })) : [];
   return <Screen scroll>
     <ReportNavigation active="expenses" />
-    <ReportHeader title="Expenses Report" icon="trending-down-outline" period={period.label.replace(/^(.{3})[^ ]*/, '$1')} previous={() => setMonth(value => shiftExpenseMonth(value, -1))}
+    <ReportHeader title="Expenses Report" icon="trending-down-outline" compact period={period.label.replace(/^(.{3})[^ ]*/, '$1')} previous={() => setMonth(value => shiftExpenseMonth(value, -1))}
       next={() => setMonth(value => shiftExpenseMonth(value, 1))} previousDisabled={month === '0100-02'} nextDisabled={month === '9999-12'} />
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
       <AppText variant="caption" color="textSecondary">{period.from} – {period.to}</AppText>
@@ -56,7 +57,7 @@ export default function ExpensesReportScreen() {
     </View>}
     {!ready || !report || !visible ? <ActivityIndicator color={moduleColors.finance} /> : <>
       <ReportPicker label="Currency" value={activeCurrency} onSelect={setCurrencyCode} options={report.currencies.map(item => ({ id: item.currencyCode, label: currencyLabel(item.currencyCode) }))} />
-      <ReportSummaryCards currency={activeCurrency} cards={[{ label: report.unknown.length ? 'Known Expenses' : 'Net Expenses', value: netExpenses },
+      <ReportSummaryCards compact currency={activeCurrency} cards={[{ label: report.unknown.length ? 'Known Expenses' : 'Net Expenses', value: netExpenses },
         { label: 'Previous Month', value: metric?.previous ?? null, detail: filtersActive ? 'All accounts/categories only' : undefined }, { label: 'Change', value: metric?.difference ?? null, detail: filtersActive ? 'Clear filters to compare' : metric?.reason === 'incomplete_data' ? 'Incomplete data' : metric?.percentageChange !== null && metric?.percentageChange !== undefined ? `${metric.percentageChange.toFixed(1)}% vs previous` : metric?.reason === 'zero_baseline' ? 'Zero baseline' : metric?.reason === 'negative_baseline' ? 'Negative baseline' : metric?.difference === null ? 'Unsafe precision' : undefined }]} />
       {report.unknown.length > 0 && <AppText accessibilityRole="alert" color="textSecondary">Incomplete report · {report.unknown.length} unverified transaction(s). Known subtotals only; exports unavailable.</AppText>}
       {report.currencies.length === 0 && <AppText>No verified ordinary expense transactions for this period.</AppText>}
@@ -72,10 +73,10 @@ export default function ExpensesReportScreen() {
       </View>)}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <AppText variant="bodyStrong">Transactions ({transactions.length})</AppText>
-        <Pressable accessibilityRole="button" accessibilityLabel="View all Expenses transactions" onPress={() => setTransactionsExpanded(value => !value)} accessibilityState={{ expanded: transactionsExpanded }} style={{ minHeight: 44, justifyContent: 'center' }}><AppText variant="caption" style={{ color: moduleColors.finance, fontWeight: '600' }}>{transactionsExpanded ? 'Show less' : 'View all'}</AppText></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="View all Expenses transactions" onPress={() => setTransactionsExpanded(value => !value)} accessibilityState={{ expanded: transactionsExpanded }} style={{ minHeight: 44, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 }}><AppText variant="caption" style={{ color: moduleColors.finance, fontWeight: '600' }}>{transactionsExpanded ? 'Show less' : 'View all'}</AppText><Ionicons name={transactionsExpanded ? 'chevron-up' : 'chevron-down'} size={15} color={moduleColors.finance} /></Pressable>
       </View>
       {!visible.reconciled ? <AppText accessibilityRole="alert">Statement cannot be reconciled; details are hidden.</AppText>
-        : <>{transactionsExpanded && <ReportTransactionRows rows={transactions} />}{!transactions.length && <AppText color="textSecondary">No verified expenses for this currency.</AppText>}</>}
+        : <>{transactionsExpanded && <ReportTransactionRows compact rows={transactions} />}{!transactions.length && <AppText color="textSecondary">No verified expenses for this currency.</AppText>}</>}
       <ReportExportActions busy={exports.exporting} disabled={!exports.canExport} pdf={exports.exportPdf} excel={exports.exportExcel} share={exports.share} />
     </>}
   </Screen>;
