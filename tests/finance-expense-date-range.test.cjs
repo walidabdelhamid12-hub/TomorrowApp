@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const source = fs.readFileSync('src/features/finance/utils/expenseDateRange.ts', 'utf8');
-const body = source.replace(/^import type .*;\s*/m, '').replace('export function previousExpensePeriod', 'function previousExpensePeriod');
+const ts = require('typescript');
+const body = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 } }).outputText.replace('export function previousExpensePeriod', 'function previousExpensePeriod');
 const previousExpensePeriod = new Function(body + '\nreturn previousExpensePeriod;')();
 
 test('inclusive one-day previous period', () => {
