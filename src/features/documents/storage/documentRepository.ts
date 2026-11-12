@@ -34,10 +34,13 @@ export interface DocumentStorageBackend {
   setItem(key: string, value: string): Promise<unknown>;
 }
 export type DocumentStorageResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: 'invalid_data' | 'duplicate' | 'not_found' | 'conflict' | 'storage_error'; };
-const queues = new WeakMap<DocumentStorageBackend, Promise<unknown>>();
-function exclusive<T>(backend: DocumentStorageBackend, operation: () => Promise<T>): Promise<T> {
-  const task = (queues.get(backend) ?? Promise.resolve()).then(operation);
-  queues.set(backend, task.catch(() => undefined));
+// Serializes complete Documents mutations across wrappers sharing this loaded module.
+// One JavaScript runtime only: not a cross-module, cross-process or cross-runtime lock.
+// Independent Documents stores also share this queue; reads remain outside it.
+let mutationQueue: Promise<unknown> = Promise.resolve();
+function exclusive<T>(operation: () => Promise<T>): Promise<T> {
+  const task = mutationQueue.then(operation);
+  mutationQueue = task.catch(() => undefined);
   return task;
 }
 function parseIndex(raw: string | null): string[] {
@@ -84,7 +87,7 @@ export function createDocumentRepository(backend: DocumentStorageBackend) {
   }
   async function create(input: DocumentRecord): Promise<DocumentStorageResult<DocumentRecord>> {
     try { validateDocument(input); input = JSON.parse(JSON.stringify(input)); validateDocument(input); } catch { return { ok: false, error: 'invalid_data' }; }
-    return exclusive(backend, async () => {
+    return exclusive(async () => {
       try {
         if (parsePending(await backend.getItem(pendingKey))) return { ok: false, error: 'storage_error' } as const;
         const ids = parseIndex(await backend.getItem(indexKey));
@@ -96,7 +99,7 @@ export function createDocumentRepository(backend: DocumentStorageBackend) {
   }
   async function update(input: DocumentRecord, expectedUpdatedAt: string): Promise<DocumentStorageResult<DocumentRecord>> {
     try { validateDocument(input); input = JSON.parse(JSON.stringify(input)); validateDocument(input); } catch { return { ok: false, error: 'invalid_data' }; }
-    return exclusive(backend, async () => {
+    return exclusive(async () => {
       try {
         if (parsePending(await backend.getItem(pendingKey))) return { ok: false, error: 'storage_error' } as const;
         const ids = parseIndex(await backend.getItem(indexKey));
@@ -112,7 +115,7 @@ export function createDocumentRepository(backend: DocumentStorageBackend) {
       } catch { return { ok: false, error: 'storage_error' } as const; }
     });
   }
-  /** Atomically checks known hashes and creates metadata within the shared backend queue. */
+  /** Checks hashes and persists within the module-scoped mutation queue; not a storage transaction. */
   async function createIfHashAbsent(input: DocumentRecord, saveIndependentCopy = false): Promise<
     DocumentStorageResult<{ readonly kind: 'created'; readonly record: DocumentRecord } | { readonly kind: 'duplicate'; readonly record: DocumentRecord }>
   > {
@@ -123,7 +126,7 @@ export function createDocumentRepository(backend: DocumentStorageBackend) {
       if (typeof saveIndependentCopy !== 'boolean' || !input.sha256 || !/^[a-f0-9]{64}$/.test(input.sha256))
         return { ok: false, error: 'invalid_data' };
     } catch { return { ok: false, error: 'invalid_data' }; }
-    return exclusive(backend, async () => {
+    return exclusive(async () => {
       try {
         if (parsePending(await backend.getItem(pendingKey))) return { ok: false, error: 'storage_error' } as const;
         const ids = parseIndex(await backend.getItem(indexKey));
@@ -147,7 +150,7 @@ export function createDocumentRepository(backend: DocumentStorageBackend) {
   /** Explicit, ID-scoped recovery only. Never scans or deletes unrelated metadata. */
   async function recoverUnindexed(id: string): Promise<DocumentStorageResult<DocumentRecord>> {
     if (!validId(id)) return { ok: false, error: 'invalid_data' };
-    return exclusive(backend, async () => {
+    return exclusive(async () => {
       try {
         const pending = parsePending(await backend.getItem(pendingKey));
         if (pending && pending.record.id !== id) return { ok: false, error: 'conflict' } as const;
