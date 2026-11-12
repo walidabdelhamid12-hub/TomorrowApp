@@ -32,12 +32,12 @@ export default function FinanceReportsScreen() {
           accessibilityRole="button"
           accessibilityLabel={`Open ${name} report`}
           onPress={() => router.push((name === 'Expenses' ? '/finance/report-expenses' : name === 'Accounts' ? '/finance/report-accounts' : name === 'Assets' ? '/finance/report-assets' : name === 'Installments' ? '/finance/report-installments' : name === 'Loans' ? '/finance/report-loans' : name === 'Debts Receivable' ? '/finance/report-receivable' : name === 'Debts Payable' ? '/finance/report-payable' : '/finance/report-income') as Href)} style={{
-          width: '48%', padding: spacing.md, borderRadius: 12, gap: 8,
+          width: '48%', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: 12, gap: 4,
           borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
-          alignItems: 'center', justifyContent: 'center', minHeight: 108,
+          alignItems: 'center', justifyContent: 'center', minHeight: 86,
         }}>
-          <View style={{ width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
-            <Ionicons name={REPORT_ITEMS.find(item => item.label === name.replace('Debts ', ''))?.icon ?? 'bar-chart-outline'} size={24} color={moduleColors.finance} />
+          <View style={{ width: 32, height: 32, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+            <Ionicons name={REPORT_ITEMS.find(item => item.label === name.replace('Debts ', ''))?.icon ?? 'bar-chart-outline'} size={21} color={moduleColors.finance} />
           </View>
           <View style={{ alignItems: 'center' }}>
             <AppText variant="bodyStrong" style={{ textAlign: 'center' }}>{name}</AppText>
