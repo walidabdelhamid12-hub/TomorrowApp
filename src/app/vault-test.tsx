@@ -346,6 +346,32 @@ async function runPickerImportTest(): Promise<string> {
   return lines.join('\n');
 }
 
+/** Read-only alternative picker probe. Does not import, copy or write. */
+async function runNativeFilePickerProbe(): Promise<string> {
+  const lines: string[] = [];
+  try {
+    const result = await File.pickFileAsync({ mimeTypes: ['application/pdf'], multipleFiles: false });
+    if (result.canceled) return 'RESULT: CANCELED - no file read';
+    const file = result.result;
+    lines.push(`Native picker URI scheme: ${file.uri.startsWith('content://') ? 'content' : file.uri.startsWith('file://') ? 'file' : 'other'}`);
+    lines.push(`Native picker exists: ${file.exists}`);
+    if (!file.exists) throw new Error('Native picker file inaccessible');
+    const size = file.size;
+    lines.push(`Native picker bytes: ${size}`);
+    if (!Number.isSafeInteger(size) || size <= 0 || size > TEST_MAX_BYTES) {
+      throw new Error('Invalid size or file exceeds 1 MiB');
+    }
+    const digest = await file.digest('SHA-256');
+    if (!/^[a-f0-9]{64}$/i.test(digest)) throw new Error('Invalid digest');
+    lines.push('PASS: Native picker content read and SHA-256 calculated');
+    lines.push('RESULT: PASS - read-only probe; no import attempted');
+  } catch (error) {
+    lines.push(`RESULT: FAIL - ${String(error)}`);
+  }
+  lines.push('No files or metadata written or deleted.');
+  return lines.join('\n');
+}
+
 /** Strictly read-only: AsyncStorage get/getAllKeys, repository read/list, vault exists/size/digest. */
 async function runPersistenceVerification(): Promise<string> {
   const lines: string[] = [];
@@ -553,6 +579,7 @@ export default function VaultTestScreen() {
   const runImportIntegration = () => runExclusive(runImportIntegrationTest);
   const runPersistenceCheck = () => runExclusive(runPersistenceVerification);
   const runPickerImport = () => runExclusive(runPickerImportTest);
+  const runNativePickerProbe = () => runExclusive(runNativeFilePickerProbe);
 
   return (
     <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
