@@ -372,6 +372,69 @@ async function runNativeFilePickerProbe(): Promise<string> {
   return lines.join('\n');
 }
 
+/** Android native picker integration: PDF only; test metadata isolated. */
+async function runNativePickerImportTest(): Promise<string> {
+  const lines: string[] = [];
+  try {
+    if (!namespacesAreDisjoint()) throw new Error('Test namespace overlaps production');
+    if (!isPendingClear(await AsyncStorage.getItem(`${TEST_PREFIX}pending-import`))) {
+      throw new Error('Pending test import exists; import refused');
+    }
+    const selection = await File.pickFileAsync({ mimeTypes: ['application/pdf'], multipleFiles: false });
+    if (selection.canceled) return 'RESULT: CANCELED - no import attempted';
+    const file = selection.result;
+    if (!file.uri.startsWith('file://') && !file.uri.startsWith('content://')) {
+      throw new Error('Unsupported native picker URI');
+    }
+    if (!file.exists) throw new Error('Selected native file inaccessible');
+    const bytes = file.size;
+    if (!Number.isSafeInteger(bytes) || bytes <= 0 || bytes > TEST_MAX_BYTES) {
+      throw new Error('Selected file size invalid or above 1 MiB');
+    }
+    const digest = (await file.digest('SHA-256')).toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(digest)) throw new Error('Selected file digest invalid');
+    lines.push(`PASS: Native picker readable; ${bytes} bytes; SHA-256 verified`);
+    const id = `vt-native-${Crypto.randomUUID()}`;
+    const prodIndexKey = `${DOCUMENTS_NAMESPACE}index`;
+    const prodPendingKey = `${DOCUMENTS_NAMESPACE}pending-import`;
+    const prodRecordKey = `${DOCUMENTS_NAMESPACE}record:${id}`;
+    const prodIndex = await AsyncStorage.getItem(prodIndexKey);
+    const prodPending = await AsyncStorage.getItem(prodPendingKey);
+    if (await AsyncStorage.getItem(prodRecordKey) !== null) throw new Error('Production ID collision');
+    const repository = createDocumentRepository(createIsolatedBackend(false));
+    const vault = createLocalFileVault(vaultFs, { maxBytes: TEST_MAX_BYTES, nextStageId: () => Crypto.randomUUID() });
+    const result = await createDocumentImporter({ vault, repository }).importDocument({
+      id, sourceUri: file.uri, category: 'other', source: 'picker',
+      name: `native-picker-${id}.pdf`, declaredMime: 'application/pdf', createdAt: new Date().toISOString(),
+    });
+    if (!result.ok) throw new Error(`Import failed: ${result.code}; ${result.detail ?? 'no detail'}`);
+    const record = result.record;
+    if (record.byteSize !== bytes || record.sha256 !== digest ||
+        !(await vaultFs.exists(record.vaultPath)) ||
+        (await vaultFs.size(record.vaultPath)) !== bytes ||
+        (await vaultFs.digestSha256(record.vaultPath)) !== digest) {
+      throw new Error('Vault size or SHA-256 verification failed');
+    }
+    const read = await repository.read(id);
+    const listed = await repository.list();
+    if (!read.ok || !read.value || !sameRecord(read.value, record) ||
+        !listed.ok || listed.value.filter((item) => item.id === id).length !== 1) {
+      throw new Error('Repository readback or listing verification failed');
+    }
+    if ((await AsyncStorage.getItem(prodIndexKey)) !== prodIndex ||
+        (await AsyncStorage.getItem(prodPendingKey)) !== prodPending ||
+        (await AsyncStorage.getItem(prodRecordKey)) !== null) {
+      throw new Error('Production metadata isolation failed');
+    }
+    lines.push('PASS: Vault object integrity and isolated repository readback');
+    lines.push('RESULT: PASS - native picker imported; restart persistence not yet verified');
+  } catch (error) {
+    lines.push(`RESULT: FAIL - ${String(error)}`);
+  }
+  lines.push('No files or metadata automatically deleted. Test and production share vault objects.');
+  return lines.join('\n');
+}
+
 /** Strictly read-only: AsyncStorage get/getAllKeys, repository read/list, vault exists/size/digest. */
 async function runPersistenceVerification(): Promise<string> {
   const lines: string[] = [];
@@ -580,6 +643,7 @@ export default function VaultTestScreen() {
   const runPersistenceCheck = () => runExclusive(runPersistenceVerification);
   const runPickerImport = () => runExclusive(runPickerImportTest);
   const runNativePickerProbe = () => runExclusive(runNativeFilePickerProbe);
+  const runNativePickerImport = () => runExclusive(runNativePickerImportTest);
 
   return (
     <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
@@ -592,6 +656,7 @@ export default function VaultTestScreen() {
       <Text>Picker test: choose a NON-SENSITIVE PDF/image (max 1 MiB). Stored test files are not deleted and share the app-private vault directory.</Text>
       <Button title={busy ? 'Running...' : 'Select Test Document (Picker Import)'} onPress={runPickerImport} disabled={busy} />
       <Button title={busy ? 'Running...' : 'Native File Picker (Read-only Probe)'} onPress={runNativePickerProbe} disabled={busy} />
+      <Button title={busy ? 'Running...' : 'Native PDF Picker (Import Test)'} onPress={runNativePickerImport} disabled={busy} />
       <View style={{ padding: 12, borderRadius: 8, backgroundColor: '#eeeeee' }}>
         <Text selectable style={{ color: '#111111' }}>{report}</Text>
       </View>
