@@ -267,8 +267,17 @@ async function runPickerImportTest(): Promise<string> {
     if (asset.size !== undefined && (!Number.isSafeInteger(asset.size) || asset.size <= 0 || asset.size > TEST_MAX_BYTES)) {
       throw new Error('Selected file size is invalid or exceeds the 1 MiB test limit');
     }
-    const actualSize = await vaultFs.sourceSize(asset.uri);
-    if (actualSize <= 0 || actualSize > TEST_MAX_BYTES) throw new Error('Source exceeds the 1 MiB test limit or is empty');
+    // Android's document provider may return a content URI that File cannot
+    // query directly. The picker was requested to copy into app cache; verify
+    // that cache copy before handing it to the existing vault importer.
+    const selectedFile = new File(asset.uri);
+    if (!selectedFile.exists) {
+      throw new Error('Picker cache copy unavailable; selected file was not imported');
+    }
+    const actualSize = selectedFile.size;
+    if (!Number.isSafeInteger(actualSize) || actualSize <= 0 || actualSize > TEST_MAX_BYTES) {
+      throw new Error('Source exceeds the 1 MiB test limit or is empty');
+    }
     if (asset.size !== undefined && asset.size !== actualSize) throw new Error('Picker size differs from readable source size');
 
     const id = `vt-picker-${Crypto.randomUUID()}`;
