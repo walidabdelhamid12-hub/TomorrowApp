@@ -42,6 +42,7 @@ export default function DocumentsScreen() {
   const [openingId, setOpeningId] = useState<string | null>(null);
   const openLock = useRef(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [reviewId, setReviewId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<DocumentCategory>('other');
   const [savingCategory, setSavingCategory] = useState(false);
@@ -264,6 +265,31 @@ export default function DocumentsScreen() {
               <Pressable accessibilityRole="button" accessibilityLabel="Save Category" disabled={savingCategory} onPress={() => saveCategory(record)} style={styles.importButton}>
                 <Text style={styles.importText}>{savingCategory ? 'Saving…' : 'Save Category'}</Text>
               </Pressable>
+            </View>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Review financial data for ${record.name}`}
+            accessibilityState={{ expanded: reviewId === record.id }}
+            onPress={() => setReviewId((previous) => previous === record.id ? null : record.id)}
+            style={styles.verifyButton}
+          >
+            <Text style={styles.verifyText}>{reviewId === record.id ? 'Hide Smart Review' : 'Smart Review (Preview)'}</Text>
+          </Pressable>
+          {reviewId === record.id ? (
+            <View style={styles.detailsPanel}>
+              <Text style={styles.name}>Financial data review</Text>
+              <Text style={styles.detail}>Document: {record.name}</Text>
+              <Text style={styles.detail}>Selected document category: {record.category}</Text>
+              <Text style={styles.detail}>Extraction status: Not started</Text>
+              <Text style={styles.detail}>Suggested finance section: Not available</Text>
+              <Text style={styles.detail}>Amount: Not extracted</Text>
+              <Text style={styles.detail}>Currency: Not extracted</Text>
+              <Text style={styles.detail}>Transaction date: Not extracted</Text>
+              <Text style={styles.detail}>Merchant / counterparty: Not extracted</Text>
+              <Text style={styles.detail}>Payment status: Unconfirmed</Text>
+              <Text style={styles.hint}>This is a read-only preview. No PDF text has been analyzed, and the document category is not a finance posting instruction.</Text>
+              <Text style={styles.hint}>Review, approval and finance creation will be enabled only after verified extraction and a separate safe confirmation flow.</Text>
             </View>
           ) : null}
           <Pressable
