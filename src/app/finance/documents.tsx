@@ -7,7 +7,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useFocusEffect, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createDocumentRepository } from '@/features/documents';
-import type { DocumentRecord } from '@/features/documents';
+import type { DocumentCategory, DocumentRecord } from '@/features/documents';
 import { createDocumentImporter } from '@/features/documents/import/importDocument';
 import { createExpoVaultFileSystem } from '@/features/documents/vault/expoVaultFileSystem';
 import { createLocalFileVault } from '@/features/documents/vault/localFileVault';
@@ -17,6 +17,14 @@ const vaultFs = createExpoVaultFileSystem();
 const MAX_PDF_BYTES = 1024 * 1024;
 const vault = createLocalFileVault(vaultFs, { maxBytes: MAX_PDF_BYTES, nextStageId: () => Crypto.randomUUID() });
 const importer = createDocumentImporter({ repository, vault });
+const categoryOptions: readonly { value: DocumentCategory; label: string }[] = [
+  { value: 'receipt', label: 'Receipt' },
+  { value: 'invoice', label: 'Invoice' },
+  { value: 'contract', label: 'Contract' },
+  { value: 'bank_statement', label: 'Bank Statement' },
+  { value: 'handwritten_note', label: 'Handwritten Note' },
+  { value: 'other', label: 'Other' },
+];
 
 export default function DocumentsScreen() {
   const router = useRouter();
@@ -31,9 +39,46 @@ export default function DocumentsScreen() {
   const [openingId, setOpeningId] = useState<string | null>(null);
   const openLock = useRef(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<DocumentCategory>('other');
+  const [savingCategory, setSavingCategory] = useState(false);
+  const categoryLock = useRef(false);
+
+  const saveCategory = async (record: DocumentRecord) => {
+    if (categoryLock.current || importLock.current || openLock.current || verifyLock.current) return;
+    categoryLock.current = true;
+    setSavingCategory(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const current = await repository.read(record.id);
+      if (!current.ok || !current.value || current.value.updatedAt !== record.updatedAt ||
+          current.value.vaultPath !== record.vaultPath || current.value.sha256 !== record.sha256) {
+        throw new Error('Document changed. Reload before editing its category.');
+      }
+      if (current.value.category === selectedCategory) {
+        setEditingId(null);
+        setNotice('Category unchanged.');
+        return;
+      }
+      const now = Date.now();
+      const nextMs = Math.max(now, Date.parse(current.value.updatedAt) + 1);
+      const updated = { ...current.value, category: selectedCategory, updatedAt: new Date(nextMs).toISOString() };
+      const result = await repository.update(updated, current.value.updatedAt);
+      if (!result.ok) throw new Error(`Category could not be saved (${result.error}). Reload and retry.`);
+      await refresh();
+      setEditingId(null);
+      setNotice('Document category saved. Original PDF and fingerprint unchanged.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Category update failed.');
+    } finally {
+      categoryLock.current = false;
+      setSavingCategory(false);
+    }
+  };
 
   const verifyStoredPdf = async (record: DocumentRecord) => {
-    if (verifyLock.current || importLock.current) return;
+    if (verifyLock.current || importLock.current || categoryLock.current) return;
     verifyLock.current = true;
     setVerifyingId(record.id);
     setNotice(null);
@@ -61,7 +106,7 @@ export default function DocumentsScreen() {
   };
 
   const openPdf = async (record: DocumentRecord) => {
-    if (openLock.current || verifyLock.current || importLock.current) return;
+    if (openLock.current || verifyLock.current || importLock.current || categoryLock.current) return;
     openLock.current = true;
     setOpeningId(record.id);
     setNotice(null);
@@ -103,7 +148,7 @@ export default function DocumentsScreen() {
   }, []);
 
   const importPdf = async () => {
-    if (importLock.current) return;
+    if (importLock.current || categoryLock.current) return;
     importLock.current = true;
     setImporting(true);
     setNotice(null);
@@ -169,14 +214,13 @@ export default function DocumentsScreen() {
       </Pressable>
       <Text style={styles.title}>Documents</Text>
       <Text style={styles.hint}>Saved PDF documents · stored locally on this device</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Import PDF" disabled={importing || loading || verifyingId !== null || openingId !== null} onPress={importPdf} style={styles.importButton}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Import PDF" disabled={importing || loading || verifyingId !== null || openingId !== null || savingCategory} onPress={importPdf} style={styles.importButton}>
         <Text style={styles.importText}>{importing ? 'Importing…' : '+ Import PDF'}</Text>
       </Pressable>
       <Text style={styles.hint}>PDF only · maximum 1 MiB · no automatic financial transactions</Text>
       {notice ? <Text accessibilityRole="alert" style={styles.success}>{notice}</Text> : null}
-      {loading ? <ActivityIndicator accessibilityLabel="Loading documents" /> : error ? (
-        <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
-      ) : records.length === 0 ? (
+      {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+      {loading ? <ActivityIndicator accessibilityLabel="Loading documents" /> : records.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.name}>No documents saved yet</Text>
           <Text style={styles.detail}>Choose + Import PDF to add your first document. Android test documents remain separate.</Text>
@@ -187,6 +231,40 @@ export default function DocumentsScreen() {
           <Text style={styles.detail}>{record.category} · {record.mimeType}</Text>
           <Text style={styles.detail}>{record.byteSize} bytes · {record.createdAt.slice(0, 10)}</Text>
           <Text style={styles.detail}>Status: {record.status}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Edit category for ${record.name}`}
+            disabled={savingCategory || importing || openingId !== null || verifyingId !== null}
+            onPress={() => {
+              if (editingId === record.id) { setEditingId(null); return; }
+              setEditingId(record.id);
+              setSelectedCategory(record.category);
+              setError(null);
+            }}
+            style={styles.verifyButton}
+          >
+            <Text style={styles.verifyText}>{editingId === record.id ? 'Cancel Category Edit' : 'Edit Category'}</Text>
+          </Pressable>
+          {editingId === record.id ? (
+            <View style={styles.detailsPanel}>
+              <Text style={styles.name}>Choose document category</Text>
+              {categoryOptions.map((option) => (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selectedCategory === option.value }}
+                  disabled={savingCategory}
+                  onPress={() => setSelectedCategory(option.value)}
+                  style={styles.categoryOption}
+                >
+                  <Text style={styles.verifyText}>{selectedCategory === option.value ? '◉' : '○'} {option.label}</Text>
+                </Pressable>
+              ))}
+              <Pressable accessibilityRole="button" accessibilityLabel="Save Category" disabled={savingCategory} onPress={() => saveCategory(record)} style={styles.importButton}>
+                <Text style={styles.importText}>{savingCategory ? 'Saving…' : 'Save Category'}</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`View details for ${record.name}`}
@@ -210,10 +288,10 @@ export default function DocumentsScreen() {
               <Text style={styles.hint}>Details are read-only. No financial transaction is created.</Text>
             </View>
           ) : null}
-          <Pressable accessibilityRole="button" accessibilityLabel={`Open or share PDF ${record.name}`} disabled={openingId !== null || verifyingId !== null || importing} onPress={() => openPdf(record)} style={styles.verifyButton}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Open or share PDF ${record.name}`} disabled={openingId !== null || verifyingId !== null || importing || savingCategory} onPress={() => openPdf(record)} style={styles.verifyButton}>
             <Text style={styles.verifyText}>{openingId === record.id ? 'Opening…' : 'Open / Share PDF (Android)'}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Verify stored PDF ${record.name}`} disabled={verifyingId !== null || importing || openingId !== null} onPress={() => verifyStoredPdf(record)} style={styles.verifyButton}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Verify stored PDF ${record.name}`} disabled={verifyingId !== null || importing || openingId !== null || savingCategory} onPress={() => verifyStoredPdf(record)} style={styles.verifyButton}>
             <Text style={styles.verifyText}>{verifyingId === record.id ? 'Verifying…' : 'Verify stored PDF (read-only)'}</Text>
           </Pressable>
         </View>
@@ -235,6 +313,7 @@ const styles = StyleSheet.create({
   item: { padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1', gap: 5 },
   verifyButton: { paddingVertical: 12, marginTop: 6 },
   detailsPanel: { padding: 12, borderRadius: 8, backgroundColor: '#E2E8F0', gap: 7 },
+  categoryOption: { paddingVertical: 9 },
   verifyText: { color: '#2563EB', fontSize: 15, fontWeight: '600' },
   name: { fontSize: 17, fontWeight: '600' },
   detail: { fontSize: 13, color: '#64748B' },
