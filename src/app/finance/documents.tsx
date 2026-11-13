@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
-import { File } from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { isSafeVaultRelativePath } from '@/features/documents/vault/vaultPaths';
 import * as Crypto from 'expo-crypto';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -26,6 +28,8 @@ export default function DocumentsScreen() {
   const importLock = useRef(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const verifyLock = useRef(false);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const openLock = useRef(false);
 
   const verifyStoredPdf = async (record: DocumentRecord) => {
     if (verifyLock.current || importLock.current) return;
@@ -52,6 +56,41 @@ export default function DocumentsScreen() {
     } finally {
       verifyLock.current = false;
       setVerifyingId(null);
+    }
+  };
+
+  const openPdf = async (record: DocumentRecord) => {
+    if (openLock.current || verifyLock.current || importLock.current) return;
+    openLock.current = true;
+    setOpeningId(record.id);
+    setNotice(null);
+    setError(null);
+    try {
+      const current = await repository.read(record.id);
+      if (!current.ok || !current.value ||
+          current.value.vaultPath !== record.vaultPath ||
+          current.value.byteSize !== record.byteSize ||
+          current.value.sha256 !== record.sha256 ||
+          current.value.mimeType !== 'application/pdf' ||
+          !current.value.sha256 ||
+          !/^[a-f0-9]{64}$/i.test(current.value.sha256) ||
+          !isSafeVaultRelativePath(current.value.vaultPath)) {
+        throw new Error('Stored PDF metadata failed validation.');
+      }
+      if (!(await vaultFs.exists(record.vaultPath)) ||
+          (await vaultFs.size(record.vaultPath)) !== record.byteSize ||
+          (await vaultFs.digestSha256(record.vaultPath)) !== record.sha256.toLowerCase()) {
+        throw new Error('Stored PDF integrity check failed. File was not shared.');
+      }
+      if (!(await Sharing.isAvailableAsync())) throw new Error('No Android share/open handler available.');
+      const file = new File(Paths.document, ...record.vaultPath.split('/'));
+      await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', dialogTitle: 'Open or share PDF' });
+      setNotice('Android open/share dialog completed. Original vault file was not modified.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not open PDF.');
+    } finally {
+      openLock.current = false;
+      setOpeningId(null);
     }
   };
 
@@ -128,7 +167,7 @@ export default function DocumentsScreen() {
       </Pressable>
       <Text style={styles.title}>Documents</Text>
       <Text style={styles.hint}>Saved PDF documents · stored locally on this device</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Import PDF" disabled={importing || loading || verifyingId !== null} onPress={importPdf} style={styles.importButton}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Import PDF" disabled={importing || loading || verifyingId !== null || openingId !== null} onPress={importPdf} style={styles.importButton}>
         <Text style={styles.importText}>{importing ? 'Importing…' : '+ Import PDF'}</Text>
       </Pressable>
       <Text style={styles.hint}>PDF only · maximum 1 MiB · no automatic financial transactions</Text>
@@ -146,7 +185,10 @@ export default function DocumentsScreen() {
           <Text style={styles.detail}>{record.category} · {record.mimeType}</Text>
           <Text style={styles.detail}>{record.byteSize} bytes · {record.createdAt.slice(0, 10)}</Text>
           <Text style={styles.detail}>Status: {record.status}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Verify stored PDF ${record.name}`} disabled={verifyingId !== null || importing} onPress={() => verifyStoredPdf(record)} style={styles.verifyButton}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Open or share PDF ${record.name}`} disabled={openingId !== null || verifyingId !== null || importing} onPress={() => openPdf(record)} style={styles.verifyButton}>
+            <Text style={styles.verifyText}>{openingId === record.id ? 'Opening…' : 'Open / Share PDF (Android)'}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Verify stored PDF ${record.name}`} disabled={verifyingId !== null || importing || openingId !== null} onPress={() => verifyStoredPdf(record)} style={styles.verifyButton}>
             <Text style={styles.verifyText}>{verifyingId === record.id ? 'Verifying…' : 'Verify stored PDF (read-only)'}</Text>
           </Pressable>
         </View>
