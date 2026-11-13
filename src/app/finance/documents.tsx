@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createDocumentRepository } from '@/features/documents';
 import type { DocumentCategory, DocumentRecord } from '@/features/documents';
 import { createDocumentImporter } from '@/features/documents/import/importDocument';
+import { evaluateExtractionGate } from '@/features/documents/extraction/extractionGate';
 import { createExpoVaultFileSystem } from '@/features/documents/vault/expoVaultFileSystem';
 import { createLocalFileVault } from '@/features/documents/vault/localFileVault';
 
@@ -281,6 +282,7 @@ export default function DocumentsScreen() {
               <Text style={styles.name}>Financial data review</Text>
               <Text style={styles.detail}>Document: {record.name}</Text>
               <Text style={styles.detail}>Selected document category: {record.category}</Text>
+              <Text style={styles.detail}>Extraction gate: {evaluateExtractionGate(record, null).ready ? 'Ready for review' : 'Blocked — no verified extraction'}</Text>
               <Text style={styles.detail}>Extraction status: Not started</Text>
               <Text style={styles.detail}>Suggested finance section: Not available</Text>
               <Text style={styles.detail}>Amount: Not extracted</Text>
