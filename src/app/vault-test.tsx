@@ -268,46 +268,39 @@ async function runPickerImportTest(): Promise<string> {
     if (asset.size !== undefined && (!Number.isSafeInteger(asset.size) || asset.size <= 0 || asset.size > TEST_MAX_BYTES)) {
       throw new Error('Selected file size is invalid or exceeds the 1 MiB test limit');
     }
-    // Android's document provider may return a content URI that File cannot
-    // query directly. The picker was requested to copy into app cache; verify
-    // that cache copy before handing it to the existing vault importer.
+    // Expo's legacy API can read some Android picker cache URIs that the
+    // modern File API reports as absent. Copy into a unique app-owned cache
+    // location before using the existing vault importer.
     note(`Picker URI scheme: ${asset.uri.startsWith('file://') ? 'file' : 'content'}`);
     note(`Picker MIME: ${mime}; reported size: ${asset.size ?? 'unknown'}`);
-    let selectedFile: File;
-    try {
-      selectedFile = new File(asset.uri);
-    } catch {
-      throw new Error('Picker URI cannot be opened by expo-file-system File');
+    const legacyInfo = await LegacyFileSystem.getInfoAsync(asset.uri);
+    note(`Legacy file info exists: ${legacyInfo.exists}`);
+    if (!legacyInfo.exists) throw new Error('Picker source missing; import not attempted');
+    const sourceBytes = legacyInfo.size;
+    note(`Legacy file info bytes: ${sourceBytes ?? 'unknown'}`);
+    if (!Number.isSafeInteger(sourceBytes) || sourceBytes === undefined ||
+        sourceBytes <= 0 || sourceBytes > TEST_MAX_BYTES) {
+      throw new Error('Picker source is empty, too large, or has unknown size');
     }
-    let accessible: boolean;
-    try {
-      accessible = selectedFile.exists;
-    } catch {
-      throw new Error('Picker cache existence check threw');
+    if (asset.size !== undefined && asset.size !== sourceBytes) {
+      throw new Error('Picker-reported size differs from source size');
     }
-    note(`Picker cache accessible: ${accessible}`);
-    note(`Picker URI inside app cache: ${asset.uri.startsWith(Paths.cache.uri)}`);
-    try {
-      const legacyInfo = await LegacyFileSystem.getInfoAsync(asset.uri);
-      note(`Legacy file info exists: ${legacyInfo.exists}`);
-      if (legacyInfo.exists) note(`Legacy file info bytes: ${legacyInfo.size ?? 'unknown'}`);
-    } catch (legacyError) {
-      note(`Legacy file info failed: ${String(legacyError instanceof Error ? legacyError.message : legacyError)}`);
+    const cacheCopy = new File(Paths.cache, `tomorrow-picker-${Crypto.randomUUID()}.${extensionForMime(mime)}`);
+    if (cacheCopy.exists) throw new Error('Picker cache destination collision');
+    const destinationInfo = await LegacyFileSystem.getInfoAsync(cacheCopy.uri);
+    if (destinationInfo.exists) throw new Error('Picker cache destination already exists');
+    await LegacyFileSystem.copyAsync({ from: asset.uri, to: cacheCopy.uri });
+    const copiedInfo = await LegacyFileSystem.getInfoAsync(cacheCopy.uri);
+    if (!copiedInfo.exists || copiedInfo.size !== sourceBytes) {
+      throw new Error('Picker cache copy failed size verification; import not attempted');
     }
-    if (!accessible) {
-      throw new Error('Picker cache copy unavailable; selected file was not imported');
+    note(`PASS: Legacy cache copy verified: ${sourceBytes} bytes`);
+    if (!cacheCopy.exists) {
+      throw new Error('Modern File API cannot read verified app-owned cache copy; import not attempted');
     }
-    let actualSize: number;
-    try {
-      actualSize = selectedFile.size;
-    } catch {
-      throw new Error('Picker cache size read threw');
-    }
-    note(`Readable source bytes: ${actualSize}`);
-    if (!Number.isSafeInteger(actualSize) || actualSize <= 0 || actualSize > TEST_MAX_BYTES) {
-      throw new Error('Source exceeds the 1 MiB test limit or is empty');
-    }
-    if (asset.size !== undefined && asset.size !== actualSize) throw new Error('Picker size differs from readable source size');
+    const actualSize = cacheCopy.size;
+    if (actualSize !== sourceBytes) throw new Error('Modern cache copy size differs from source');
+    note('PASS: Modern File API can read app-owned cache copy');
 
     const id = `vt-picker-${Crypto.randomUUID()}`;
     const prodIndexKey = `${DOCUMENTS_NAMESPACE}index`;
@@ -322,7 +315,7 @@ async function runPickerImportTest(): Promise<string> {
       nextStageId: () => Crypto.randomUUID(),
     });
     const result = await createDocumentImporter({ vault, repository }).importDocument({
-      id, sourceUri: asset.uri, category: 'other', source: 'picker',
+      id, sourceUri: cacheCopy.uri, category: 'other', source: 'picker',
       name: asset.name, declaredMime: mime, createdAt: new Date().toISOString(),
     });
     if (!result.ok) throw new Error(`Import failed: ${result.code}; ${result.detail ?? 'no detail'}`);
