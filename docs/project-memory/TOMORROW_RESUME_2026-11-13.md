@@ -48,3 +48,24 @@ When user says **"Tomorrow Resume"** or **"افتح Tomorrow Resume"**, start he
 - Every PowerShell helper must collect output and end with `Set-Clipboard` so user can paste results with Ctrl+V.
 - User requested that today's decisions and resume context be saved; don't claim local files or image were updated without actual evidence.
 - On return, first verify branch/HEAD and GitHub/local synchronization (especially if this handover created a new GitHub commit), then plan 9.2C-1B-2. No further implementation was authorized by this handover alone.
+
+## 2026-11-13 — Latest checkpoint and approved design addendum (supersedes older status above)
+- **Verified GitHub branch HEAD:** `76e249cee96ede3175e1bb6cc37ecda328ce0b41` (`76e249c`), message: `test(documents): checkpoint Android import integration pending device verification`. Earlier `bcc6b72` status is historical, NOT the current remote HEAD.
+- The Android import integration test harness is committed at `src/app/vault-test.tsx`. Commit inspection confirms a dedicated test AsyncStorage namespace (`tomorrow:vault-test:v1:`), real importer and local vault wiring, write-once evidence, production Documents namespace read-only comparisons, and a separate read-only persistence check after restart. **Committed test code is not evidence of Android execution.**
+- **Android Import: PENDING on-device execution and evidence review. Android Persistence: PENDING restart/reopen and read-only verification.** No device PASS is claimed. Prior unit/TypeScript results from older checkpoints must not be presented as fresh results for `76e249c` without rerunning.
+- Next work sequence: run Android Import on the actual Android device; preserve its run ID and PASS/FAIL evidence; fully close/reopen the app; run read-only Verify Persistence; record both outcomes separately. Do not erase test evidence or backups.
+
+## Finance visual reference — latest user-selected image
+- **Canonical current design reference:** `TomorrowApp_Finance_Design(8).png` (user-supplied image, 2026-11-13). The image is currently in the conversation/library; **its presence inside this Git repository has NOT been verified**. Do not silently substitute `TomorrowApp Finance Dashboard(4).png` or the older `docs/project-memory/assets/TomorrowApp_Final_Dashboard.png`. Keep old assets for history; do not delete backups.
+- Reference shows dark navy TomorrowApp header, notifications/settings, financial profile selector, full date row with **blue circular Rates refresh arrows and green check status**, Total Balance with visibility eye/currency, Net Worth, two-column tiles (Expenses | Income; Accounts | Assets; Installments | Loans; Debts | Transfers), green Add and blue Reports buttons, Financial Planning (Trips, Events, Budget), and four bottom navigation items.
+- Image values, labels and dates are mockup examples, not live balances, test outcomes, or requirements to hardcode.
+- **Approved follow-up not yet drawn in the reference image:** add a centered **teal circular balance-scale ⚖️ control between Expenses (left) and Income (right)** without losing access to either tile. Tapping the scale opens an Income-vs-Expenses comparison report.
+- **Comparison report reference requirements:** Total Income, Total Expenses, Net Difference, Spending Ratio; clear visual comparison and filters for period and account. Detailed layout and calculations must be checked against Phase 8 Reports/Statements design before implementation. No claim that this report or scale is already implemented.
+- Rates icon/refresh behavior and its exact placement must be reconciled with the latest image before coding; a static mockup does not prove animation or rate-refresh behavior.
+- Keep Documents inside the + Add menu (not a third standalone bottom button), Reports as a separate button, and the eight-tile layout described above.
+- **No Finance code changes authorized in this documentation checkpoint.** Resume Phase 8 reports and dashboard implementation only after the Phase 9 Android verification sequence and separate approval.
+
+## Documentation discipline and safety
+- Treat GitHub project-memory as the durable source of truth; record every newly approved design/decision and verified test outcome at checkpoints. Keep historical statements distinguishable from current verified facts.
+- Preserve unrelated files, backups, existing evidence and untracked files. Do not run destructive cleanup, change Finance posting, or merge to `main` without explicit user approval. Keep `postingAllowed=false`.
+- Claude may handle scoped implementation, Codex is reserved for final/complex review, and ChatGPT Work is optional only when needed. Follow one-task-at-a-time workflow and use clipboard-ending PowerShell helpers.
