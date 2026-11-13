@@ -288,7 +288,7 @@ async function runPickerImportTest(): Promise<string> {
     note(`Picker cache accessible: ${accessible}`);
     note(`Picker URI inside app cache: ${asset.uri.startsWith(Paths.cache.uri)}`);
     try {
-      const legacyInfo = await LegacyFileSystem.getInfoAsync(asset.uri, { size: true });
+      const legacyInfo = await LegacyFileSystem.getInfoAsync(asset.uri);
       note(`Legacy file info exists: ${legacyInfo.exists}`);
       if (legacyInfo.exists) note(`Legacy file info bytes: ${legacyInfo.size ?? 'unknown'}`);
     } catch (legacyError) {
