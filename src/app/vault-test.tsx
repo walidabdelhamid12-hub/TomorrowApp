@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, ScrollView, Text, View } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import * as Crypto from 'expo-crypto';
+import * as DocumentPicker from 'expo-document-picker';
 import { createExpoVaultFileSystem } from '@/features/documents/vault/expoVaultFileSystem';
 import { createLocalFileVault } from '@/features/documents/vault/localFileVault';
+import { extensionForMime } from '@/features/documents/vault/vaultPaths';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createDocumentRepository, DOCUMENTS_NAMESPACE, validateDocument } from '@/features/documents';
 import type { DocumentRecord, DocumentStorageBackend } from '@/features/documents';
@@ -239,6 +241,80 @@ async function runImportIntegrationTest(): Promise<string> {
   return lines.join('\n');
 }
 
+
+// Manual Android picker smoke test. Uses isolated TEST_PREFIX metadata but the
+// existing shared app-private vault object store. Only use non-sensitive fixtures.
+async function runPickerImportTest(): Promise<string> {
+  const lines: string[] = [];
+  const note = (message: string) => { lines.push(message); };
+  try {
+    if (!namespacesAreDisjoint()) throw new Error('Test namespace overlaps production');
+    if (!isPendingClear(await AsyncStorage.getItem(`${TEST_PREFIX}pending-import`))) {
+      throw new Error('Pending test import exists; preserve evidence and stop');
+    }
+    const picked = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (picked.canceled) return 'RESULT: CANCELED - no import attempted';
+    if (picked.assets.length !== 1) throw new Error('Expected exactly one selected document');
+    const asset = picked.assets[0];
+    const mime = asset.mimeType;
+    if (!mime || !extensionForMime(mime)) throw new Error('Unsupported or missing MIME type');
+    if (!/^(file|content):\\/\\//.test(asset.uri)) throw new Error('Unsupported source URI');
+    if (!asset.name || asset.name.length > 255) throw new Error('Invalid file name');
+    if (asset.size !== undefined && (!Number.isSafeInteger(asset.size) || asset.size <= 0 || asset.size > TEST_MAX_BYTES)) {
+      throw new Error('Selected file size is invalid or exceeds the 1 MiB test limit');
+    }
+    const actualSize = await vaultFs.sourceSize(asset.uri);
+    if (actualSize <= 0 || actualSize > TEST_MAX_BYTES) throw new Error('Source exceeds the 1 MiB test limit or is empty');
+    if (asset.size !== undefined && asset.size !== actualSize) throw new Error('Picker size differs from readable source size');
+
+    const id = `vt-picker-${Crypto.randomUUID()}`;
+    const prodIndexKey = `${DOCUMENTS_NAMESPACE}index`;
+    const prodPendingKey = `${DOCUMENTS_NAMESPACE}pending-import`;
+    const prodRecordKey = `${DOCUMENTS_NAMESPACE}record:${id}`;
+    const prodIndex = await AsyncStorage.getItem(prodIndexKey);
+    const prodPending = await AsyncStorage.getItem(prodPendingKey);
+    if ((await AsyncStorage.getItem(prodRecordKey)) !== null) throw new Error('Production ID collision');
+    const repository = createDocumentRepository(createIsolatedBackend(false));
+    const vault = createLocalFileVault(vaultFs, {
+      maxBytes: TEST_MAX_BYTES,
+      nextStageId: () => Crypto.randomUUID(),
+    });
+    const result = await createDocumentImporter({ vault, repository }).importDocument({
+      id, sourceUri: asset.uri, category: 'other', source: 'picker',
+      name: asset.name, declaredMime: mime, createdAt: new Date().toISOString(),
+    });
+    if (!result.ok) throw new Error(`Import failed: ${result.code}; ${result.detail ?? 'no detail'}`);
+    const record = result.record;
+    if (record.byteSize !== actualSize || !await vaultFs.exists(record.vaultPath) ||
+        await vaultFs.size(record.vaultPath) !== actualSize ||
+        await vaultFs.digestSha256(record.vaultPath) !== record.sha256) {
+      throw new Error('Stored object integrity verification failed');
+    }
+    const read = await repository.read(record.id);
+    if (!read.ok || !read.value || !sameRecord(read.value, record)) throw new Error('Repository readback mismatch');
+    const listed = await repository.list();
+    if (!listed.ok || listed.value.filter((item) => item.id === record.id).length !== 1) {
+      throw new Error('Repository listing mismatch');
+    }
+    if ((await AsyncStorage.getItem(prodIndexKey)) !== prodIndex ||
+        (await AsyncStorage.getItem(prodPendingKey)) !== prodPending ||
+        (await AsyncStorage.getItem(prodRecordKey)) !== null) {
+      throw new Error('Production Documents metadata changed unexpectedly');
+    }
+    note(`PASS: Picker imported ${record.byteSize} bytes; ${result.kind}; SHA-256 ${record.sha256}`);
+    note('PASS: Vault integrity, repository readback, and production metadata isolation');
+    note('RESULT: PASS - manual picker test; persistence after restart not yet verified');
+  } catch (error) {
+    note(`RESULT: FAIL - ${String(error)}`);
+  }
+  note('No files or metadata automatically deleted. Test and production share the vault object directory.');
+  return lines.join('\\n');
+}
+
 /** Strictly read-only: AsyncStorage get/getAllKeys, repository read/list, vault exists/size/digest. */
 async function runPersistenceVerification(): Promise<string> {
   const lines: string[] = [];
@@ -445,6 +521,7 @@ export default function VaultTestScreen() {
   }
   const runImportIntegration = () => runExclusive(runImportIntegrationTest);
   const runPersistenceCheck = () => runExclusive(runPersistenceVerification);
+  const runPickerImport = () => runExclusive(runPickerImportTest);
 
   return (
     <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
@@ -454,6 +531,8 @@ export default function VaultTestScreen() {
       <Button title={busy ? 'Running...' : 'Run Store Integration Test'} onPress={runStoreIntegrationTest} disabled={busy} />
       <Button title={busy ? 'Running...' : 'Run Import Integration Test'} onPress={runImportIntegration} disabled={busy} />
       <Button title={busy ? 'Running...' : 'Verify Persistence (read-only)'} onPress={runPersistenceCheck} disabled={busy} />
+      <Text>Picker test: choose a NON-SENSITIVE PDF/image (max 1 MiB). Stored test files are not deleted and share the app-private vault directory.</Text>
+      <Button title={busy ? 'Running...' : 'Select Test Document (Picker Import)'} onPress={runPickerImport} disabled={busy} />
       <View style={{ padding: 12, borderRadius: 8, backgroundColor: '#eeeeee' }}>
         <Text selectable style={{ color: '#111111' }}>{report}</Text>
       </View>
