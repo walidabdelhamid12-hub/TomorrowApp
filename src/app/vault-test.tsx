@@ -262,7 +262,7 @@ async function runPickerImportTest(): Promise<string> {
     const asset = picked.assets[0];
     const mime = asset.mimeType;
     if (!mime || !extensionForMime(mime)) throw new Error('Unsupported or missing MIME type');
-    if (!/^(file|content):\\/\\//.test(asset.uri)) throw new Error('Unsupported source URI');
+    if (!asset.uri.startsWith('file://') && !asset.uri.startsWith('content://')) throw new Error('Unsupported source URI');
     if (!asset.name || asset.name.length > 255) throw new Error('Invalid file name');
     if (asset.size !== undefined && (!Number.isSafeInteger(asset.size) || asset.size <= 0 || asset.size > TEST_MAX_BYTES)) {
       throw new Error('Selected file size is invalid or exceeds the 1 MiB test limit');
