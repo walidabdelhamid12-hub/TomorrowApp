@@ -77,9 +77,10 @@ export default function DocumentsScreen() {
           !isSafeVaultRelativePath(current.value.vaultPath)) {
         throw new Error('Stored PDF metadata failed validation.');
       }
+      const expectedSha256 = current.value.sha256;
       if (!(await vaultFs.exists(record.vaultPath)) ||
           (await vaultFs.size(record.vaultPath)) !== record.byteSize ||
-          (await vaultFs.digestSha256(record.vaultPath)) !== record.sha256.toLowerCase()) {
+          (await vaultFs.digestSha256(record.vaultPath)) !== expectedSha256.toLowerCase()) {
         throw new Error('Stored PDF integrity check failed. File was not shared.');
       }
       if (!(await Sharing.isAvailableAsync())) throw new Error('No Android share/open handler available.');
