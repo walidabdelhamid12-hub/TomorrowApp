@@ -24,6 +24,36 @@ export default function DocumentsScreen() {
   const [importing, setImporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const importLock = useRef(false);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const verifyLock = useRef(false);
+
+  const verifyStoredPdf = async (record: DocumentRecord) => {
+    if (verifyLock.current || importLock.current) return;
+    verifyLock.current = true;
+    setVerifyingId(record.id);
+    setNotice(null);
+    setError(null);
+    try {
+      const current = await repository.read(record.id);
+      if (!current.ok || !current.value || current.value.vaultPath !== record.vaultPath ||
+          current.value.byteSize !== record.byteSize || current.value.sha256 !== record.sha256) {
+        throw new Error('Stored document metadata is missing or changed.');
+      }
+      if (record.mimeType !== 'application/pdf' || !record.sha256 ||
+          !/^[a-f0-9]{64}$/i.test(record.sha256)) throw new Error('Stored PDF metadata is invalid.');
+      if (!(await vaultFs.exists(record.vaultPath))) throw new Error('Stored PDF file is missing.');
+      if ((await vaultFs.size(record.vaultPath)) !== record.byteSize) throw new Error('Stored PDF size mismatch.');
+      if ((await vaultFs.digestSha256(record.vaultPath)) !== record.sha256.toLowerCase()) {
+        throw new Error('Stored PDF SHA-256 mismatch.');
+      }
+      setNotice(`PASS: ${record.name} — size and SHA-256 verified (read-only).`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Stored PDF verification failed.');
+    } finally {
+      verifyLock.current = false;
+      setVerifyingId(null);
+    }
+  };
 
   const refresh = useCallback(async () => {
     const result = await repository.list();
@@ -98,7 +128,7 @@ export default function DocumentsScreen() {
       </Pressable>
       <Text style={styles.title}>Documents</Text>
       <Text style={styles.hint}>Saved PDF documents · stored locally on this device</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Import PDF" disabled={importing || loading} onPress={importPdf} style={styles.importButton}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Import PDF" disabled={importing || loading || verifyingId !== null} onPress={importPdf} style={styles.importButton}>
         <Text style={styles.importText}>{importing ? 'Importing…' : '+ Import PDF'}</Text>
       </Pressable>
       <Text style={styles.hint}>PDF only · maximum 1 MiB · no automatic financial transactions</Text>
@@ -116,6 +146,9 @@ export default function DocumentsScreen() {
           <Text style={styles.detail}>{record.category} · {record.mimeType}</Text>
           <Text style={styles.detail}>{record.byteSize} bytes · {record.createdAt.slice(0, 10)}</Text>
           <Text style={styles.detail}>Status: {record.status}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Verify stored PDF ${record.name}`} disabled={verifyingId !== null || importing} onPress={() => verifyStoredPdf(record)} style={styles.verifyButton}>
+            <Text style={styles.verifyText}>{verifyingId === record.id ? 'Verifying…' : 'Verify stored PDF (read-only)'}</Text>
+          </Pressable>
         </View>
       ))}
     </ScrollView>
@@ -133,6 +166,8 @@ const styles = StyleSheet.create({
   importText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
   empty: { padding: 20, borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1', gap: 8 },
   item: { padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1', gap: 5 },
+  verifyButton: { paddingVertical: 12, marginTop: 6 },
+  verifyText: { color: '#2563EB', fontSize: 15, fontWeight: '600' },
   name: { fontSize: 17, fontWeight: '600' },
   detail: { fontSize: 13, color: '#64748B' },
 });
