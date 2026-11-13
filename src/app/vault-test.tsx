@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, ScrollView, Text, View } from 'react-native';
 import { File, Paths } from 'expo-file-system';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 import * as DocumentPicker from 'expo-document-picker';
 import { createExpoVaultFileSystem } from '@/features/documents/vault/expoVaultFileSystem';
@@ -285,6 +286,14 @@ async function runPickerImportTest(): Promise<string> {
       throw new Error('Picker cache existence check threw');
     }
     note(`Picker cache accessible: ${accessible}`);
+    note(`Picker URI inside app cache: ${asset.uri.startsWith(Paths.cache.uri)}`);
+    try {
+      const legacyInfo = await LegacyFileSystem.getInfoAsync(asset.uri, { size: true });
+      note(`Legacy file info exists: ${legacyInfo.exists}`);
+      if (legacyInfo.exists) note(`Legacy file info bytes: ${legacyInfo.size ?? 'unknown'}`);
+    } catch (legacyError) {
+      note(`Legacy file info failed: ${String(legacyError instanceof Error ? legacyError.message : legacyError)}`);
+    }
     if (!accessible) {
       throw new Error('Picker cache copy unavailable; selected file was not imported');
     }
@@ -341,7 +350,7 @@ async function runPickerImportTest(): Promise<string> {
     note(`RESULT: FAIL - ${String(error)}`);
   }
   note('No files or metadata automatically deleted. Test and production share the vault object directory.');
-  return lines.join('\\n');
+  return lines.join('\n');
 }
 
 /** Strictly read-only: AsyncStorage get/getAllKeys, repository read/list, vault exists/size/digest. */
