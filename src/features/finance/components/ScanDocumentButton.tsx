@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AppButton, AppText } from '@/components/ui';
@@ -22,7 +22,11 @@ export function ScanDocumentButton({ onResult, initialSource, onFinished }: Scan
   const [busy, setBusy] = useState<ScanSource | null>(null);
   const [message, setMessage] = useState<string | undefined>();
 
-  const run = async (source: ScanSource) => {
+  const runningRef = useRef(false);
+
+  const run = useCallback(async (source: ScanSource) => {
+    if (runningRef.current) return;
+    runningRef.current = true;
     setBusy(source);
     setMessage(undefined);
     try {
@@ -44,14 +48,29 @@ export function ScanDocumentButton({ onResult, initialSource, onFinished }: Scan
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Scan failed.');
     } finally {
+      runningRef.current = false;
       setBusy(null);
       onFinished?.();
     }
-  };
+  }, [onResult, onFinished]);
+
+  const runRef = useRef(run);
 
   useEffect(() => {
-    if (initialSource) void run(initialSource);
-    // Run once per selected source; parent unmounts after completion.
+    runRef.current = run;
+  }, [run]);
+
+  const startedSourceRef = useRef<ScanSource | null>(null);
+
+  useEffect(() => {
+    if (!initialSource || startedSourceRef.current === initialSource) return;
+    startedSourceRef.current = initialSource;
+
+    const timeout = setTimeout(() => {
+      void runRef.current(initialSource);
+    }, 0);
+
+    return () => clearTimeout(timeout);
   }, [initialSource]);
 
   const accent = moduleColors.finance;
