@@ -66,7 +66,7 @@ import {
 import { getAssetValueInBase } from '@/features/finance/utils/valuation';
 import { moduleColors, useTheme } from '@/theme';
 
-type AddMenuAction = 'transaction' | 'transfer' | 'account' | 'asset';
+type AddMenuAction = 'transaction' | 'transfer' | 'account' | 'asset' | 'documents';
 type MenuIconName = ComponentProps<typeof Ionicons>['name'];
 
 const NETWORK_ITEMS: {
@@ -299,6 +299,9 @@ export default function FinanceHomeScreen() {
         break;
       case 'asset':
         openAsset(null);
+        break;
+      case 'documents':
+        router.push('/finance/documents' as Href);
         break;
     }
   };
@@ -905,6 +908,14 @@ export default function FinanceHomeScreen() {
                 accent="#FBBF24"
                 background="#78350F"
               />
+              <MenuOption
+                icon="document-text-outline"
+                title="Documents"
+                onPress={() => handleAddMenuAction('documents')}
+                accent="#38BDF8"
+                background="#164E63"
+              />
+
             </View>
           </Pressable>
         </Pressable>
