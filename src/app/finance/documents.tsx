@@ -30,6 +30,7 @@ export default function DocumentsScreen() {
   const verifyLock = useRef(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const openLock = useRef(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const verifyStoredPdf = async (record: DocumentRecord) => {
     if (verifyLock.current || importLock.current) return;
@@ -186,6 +187,29 @@ export default function DocumentsScreen() {
           <Text style={styles.detail}>{record.category} · {record.mimeType}</Text>
           <Text style={styles.detail}>{record.byteSize} bytes · {record.createdAt.slice(0, 10)}</Text>
           <Text style={styles.detail}>Status: {record.status}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`View details for ${record.name}`}
+            accessibilityState={{ expanded: expandedId === record.id }}
+            onPress={() => setExpandedId((previous) => previous === record.id ? null : record.id)}
+            style={styles.verifyButton}
+          >
+            <Text style={styles.verifyText}>{expandedId === record.id ? 'Hide Details' : 'View Details'}</Text>
+          </Pressable>
+          {expandedId === record.id ? (
+            <View style={styles.detailsPanel}>
+              <Text style={styles.detail}>Document ID: {record.id}</Text>
+              <Text style={styles.detail}>Category: {record.category}</Text>
+              <Text style={styles.detail}>Source: {record.source}</Text>
+              <Text style={styles.detail}>Created: {record.createdAt}</Text>
+              <Text style={styles.detail}>Updated: {record.updatedAt}</Text>
+              <Text style={styles.detail}>Size: {record.byteSize} bytes</Text>
+              <Text style={styles.detail}>MIME: {record.mimeType}</Text>
+              <Text style={styles.detail}>SHA-256: {record.sha256 ?? 'Unavailable'}</Text>
+              <Text style={styles.detail}>Local storage: app-private vault</Text>
+              <Text style={styles.hint}>Details are read-only. No financial transaction is created.</Text>
+            </View>
+          ) : null}
           <Pressable accessibilityRole="button" accessibilityLabel={`Open or share PDF ${record.name}`} disabled={openingId !== null || verifyingId !== null || importing} onPress={() => openPdf(record)} style={styles.verifyButton}>
             <Text style={styles.verifyText}>{openingId === record.id ? 'Opening…' : 'Open / Share PDF (Android)'}</Text>
           </Pressable>
@@ -210,6 +234,7 @@ const styles = StyleSheet.create({
   empty: { padding: 20, borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1', gap: 8 },
   item: { padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1', gap: 5 },
   verifyButton: { paddingVertical: 12, marginTop: 6 },
+  detailsPanel: { padding: 12, borderRadius: 8, backgroundColor: '#E2E8F0', gap: 7 },
   verifyText: { color: '#2563EB', fontSize: 15, fontWeight: '600' },
   name: { fontSize: 17, fontWeight: '600' },
   detail: { fontSize: 13, color: '#64748B' },
