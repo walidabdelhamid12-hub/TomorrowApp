@@ -270,11 +270,31 @@ async function runPickerImportTest(): Promise<string> {
     // Android's document provider may return a content URI that File cannot
     // query directly. The picker was requested to copy into app cache; verify
     // that cache copy before handing it to the existing vault importer.
-    const selectedFile = new File(asset.uri);
-    if (!selectedFile.exists) {
+    note(`Picker URI scheme: ${asset.uri.startsWith('file://') ? 'file' : 'content'}`);
+    note(`Picker MIME: ${mime}; reported size: ${asset.size ?? 'unknown'}`);
+    let selectedFile: File;
+    try {
+      selectedFile = new File(asset.uri);
+    } catch {
+      throw new Error('Picker URI cannot be opened by expo-file-system File');
+    }
+    let accessible: boolean;
+    try {
+      accessible = selectedFile.exists;
+    } catch {
+      throw new Error('Picker cache existence check threw');
+    }
+    note(`Picker cache accessible: ${accessible}`);
+    if (!accessible) {
       throw new Error('Picker cache copy unavailable; selected file was not imported');
     }
-    const actualSize = selectedFile.size;
+    let actualSize: number;
+    try {
+      actualSize = selectedFile.size;
+    } catch {
+      throw new Error('Picker cache size read threw');
+    }
+    note(`Readable source bytes: ${actualSize}`);
     if (!Number.isSafeInteger(actualSize) || actualSize <= 0 || actualSize > TEST_MAX_BYTES) {
       throw new Error('Source exceeds the 1 MiB test limit or is empty');
     }
