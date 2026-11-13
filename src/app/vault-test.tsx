@@ -435,6 +435,47 @@ async function runNativePickerImportTest(): Promise<string> {
   return lines.join('\n');
 }
 
+/** Read-only persistence verification for native-picker imports, after app restart. */
+async function verifyNativePickerPersistence(): Promise<string> {
+  const lines: string[] = [];
+  try {
+    if (!namespacesAreDisjoint()) throw new Error('Test namespace overlaps production');
+    const repository = createDocumentRepository(createIsolatedBackend(true));
+    const listed = await repository.list();
+    if (!listed.ok) throw new Error(`Repository list failed: ${listed.error}`);
+    const nativeRecords = listed.value.filter((record) => record.id.startsWith('vt-native-'));
+    if (nativeRecords.length === 0) {
+      return 'RESULT: INCONCLUSIVE - no native picker import records found. Nothing written or deleted.';
+    }
+    for (const record of nativeRecords) {
+      validateDocument(record);
+      if (!(await vaultFs.exists(record.vaultPath))) throw new Error(`Object missing: ${record.id}`);
+      if ((await vaultFs.size(record.vaultPath)) !== record.byteSize) {
+        throw new Error(`Object size mismatch: ${record.id}`);
+      }
+      if ((await vaultFs.digestSha256(record.vaultPath)) !== record.sha256) {
+        throw new Error(`Object SHA-256 mismatch: ${record.id}`);
+      }
+      const read = await repository.read(record.id);
+      if (!read.ok || !read.value || !sameRecord(read.value, record)) {
+        throw new Error(`Repository readback mismatch: ${record.id}`);
+      }
+      if (listed.value.filter((item) => item.id === record.id).length !== 1) {
+        throw new Error(`Duplicate record ID: ${record.id}`);
+      }
+      if ((await AsyncStorage.getItem(`${DOCUMENTS_NAMESPACE}record:${record.id}`)) !== null) {
+        throw new Error(`Production record collision: ${record.id}`);
+      }
+      lines.push(`PASS: ${record.id} - ${record.byteSize} bytes; SHA-256 verified`);
+    }
+    lines.push(`RESULT: PASS - ${nativeRecords.length} native picker import(s) verified; read-only`);
+  } catch (error) {
+    lines.push(`RESULT: FAIL - ${String(error)}`);
+  }
+  lines.push('No files or metadata written or deleted.');
+  return lines.join('\n');
+}
+
 /** Strictly read-only: AsyncStorage get/getAllKeys, repository read/list, vault exists/size/digest. */
 async function runPersistenceVerification(): Promise<string> {
   const lines: string[] = [];
@@ -644,6 +685,7 @@ export default function VaultTestScreen() {
   const runPickerImport = () => runExclusive(runPickerImportTest);
   const runNativePickerProbe = () => runExclusive(runNativeFilePickerProbe);
   const runNativePickerImport = () => runExclusive(runNativePickerImportTest);
+  const runNativePersistence = () => runExclusive(verifyNativePickerPersistence);
 
   return (
     <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
@@ -657,6 +699,7 @@ export default function VaultTestScreen() {
       <Button title={busy ? 'Running...' : 'Select Test Document (Picker Import)'} onPress={runPickerImport} disabled={busy} />
       <Button title={busy ? 'Running...' : 'Native File Picker (Read-only Probe)'} onPress={runNativePickerProbe} disabled={busy} />
       <Button title={busy ? 'Running...' : 'Native PDF Picker (Import Test)'} onPress={runNativePickerImport} disabled={busy} />
+      <Button title={busy ? 'Running...' : 'Verify Native PDF Persistence (read-only)'} onPress={runNativePersistence} disabled={busy} />
       <View style={{ padding: 12, borderRadius: 8, backgroundColor: '#eeeeee' }}>
         <Text selectable style={{ color: '#111111' }}>{report}</Text>
       </View>
