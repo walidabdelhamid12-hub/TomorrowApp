@@ -17,6 +17,9 @@ const vaultFs = createExpoVaultFileSystem();
 const MAX_PDF_BYTES = 1024 * 1024;
 const vault = createLocalFileVault(vaultFs, { maxBytes: MAX_PDF_BYTES, nextStageId: () => Crypto.randomUUID() });
 const importer = createDocumentImporter({ repository, vault });
+function nextDocumentUpdateTimestamp(previous: string): string {
+  return new Date(Math.max(Date.now(), Date.parse(previous) + 1)).toISOString();
+}
 const categoryOptions: readonly { value: DocumentCategory; label: string }[] = [
   { value: 'receipt', label: 'Receipt' },
   { value: 'invoice', label: 'Invoice' },
@@ -61,9 +64,7 @@ export default function DocumentsScreen() {
         setNotice('Category unchanged.');
         return;
       }
-      const now = Date.now();
-      const nextMs = Math.max(now, Date.parse(current.value.updatedAt) + 1);
-      const updated = { ...current.value, category: selectedCategory, updatedAt: new Date(nextMs).toISOString() };
+      const updated = { ...current.value, category: selectedCategory, updatedAt: nextDocumentUpdateTimestamp(current.value.updatedAt) };
       const result = await repository.update(updated, current.value.updatedAt);
       if (!result.ok) throw new Error(`Category could not be saved (${result.error}). Reload and retry.`);
       await refresh();
