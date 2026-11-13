@@ -591,6 +591,7 @@ export default function VaultTestScreen() {
       <Button title={busy ? 'Running...' : 'Verify Persistence (read-only)'} onPress={runPersistenceCheck} disabled={busy} />
       <Text>Picker test: choose a NON-SENSITIVE PDF/image (max 1 MiB). Stored test files are not deleted and share the app-private vault directory.</Text>
       <Button title={busy ? 'Running...' : 'Select Test Document (Picker Import)'} onPress={runPickerImport} disabled={busy} />
+      <Button title={busy ? 'Running...' : 'Native File Picker (Read-only Probe)'} onPress={runNativePickerProbe} disabled={busy} />
       <View style={{ padding: 12, borderRadius: 8, backgroundColor: '#eeeeee' }}>
         <Text selectable style={{ color: '#111111' }}>{report}</Text>
       </View>
