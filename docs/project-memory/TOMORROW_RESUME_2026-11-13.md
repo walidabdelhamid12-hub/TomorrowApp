@@ -85,3 +85,54 @@ When user says **"Tomorrow Resume"** or **"افتح Tomorrow Resume"**, start he
 - Latest user-confirmed local sync and checks: `424f834` fast-forward, TypeScript EXIT 0, scoped strict ESLint EXIT 0. Local `package.json` and `package-lock.json` remained modified and untouched. No merge to `main`.
 - Acceptance scope: **Android native PDF test import and post-restart persistence only**. Do not claim production Documents UI, camera/gallery, image import, OCR, transaction posting, broader file types, iOS, backup/restore or Phase 9 complete.
 - Next proposed scoped work: review and design Documents V1 production-facing entry/list/import/view flow; preserve user-approved Documents entry inside Finance **+ Add**, not as a third bottom button. Define UX and files before implementation. Continue with explicit user confirmation for consequential scope.
+
+## 2026-11-14 — Native PDF Geometry Lab checkpoint
+
+### Scope and isolation
+- Separate Android lab: `D:\TomorrowNativePdfLab-v3`.
+- Main app: `D:\Mobile Apps\TomorrowApp`.
+- Native PDF extraction and diagnostic geometry mapping are review-only.
+- No automatic financial posting, production integration, or merge to main is authorized.
+
+### Verified lab checkpoint
+- Kotlin/PDFBox extraction reference: 744 positioned glyphs, 115 callbacks, 36 layout rows, zero unclaimed glyphs.
+- Diagnostic adapter uses shared row IDs, field bounds and 3-point tolerance.
+- Strict validation and fail-closed review behavior.
+- Sparse callback array validation fixed, including inherited numeric properties.
+- Final reported tests: 211/211 PASS.
+- TypeScript: PASS.
+- All diagnostic associations remain `needsReview=true`.
+- Adapter is not connected to a production app call site.
+- No APK rebuild or new Android device test is claimed for this checkpoint.
+
+### PDF reference totals
+- 2026: EGP 895,000
+- 2027: EGP 1,734,150
+- 2028: EGP 1,528,980
+- 2029: EGP 780,000
+- 2030: EGP 584,700
+- Grand total: EGP 5,522,830.
+
+### Remaining verification
+- Compare actual diagnostic adapter output field-by-field against the original PDF and extracted JSON.
+- Review split/ambiguous text in rows 15, 21, 22 and 34.
+- Inspect callback fragments 1, 2, 5, 7 and 114.
+- Record field-level mismatches and review requirements.
+- Decide GO/NO-GO for extraction accuracy separately from code/test acceptance.
+- Existing code checkpoint: GO for review-only diagnostic implementation.
+- Automatic financial posting: NO-GO.
+
+### Current TomorrowApp checkpoint
+- User-provided local Git HEAD on 2026-11-14: `3e67c65`.
+- Branch: `codex/finance-8-6-expenses-redesign`.
+- Local `package.json` and `package-lock.json` are modified.
+- Numerous untracked scripts, backups and tests exist and must be preserved.
+- Remote GitHub synchronization is not established by this local inspection.
+- Earlier Android native PDF import and persistence PASS evidence remains valid within its tested scope.
+
+### Resume rules
+- Preserve all previous roadmap, design decisions, Android evidence and financial safety boundaries.
+- Do not treat PDF reference totals as verified structured adapter output.
+- Do not claim Phase 9 complete.
+- Reserve Codex for essential implementation/review.
+- No destructive Git cleanup, automatic dependency changes or merge to main.
