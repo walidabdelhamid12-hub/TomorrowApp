@@ -136,3 +136,16 @@ When user says **"Tomorrow Resume"** or **"افتح Tomorrow Resume"**, start he
 - Do not claim Phase 9 complete.
 - Reserve Codex for essential implementation/review.
 - No destructive Git cleanup, automatic dependency changes or merge to main.
+
+## Native PDF Lab - Independent Test - 2026-11-14
+
+- Android Native PDF Lab: independent English PDF extraction test passed.
+- Test fixture: PDF_Geometry_Independent_Test.pdf.
+- Extract Layout: 1 page, 586 positioned characters, 13 detected rows.
+- Extraction JSON export succeeded.
+- Original Payment_Plans.pdf test remains diagnostic only.
+- Arabic PDF support is NOT approved yet.
+- Next task: prepare our own Arabic PDF test files, including RTL, financial tables, mixed Arabic/English, Arabic and Western numerals, currencies, dates, and multiple pages.
+- Verify extraction order, table geometry, row associations, and numeric accuracy before approval.
+- Keep postingAllowed=false; no automatic financial posting.
+- No production approval or merge to main.
