@@ -232,3 +232,61 @@ Do not repeat the completed 526-test regression unless code changes require it.
 - Commit and push to the current working branch.
 - Verify local and remote commit hashes match.
 - After checkpoint, resume remaining Phase 9 work separately.
+
+<!-- TOMORROW_PHASE8_FINAL_CLEANUP_20261115 -->
+
+## November 15, 2026 - Phase 8 Final Closure and Cleanup
+
+### Project Status
+- Project: TomorrowApp Finance.
+- Working branch: codex/finance-8-6-expenses-redesign.
+- Last confirmed GitHub checkpoint: a646813.
+- Phase 8 Financial Reports and Analytics: functionally complete (100%).
+- Overall Finance roadmap progress: approximately 75% +/- 5%. This is an estimate, not an automated measurement.
+
+### Verified Quality Gates
+- TypeScript: PASS (npx tsc --noEmit, exit 0).
+- Finance tests: 2,153 passed, 0 failed.
+- Finance test command: npm run test:finance.
+- Tests passed after archiving the first 252 files.
+- The final five backup files were subsequently archived with matching SHA-256 hashes.
+- No additional TypeScript or Finance test run was reported after the final five-file archive.
+
+### Phase 8 Cleanup
+- One unused ReportCurrencyOverview.tsx component archived.
+- 18 backup folders archived, containing 64 files.
+- 187 individual backup files archived.
+- Five final Phase 8 temporary files archived.
+- Total archived: 257 files.
+- All reported archive batches passed SHA-256 verification.
+- Archive root: D:\TomorrowApp-Cleanup-Archive-20261115
+- Archives:
+  - phase8-backup-folders
+  - individual-backups
+  - phase8-final-five
+  - src\features\finance\components\reporting\ReportCurrencyOverview.tsx
+- No Git commit, push, reset, clean, or main-branch merge was performed during cleanup.
+
+### Preserved Work
+- package.json and package-lock.json remain locally modified for Phase 9 expo-crypto work.
+- Five ScanDocumentButton backup files were deliberately retained.
+- Phase 9 scripts, document import implementation, and document tests were retained.
+- Last verified untracked count was 31 before the final five-file archive; expected remaining count is 26, not yet independently recounted.
+- The remaining untracked files must not be deleted or committed without review.
+- Financial posting safety remains restricted: postingAllowed=false.
+
+### Next Session
+1. Resume Phase 9 - Smart Documents and Receipts.
+2. Review the existing Phase 9 implementation and resume instructions before changes.
+3. Continue Android document import and persistence verification.
+4. Preserve the finance safety boundary and existing Phase 9 work.
+5. Do not merge into main without explicit approval.
+6. Continue using one verified task at a time.
+
+### Finance Roadmap
+- Phases 1-7: substantial finance functionality implemented; remaining gaps must be assessed individually.
+- Phase 8: closed.
+- Phase 9: in progress.
+- Phase 10: voice input pending.
+- Phase 11: backup and synchronization pending.
+- Phase 12: smart recording and financial notifications pending.
