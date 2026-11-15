@@ -7,11 +7,13 @@ const Module = require('node:module');
 const ts = require('typescript');
 const React = require('react');
 const root = path.resolve(__dirname, '..'), load = Module._load;
+let componentStates = new Map(), activeFrame = null;
+const stateArray = () => { if (activeFrame === null) return states; if (!componentStates.has(activeFrame)) componentStates.set(activeFrame, []); return componentStates.get(activeFrame); };
 let states, cursor, ledger, finance, ready, params, calls, alerts, files, tree, html;
 const hooks = { ...React, useMemo: fn => fn(), useState: initial => {
-  const index = cursor++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial;
+  const states = stateArray(); const index = cursor++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial;
   return [states[index], next => { states[index] = typeof next === 'function' ? next(states[index]) : next; }];
-}, useRef: initial => { const index = cursor++; if (!(index in states)) states[index] = { current: initial }; return states[index]; } };
+}, useRef: initial => { const states = stateArray(); const index = cursor++; if (!(index in states)) states[index] = { current: initial }; return states[index]; } };
 const selectors = data => select => select(new Proxy(data, { get: (value, key) => {
   assert.ok(Object.hasOwn(value, key), 'No store writers: ' + String(key)); return value[key];
 } }));
@@ -25,7 +27,7 @@ class File {
 Module._load = function(id, parent, main) {
   if (id === 'react') return hooks;
   if (id === '@react-native-community/datetimepicker') return { __esModule: true, default: 'DateTimePicker' };
-  if (id === 'react-native') return { Platform: { OS: 'android' }, View: 'View', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', Alert: { alert: (...args) => alerts.push(args) } };
+  if (id === 'react-native') return { Platform: { OS: 'android' }, Modal: 'Modal', View: 'View', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', Alert: { alert: (...args) => alerts.push(args) } };
   if (id === '@expo/vector-icons') return { Ionicons: 'Ionicons' };
   if (id === 'expo-router') return { useRouter: () => ({ push: value => calls.push(value), back: () => calls.push('back') }), useLocalSearchParams: () => params };
   if (id === '@/components/ui') return { Screen: 'Screen', AppText: 'AppText' };
@@ -67,7 +69,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 const tx = (id, amount, extra = {}) => ({ id, amount, type: 'expense', date: '2026-11-10', accountId: 'bank', currencyCode: 'EGP', categoryId: 'food', note: 'Groceries', ...extra });
 const freeze = value => { if (value && typeof value === 'object') { Object.freeze(value); Object.values(value).forEach(freeze); } };
 beforeEach(() => {
-  states = []; cursor = 0; ready = true; params = {}; calls = []; alerts = []; files = []; html = [];
+  componentStates = new Map(); activeFrame = null; states = []; cursor = 0; ready = true; params = {}; calls = []; alerts = []; files = []; html = [];
   ledger = { accounts: [{ id: 'bank', name: 'Bank', currencyCode: 'EGP', archived: false }, { id: 'oman', name: 'Oman', currencyCode: 'OMR', archived: true }],
     categories: [{ id: 'food', name: 'Food', kind: 'expense' }, { id: 'travel', name: 'Travel', kind: 'expense' }], transfers: [],
     transactions: [tx('a', 100), tx('refund', 20, { entryType: 'refund', relatedTransactionId: 'a', note: 'Refund' }),
@@ -76,18 +78,19 @@ beforeEach(() => {
   finance = { assets: [], debts: [], loans: [], cheques: [] };
 });
 
-test('compact Expenses has eight real report tabs, one chart, three per-currency summaries and signed refund rows', () => {
-  render(); assert.match(allText(), /2026-11-01/); assert.match(allText(), /Net Expenses/);
-  assert.match(allText(), /80\.00/); press('View all Expenses transactions'); render(); assert.match(allText(), /-20\.00 EGP/);
-  for (const name of ['Income','Expenses','Accounts','Assets','Installments','Loans','Receivable','Payable']) assert.ok(button(`Open ${name} report`));
+test('compact Expenses has functional Back navigation, one chart, currency summaries and signed refund rows', () => {
+  render(); assert.match(allText(), /2026-11-01/); assert.match(allText(), /Total Expenses/);
+  assert.match(allText(), /80\.00/); press('View all Expenses transactions'); render(); assert.match(allText(), /-20\.00 🇪🇬 EGP/);
+  assert.equal(nodes('Pressable').some(node => node.props.accessibilityLabel?.startsWith('Open ')), false);
+  press('Back'); assert.deepEqual(calls, ['back']);
   assert.equal(nodes('View').filter(node => node.props.testID?.startsWith('chart-')).length, 1);
-  press('Vertical Bar'); render(); assert.ok(nodes('View').some(node => node.props.testID === 'chart-vertical'));
-  press('Horizontal Bar'); render(); assert.ok(nodes('View').some(node => node.props.testID === 'chart-horizontal'));
+  press('Choose chart type, donut'); render(); press('Vertical'); render(); assert.ok(nodes('View').some(node => node.props.testID === 'chart-vertical'));
+  press('Choose chart type, vertical'); render(); press('Horizontal'); render(); assert.ok(nodes('View').some(node => node.props.testID === 'chart-horizontal'));
   assert.equal(nodes('View').filter(node => node.props.testID?.startsWith('chart-')).length, 1);
 });
 
 test('Expenses currency selection never combines EGP and OMR and statement preserves exact filters', () => {
-  render(); press('Currency: 🇪🇬 EGP'); render(); press('🇴🇲 OMR'); render();
+  render(); press('Choose analysis currency, EGP'); render(); press('🇴🇲 OMR'); render();
   assert.match(allText(), /1\.237/); assert.match(allText(), /🇴🇲/);
   assert.doesNotMatch(allText(), /report-transaction-a/);
   assert.equal(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).length, 0);
@@ -98,29 +101,29 @@ test('Expenses currency selection never combines EGP and OMR and statement prese
   press('View all Expenses transactions'); render();
   assert.equal(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).length, 0);
   params = { from: '2026-11-01', to: '2026-11-30', currencyCode: 'OMR' }; states = []; render(Statement);
-  assert.match(allText(), /1\.237 OMR/); assert.match(allText(), /Taxi in Muscat/); assert.doesNotMatch(allText(), /100\.00 EGP/);
+  assert.match(allText(), /1\.237 🇴🇲 OMR/); assert.match(allText(), /Taxi in Muscat/); assert.doesNotMatch(allText(), /100\.00 🇪🇬 EGP/);
 });
 
 test('month/account/category controls retain full refund context and preserve archived filters', () => {
-  render(); press('Acc.: All accounts'); render(); press('Oman 🇴🇲 OMR · Archived'); render();
-  press('Cat.: All Categories'); render(); press('Travel'); render();
+  render(); press('Account: All accounts'); render(); press('Oman 🇴🇲 OMR · Archived'); render();
+  press('Category: All Categories'); render(); press('Travel'); render();
   press('View all Expenses transactions'); render();
   assert.equal(calls.length, 0);
   assert.deepEqual(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).map(node => node.props.testID), ['report-transaction-omr']);
-  assert.match(allText(), /1\.237 OMR/);
-  press('From date: 2026-11-01'); render();
+  assert.match(allText(), /1\.237 🇴🇲 OMR/);
+  press('from date: 2026-11-01'); render();
   assert.equal(nodes('DateTimePicker').length, 1);
 });
 
 test('Expenses exports exact selected OMR rows to readable A4 PDF and Excel XLSX without mutation', async () => {
   const before = structuredClone({ ledger, finance }); freeze(ledger); freeze(finance);
-  render(); press('Currency: 🇪🇬 EGP'); render(); press('🇴🇲 OMR'); render();
+  render(); press('Choose analysis currency, EGP'); render(); press('🇴🇲 OMR'); render();
   press('Export PDF'); press('Export PDF'); await flush();
   assert.equal(html.length, 1, 'Synchronous export lock blocks rapid double-tap');
   assert.match(html[0], /size:A4 portrait;margin:10mm/); assert.match(html[0], /OMR · Omani Rial/);
   assert.match(html[0], /aria-label="Oman"/); assert.match(html[0], /1\.237/);
   assert.doesNotMatch(html[0], /Groceries|100\.00/);
-  render(); press('Export Excel XLSX'); await flush();
+  render(); press('Export Excel'); await flush();
   const workbook = files.find(file => file.uri.endsWith('.xlsx'));
   assert.ok(workbook); assert.equal(workbook.options.encoding, 'base64');
   const bytes = Buffer.from(workbook.content, 'base64');
@@ -137,7 +140,7 @@ test('Share offers functional format choices and incomplete data blocks every ex
   choice.onPress(); await flush(); assert.ok(files.some(file => file.uri.endsWith('.xlsx')));
   ledger.transactions.push(tx('bad', 0.001)); states = []; render();
   assert.match(allText(), /Incomplete report/);
-  for (const label of ['Export PDF','Export Excel XLSX','Export Share']) assert.equal(button(label).props.disabled, true);
+  for (const label of ['Export PDF','Export Excel','Export Share']) assert.equal(button(label).props.disabled, true);
 });
 
 test('statement rejects repeated/unsupported currency parameters and keeps exports unavailable before hydration', () => {
@@ -153,17 +156,19 @@ test('statement rejects repeated/unsupported currency parameters and keeps expor
 test('negative-only categories have no chart segments and retain actual signed rows', () => {
   ledger.transactions = [tx('purchase', 100, { date: '2026-10-01' }), tx('r', 20, { entryType: 'refund', relatedTransactionId: 'purchase' })];
   render(); assert.match(allText(), /No positive net expenses to chart/);
-  press('View all Expenses transactions'); render(); assert.match(allText(), /-20\.00 EGP/);
+  press('View all Expenses transactions'); render(); assert.match(allText(), /-20\.00 🇪🇬 EGP/);
   assert.equal(nodes('View').some(node => node.props.testID?.startsWith('chart-')), false);
 });
 
-test('statement row remains horizontal and horizontally scrollable without truncating long descriptions', () => {
+test('statement mobile rows retain exact descriptions and signed currency amounts', () => {
   params = { from: '2026-11-01', to: '2026-11-30', currencyCode: 'OMR' };
   ledger.transactions[2].note = '<script>long & Arabic وصف</script>';
   render(Statement);
-  assert.ok(nodes('ScrollView').some(node => node.props.horizontal));
-  assert.ok(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).every(node => node.props.style.flexDirection === 'row'));
-  assert.ok(nodes('AppText').every(node => node.props.numberOfLines === undefined));
+  assert.equal(nodes('ScrollView').some(node => node.props.horizontal), false);
+  assert.ok(nodes('AppText').some(node => text(node).includes('<script>long & Arabic وصف</script>')));
+  const record = nodes('View').find(node => node.props.style?.flexDirection === 'row' && text(node).includes('<script>long & Arabic وصف</script>') && text(node).includes('1.237'));
+  assert.ok(record, 'Actual mobile record contains the exact description and amount'); assert.match(text(record), /Travel/);
+  assert.match(allText(), /1\.237 🇴🇲 OMR/);
 });
 
 test('Expenses branded PDF escapes descriptions, preserves refund precision, and rejects unverified rows', () => {
@@ -194,15 +199,15 @@ test('Reports entry retains eight routes in two columns with Finance icons', () 
   assert.ok(nodes('Ionicons').some(node => node.props.name === 'trending-down-outline'));
 });
 
-test('polished Expenses keeps comparison in summaries, View all beside Transactions, and three export actions', () => {
+test('polished Expenses keeps compact summaries and four footer actions', () => {
   render();
-  assert.match(allText(), /Net Expenses/); assert.match(allText(), /Previous Period/); assert.match(allText(), /Change/);
-  assert.match(allText(), /All Categories/); assert.doesNotMatch(allText(), /Previous-period comparison|View Statement/);
-  assert.ok(nodes('Ionicons').filter(node => node.props.name === 'trending-down-outline').length >= 2);
+  assert.match(allText(), /Total Expenses/); assert.match(allText(), /Transactions/); assert.match(allText(), /Currencies/);
+  assert.match(allText(), /All Categories/); assert.doesNotMatch(allText(), /Previous-period comparison/); assert.ok(button('View Statement'));
+  assert.ok(nodes('Ionicons').filter(node => node.props.name === 'trending-down-outline').length >= 1);
   assert.deepEqual(nodes('Pressable').filter(node => node.props.accessibilityLabel?.startsWith('Export ')).map(node => node.props.accessibilityLabel),
-    ['Export PDF', 'Export Excel XLSX', 'Export Share']);
-  press('Acc.: All accounts'); render(); press('Oman 🇴🇲 OMR · Archived'); render();
-  assert.match(allText(), /Previous Period/);
+    ['Export PDF', 'Export Excel', 'Export Share']);
+  press('Account: All accounts'); render(); press('Oman 🇴🇲 OMR · Archived'); render();
+  assert.match(allText(), /1\.237/);
 });
 
 test('branded PDF retains metadata, navy header, three summary cards, stripes, Arabic direction and A4 scale', () => {

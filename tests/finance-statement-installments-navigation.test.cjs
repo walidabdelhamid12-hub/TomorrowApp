@@ -6,7 +6,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '../src/', file), 'utf
 test('Installments report forwards month to schedule statement', () => {
   const report = read('app/finance/report-installments.tsx');
   assert.match(report, /pathname: '\/finance\/statement-installments', params: \{ month, from: dates\.from, to: dates\.to, currencyCode: activeCurrency \}/);
-  assert.match(report, /<ReportStatementLink/);
+  assert.match(report, /statement=\{\(\) => router\.push/);
 });
 test('Installments statement only projects scheduled due dates', () => {
   const screen = read('app/finance/statement-installments.tsx');
@@ -16,6 +16,6 @@ test('Installments statement only projects scheduled due dates', () => {
   assert.match(utility, /item\.dueDate >= from && item\.dueDate <= to/);
   assert.match(utility, /aggregateSavedInstallmentsReport\(records, from, to\)/);
   assert.match(utility, /BigInt\(whole \+ fraction\.padEnd\(decimals, '0'\)\)/);
-  assert.match(screen, /Paid, overdue and remaining balances are not verified/);
+  assert.match(screen, /Scheduled due · not a recorded payment/);
   assert.doesNotMatch(screen, /createContract|updateContract|deleteContract|setState|postingAllowed\s*=\s*true/);
 });

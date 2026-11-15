@@ -15,7 +15,8 @@ test('Expenses Report uses expense categories and expense aggregates', () => {
   assert.match(screen, /category\.kind === 'expense'/);
   assert.match(screen, /report\?\.expenseCategories/);
   assert.match(screen, /netExpenses/);
-  assert.match(screen, /compareExpenseRange\(/);
+  assert.match(screen, /buildExpensesStatement\(context, \{ from: period\.from, to: period\.to \}/);
+  assert.match(screen, /<ReportDashboardMetrics kind="expenses" total=\{netExpenses\}/);
   assert.doesNotMatch(screen, /report\.incomeCategories|row\.income|item\.income/);
 });
 test('Expenses inline transactions preserve report filters and Statement remains read-only', () => {
@@ -23,8 +24,8 @@ test('Expenses inline transactions preserve report filters and Statement remains
   const statement = read('src/app/finance/statement-expenses.tsx');
   assert.match(report, /setTransactionsExpanded\(value => !value\)/);
   assert.match(report, /transactionsExpanded && <ReportTransactionRows compact rows=\{transactions\}/);
-  assert.doesNotMatch(report, /pathname: '\/finance\/statement-expenses'/);
-  for (const key of ['from', 'to', 'accountId', 'categoryId']) {
+  assert.match(report, /statement=\{\(\) => router\.push\(\{ pathname: '\/finance\/statement-expenses'/);
+  for (const key of ['from', 'to', 'accountId', 'categoryId', 'currencyCode']) {
     assert.match(report, new RegExp('\\b' + key + '\\b'));
     assert.match(statement, new RegExp('\\b' + key + '\\b'));
   }

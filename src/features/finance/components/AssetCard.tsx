@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText, Card } from '@/components/ui';
 import { AssetTypeIcon } from '@/features/finance/components/AssetTypeIcon';
+import { MetalTypeLabel } from '@/features/finance/components/MetalTypeLabel';
 import type { Asset } from '@/features/finance/types/finance';
 import { useTheme } from '@/theme';
 
@@ -31,7 +32,7 @@ export function AssetCard({ asset, categoryLabel, balanceText, valuationText, ba
           <View style={styles.heading}>
             <AssetTypeIcon category={asset.category} currencyCode={'currencyCode' in asset ? asset.currencyCode : undefined} />
             <View style={styles.name}>
-              <AppText variant="label" color={colors.finance.neutral.accent}>{categoryLabel}</AppText>
+              <AppText variant="label" color={colors.finance.neutral.accent}>{asset.category === 'gold' || asset.category === 'silver' ? <MetalTypeLabel type={asset.category} suffix={categoryLabel.slice(asset.category === 'gold' ? 4 : 6)} /> : categoryLabel}</AppText>
               <AppText variant="bodyStrong">{asset.name}</AppText>
               {valuationText !== undefined && <AppText variant="caption" color={colors.finance.neutral.accent}>{balanceText}</AppText>}
             </View>

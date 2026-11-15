@@ -1,3 +1,8 @@
+import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
+import { buildReportTableXlsx } from '@/features/finance/utils/reportTableXlsx';
+import { shareStatementXlsx } from '@/features/finance/utils/shareStatementXlsx';
+import { StatementUnifiedChrome } from '@/features/finance/components/reporting/StatementUnifiedChrome';
+import { StatementMobileRows } from '@/features/finance/components/reporting/StatementMobileRows';
 import { reportRouteCurrency } from '@/features/finance/utils/reportRoutePeriod';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -64,6 +69,22 @@ export default function IncomeStatementScreen() {
     return !currencyCode ? full : { ...full, rows: full.rows.filter(row => row.currencyCode === currencyCode), report: { ...full.report, currencies: full.report.currencies.filter(row => row.currencyCode === currencyCode), incomeCategories: full.report.incomeCategories.filter(row => row.currencyCode === currencyCode) } };
   }, [currencyCode, valid, ledgerReady, financeReady, from, to, accountId, categoryId,
     accounts, categories, transactions, transfers, assets, debts, loans, cheques]);
+  const exportExcel = async () => {
+    if (exporting || !statement || !statement.reconciled || statement.report.unknown.length > 0 || !from || !to) return;
+    setExporting(true);
+    try {
+      const rows = statement.rows.map(row => [row.date,
+        categories.find(c => c.id === row.categoryId)?.name ?? 'Uncategorized',
+        [row.note, accounts.find(a => a.id === row.accountId)?.name].filter(Boolean).join(' · '),
+        row.currencyCode, row.amount] as const);
+      const bytes = buildReportTableXlsx({ title: 'Income Statement', period: { from, to },
+        columns: ['Date', 'Category', 'Description', 'Currency', 'Amount'], rows,
+        numericColumns: [4], verified: true, notice: 'Verified ordinary income only.' });
+      await shareStatementXlsx(bytes, { title: 'Income Statement', filePrefix: 'income-statement' });
+    } catch (error) {
+      Alert.alert('Excel export failed', error instanceof Error ? error.message : 'Unable to create Excel workbook.');
+    } finally { setExporting(false); }
+  };
   const exportPdf = async () => {
     if (exporting || !statement || !statement.reconciled || statement.report.unknown.length > 0 || !from || !to) return;
     setExporting(true);
@@ -87,7 +108,6 @@ export default function IncomeStatementScreen() {
         <Ionicons name="arrow-back" size={23} color={colors.text} />
         <AppText style={{ marginLeft: spacing.sm }}>Income Report</AppText>
       </Pressable>
-      <AppText variant="h1">Income Statement</AppText>
       {!valid ? (
         <AppText color="textSecondary" style={{ marginTop: spacing.md }}>
           Invalid or missing statement filters. Return to the Income Report.
@@ -96,13 +116,11 @@ export default function IncomeStatementScreen() {
         <ActivityIndicator color={moduleColors.finance} />
       ) : (
         <View style={{ marginTop: spacing.md }}>
-          <AppText color="textSecondary">{from} to {to}</AppText>
-          <AppText color="textSecondary">
-            Account: {accountId ? accounts.find(a => a.id === accountId)?.name ?? 'Unknown account' : 'All accounts'}
-          </AppText>
-          <AppText color="textSecondary">
-            Category: {categoryId ? categories.find(c => c.id === categoryId)?.name ?? 'Unknown category' : 'All income categories'}
-          </AppText>
+          <StatementUnifiedChrome kind="Income" from={from!} to={to!}
+            account={accountId ? accounts.find(a => a.id === accountId)?.name ?? 'Unknown account' : 'All accounts'}
+            category={categoryId ? categories.find(c => c.id === categoryId)?.name ?? 'Unknown category' : 'All income categories'}
+            currency={currencyCode || undefined}
+            totals={statement.report.currencies.map(total => ({ currencyCode: total.currencyCode, amount: formatAmount(total.income, total.currencyCode) }))} />
           {statement.report.unknown.length > 0 && (
             <AppText style={{ color: '#D97706', marginTop: spacing.md }}>
               Incomplete: {statement.report.unknown.length} unverified transaction(s).
@@ -115,51 +133,33 @@ export default function IncomeStatementScreen() {
             </AppText>
           ) : (
             <>
-              <AppText variant="h3" style={{ marginTop: spacing.lg }}>Income by currency</AppText>
-              {statement.report.currencies.filter(c => c.income !== 0).map(total => (
-                <View key={total.currencyCode} style={{
-                  flexDirection: 'row', justifyContent: 'space-between',
-                  paddingVertical: spacing.sm,
-                }}>
-                  <AppText>{total.currencyCode}</AppText>
-                  <AppText variant="bodyStrong">{formatAmount(total.income, total.currencyCode)}</AppText>
-                </View>
-              ))}
-              <AppText variant="h3" style={{ marginTop: spacing.lg }}>Transactions ({statement.rows.length})</AppText>
+              <AppText variant="bodyStrong" style={{ marginTop: spacing.sm, marginBottom: spacing.xs }}>Transactions ({statement.rows.length})</AppText>
               {statement.rows.length === 0 && (
                 <AppText color="textSecondary" style={{ marginTop: spacing.sm }}>
-                  No verified ordinary income for this selection.
+                  No income transactions for this period.
                 </AppText>
               )}
-              {statement.rows.map(row => (
-                <View key={row.id} style={{
-                  borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
-                  borderRadius: 12, padding: spacing.md, marginTop: spacing.sm,
-                }}>
-                  <AppText variant="bodyStrong">
-                    {categories.find(c => c.id === row.categoryId)?.name ?? 'Uncategorized'}
-                  </AppText>
-                  <AppText color="textSecondary">{row.date} · {accounts.find(a => a.id === row.accountId)?.name ?? 'Unknown account'}</AppText>
-                  {!!row.note && <AppText color="textSecondary">{row.note}</AppText>}
-                  <AppText variant="bodyStrong" style={{ color: moduleColors.finance, marginTop: spacing.xs }}>
-                    +{formatAmount(row.amount, row.currencyCode)} {row.currencyCode}
-                  </AppText>
-                </View>
-              ))}
+              <StatementMobileRows rows={statement.rows.map(row => ({
+                id: row.id,
+                date: row.date,
+                category: categories.find(c => c.id === row.categoryId)?.name ?? 'Uncategorized',
+                description: [row.note, accounts.find(a => a.id === row.accountId)?.name].filter(Boolean).join(' · '),
+                amount: formatAmount(row.amount, row.currencyCode),
+                categoryIcon: categories.find(c => c.id === row.categoryId)?.icon as keyof typeof Ionicons.glyphMap | undefined,
+                categoryColor: categories.find(c => c.id === row.categoryId)?.color,
+                currencyCode: row.currencyCode,
+              }))} />
             </>
           )}
-          {statement.reconciled && statement.report.unknown.length === 0 && (
-            <Pressable accessibilityRole="button" accessibilityLabel="Export Income Statement PDF"
-              disabled={exporting} onPress={exportPdf}
-              style={{ minHeight: 48, marginTop: spacing.lg, borderRadius: 10,
-                backgroundColor: moduleColors.finance, alignItems: 'center', justifyContent: 'center',
-                opacity: exporting ? 0.6 : 1 }}>
-              <AppText style={{ color: '#FFFFFF' }}>{exporting ? 'Creating PDF...' : 'Export PDF'}</AppText>
-            </Pressable>
-          )}
-          <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.md }}>
-            Read-only statement. Excel XLSX is available from the Income Report.
-          </AppText>
+          <StatementExportActions busy={exporting}
+            disabled={!statement.reconciled || statement.report.unknown.length > 0}
+            pdf={exportPdf}
+            excel={exportExcel}
+            share={() => Alert.alert('Share Income Statement', 'Choose a format', [
+              { text: 'PDF', onPress: () => { void exportPdf(); } },
+              { text: 'Excel XLSX', onPress: () => { void exportExcel(); } },
+              { text: 'Cancel', style: 'cancel' },
+            ])} />
         </View>
       )}
     </Screen>

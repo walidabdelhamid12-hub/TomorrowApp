@@ -32,13 +32,13 @@ function unzip(bytes) {
 }
 const base = { period: { from: '2026-11-01', to: '2026-11-12' }, verified: true, notice: 'Read-only & verified <scope> "quoted"' };
 const cases = [
-  ['Income', ['Date','Account','Category','Description','Amount','Currency'], [['2026-11-10','Bank','Salary','<safe> & optional note',1.237,'OMR']], 'E6', '1.237'],
-  ['Accounts', ['Account','Currency','Opening balance','Closing balance','Net change'], [['Bank','OMR',1.237,2.474,1.237]], 'D6','2.474'],
-  ['Assets', ['Asset','Type','Unit','Opening quantity','Additions','Withdrawals','Closing quantity','Net change'], [['Gold','Gold','g',1.237,0.101,0,1.338,0.101]], 'G6','1.338'],
-  ['Installments', ['Contract','Currency','Ownership','All scheduled','Due in period','Due count','Schedule count'], [['Schedule','OMR','Standalone contract','0.303','0.101',1,2]], 'E6','0.101'],
-  ['Loans', ['Loan','Currency','Original principal','Contractual total','Payments','Fees','Current contractual remaining','Current principal remaining','Period-end remaining'], [['Loan','OMR',1000,1200,100,5,1100,916.6666666666666,1100]], 'H6','916.667'],
-  ['Debts Receivable', ['Person','Currency','Total','Collected','Current remaining','Period-end remaining'], [['Debtor','OMR',10,1.237,8.763,8.763]], 'E6','8.763'],
-  ['Debts Payable', ['Person','Currency','Total','Paid','Current remaining','Period-end remaining'], [['Creditor','OMR',10,1.237,8.763,8.763]], 'E6','8.763'],
+  ['Income', ['Date','Account','Category','Description','Amount','Currency'], [['2026-11-10','Bank','Salary','<safe> & optional note',1.237,'OMR']], 'E9', '1.237'],
+  ['Accounts', ['Account','Currency','Opening balance','Closing balance','Net change'], [['Bank','OMR',1.237,2.474,1.237]], 'D9','2.474'],
+  ['Assets', ['Asset','Type','Unit','Opening quantity','Additions','Withdrawals','Closing quantity','Net change'], [['Gold','Gold','g',1.237,0.101,0,1.338,0.101]], 'G9','1.338'],
+  ['Installments', ['Contract','Currency','Ownership','All scheduled','Due in period','Due count','Schedule count'], [['Schedule','OMR','Standalone contract','0.303','0.101',1,2]], 'E9','0.101'],
+  ['Loans', ['Loan','Currency','Original principal','Contractual total','Payments','Fees','Current contractual remaining','Current principal remaining','Period-end remaining'], [['Loan','OMR',1000,1200,100,5,1100,916.6666666666666,1100]], 'H9','916.667'],
+  ['Debts Receivable', ['Person','Currency','Total','Collected','Current remaining','Period-end remaining'], [['Debtor','OMR',10,1.237,8.763,8.763]], 'E9','8.763'],
+  ['Debts Payable', ['Person','Currency','Total','Paid','Current remaining','Period-end remaining'], [['Creditor','OMR',10,1.237,8.763,8.763]], 'E9','8.763'],
 ];
 for (const [title, columns, rows, ref, amount] of cases) test(title + ' exports a complete real OOXML workbook with correct numeric cells and scope', () => {
   const table = { ...base, title, columns, rows, ...(title === 'Installments' ? { numericColumns: [3,4,5,6], integerColumns: [5,6] } : {}) }; const before = structuredClone(table);
@@ -68,4 +68,35 @@ test('currency-denominated asset quantities retain three decimals and PDF/XLSX u
   const { buildReportTableHtml } = require('../src/features/finance/utils/reportTableExport.ts');
   const table = { ...base, title: 'Assets Quantity Report', decimalPlaces: 3, columns: ['Asset','Unit','Closing quantity'], rows: [['Cash asset','EGP',1.237]] };
   const sheet = unzip(buildReportTableXlsx(table)).get('xl/worksheets/sheet1.xml'); assert.match(sheet, /<v>1\.237<\/v>/); assert.match(buildReportTableHtml(table), />1\.237<\/td>/);
+});
+
+test('verified unit-scoped chart is linked to the worksheet and does not aggregate currencies', () => {
+  const parts = unzip(buildReportTableXlsx({ ...base, title: 'Income', columns: ['Category','Currency','Amount'], rows: [['Salary','OMR',1.237],['Other','OMR',2.474],['Bonus','USD',5]] }));
+  for (const name of ['xl/charts/chart1.xml','xl/charts/chart2.xml','xl/drawings/drawing1.xml','xl/drawings/drawing2.xml','xl/worksheets/_rels/sheet1.xml.rels','xl/drawings/_rels/drawing1.xml.rels']) assert.ok(parts.has(name), name);
+  assert.match(parts.get('xl/charts/chart1.xml'), /Salary/);
+  assert.doesNotMatch(parts.get('xl/charts/chart1.xml'), /Bonus/);
+  assert.match(parts.get('[Content_Types].xml'), /drawingml.chart\+xml/);
+  assert.match(parts.get('xl/worksheets/sheet1.xml'), /<drawing /);
+});
+
+test('chart formulas and cached amounts reference each currency worksheet numeric cells', () => {
+ const parts = unzip(buildReportTableXlsx({ ...base, title: 'Income', columns: ['Category','Currency','Amount'], rows: [['Refund','EGP',-2.5],['Salary','OMR',1.237]] }));
+ for (const [number, unit, amount] of [[1,'EGP','-2.50'],[2,'OMR','1.237']]) {
+  const sheet = parts.get('xl/worksheets/sheet' + number + '.xml'), chart = parts.get('xl/charts/chart' + number + '.xml');
+  assert.match(sheet, new RegExp('<c r="C9" s="[0-9]+"><v>' + amount.replace('.', '\\.') + '</v></c>'));
+  assert.ok(chart.includes("&apos;" + unit + "&apos;!$C$9:$C$9"));
+  assert.ok(chart.includes('<c:v>' + amount + '</c:v>'));
+  const bar = chart.match(/<c:barChart>([\s\S]*?)<\/c:barChart>/)[1];
+  assert.ok(bar.lastIndexOf('</c:ser>') < bar.indexOf('<c:gapWidth '));
+  assert.ok(bar.indexOf('<c:gapWidth ') < bar.indexOf('<c:axId '));
+  assert.ok(parts.get('xl/drawings/_rels/drawing' + number + '.xml.rels').includes('Target="../charts/chart' + number + '.xml"'));
+ }
+});
+test('large worksheet retains all numeric rows while omitting the bounded chart', () => {
+ const rows = Array.from({length:501}, (_, i) => ['Record ' + i, 'OMR', 1.237]);
+ const parts = unzip(buildReportTableXlsx({ ...base, title:'Income', columns:['Category','Currency','Amount'], rows }));
+ assert.equal([...parts.keys()].some(name => name.startsWith('xl/charts/')), false);
+ const sheet = parts.get('xl/worksheets/sheet1.xml');
+ assert.match(sheet, /<c r="C509" s="5"><v>1\.237<\/v><\/c>/);
+ assert.equal((sheet.match(/<v>1\.237<\/v>/g)||[]).length,501);
 });

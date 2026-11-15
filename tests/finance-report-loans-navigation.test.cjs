@@ -10,7 +10,7 @@ test('Loans is enabled and navigates to its own report', () => {
   assert.match(screen, /aggregateLoansReport\(loans, dates\)/);
 });
 test('Loans report stays read-only and preserves uncertainty labels', () => {
-  assert.match(screen, /Historical figures are hidden/);
+  assert.match(screen, /Historical figures unavailable/);
   assert.match(screen, /Recorded payments in period/);
   assert.match(screen, /Current principal remaining/);
   assert.doesNotMatch(screen, /addLoanPayment|updateLoan|setState|postingAllowed\s*=\s*true/);

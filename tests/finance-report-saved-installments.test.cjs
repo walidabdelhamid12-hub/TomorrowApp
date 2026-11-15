@@ -51,7 +51,8 @@ test('currency summary remains read-only and never combines currencies', () => {
   assert.match(utility, /current\.total \+= units\(row\.totalScheduled, decimals\)/);
   assert.match(utility, /current\.due \+= units\(row\.dueInPeriod, decimals\)/);
   assert.match(screen, /summarizeSavedInstallmentsByCurrency\(rows\)/);
-  assert.match(screen, /<ReportCurrencyAnalysis/);
+  assert.match(screen, /<ReportPicker label="Currency" value=\{activeCurrency\} onSelect=\{setCurrency\} options=\{summary\.map/);
+  assert.doesNotMatch(screen, /<ReportCurrencyTiles\b/);
   assert.match(screen, /label: 'All scheduled contracts', value: total\.totalScheduled/);
   assert.doesNotMatch(utility, /setState|createContract\(|updateContract\(|deleteContract\(/);
 });

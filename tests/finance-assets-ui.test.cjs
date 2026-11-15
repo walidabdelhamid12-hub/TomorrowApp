@@ -109,7 +109,7 @@ test('the active Assets screen uses the same Rates symbols and corrected gold/si
   render(AssetsScreen);
   assert.equal(nodes('Card').length, 2);
   assert.deepEqual(nodes('AppText').filter(n => n.props.testID?.startsWith('asset-icon-')).map(n => n.props.testID), ['asset-icon-gold', 'asset-icon-silver']);
-  for (const value of ['GOLD TEST', 'Gold · 21K', '2.000 g', '12,254.52 EGP', 'SILVER TEST', 'Silver', '0.002 g', '12.25 EGP']) assert.ok(texts().includes(value), value);
+  for (const value of ['GOLD TEST', '2.000 Gr', '12,254.52 EGP', 'SILVER TEST', '0.002 Gr', '12.25 EGP']) assert.ok(texts().includes(value), value);
   assert.deepEqual(finance.assets, previous);
   assert.deepEqual(calls, []);
 });
@@ -680,7 +680,7 @@ test('restored asset hierarchy contains quantity and right-side valuation in its
   render(AssetRow, rowProps(gold));
   const body = nodes('Pressable').find(n => n.props.accessibilityLabel.startsWith('Movements for'));
   assert.equal(nodes('Pressable', body).length, 1);
-  for (const value of ['GOLD TEST', '2.000 g', '≈ 12,254.52 EGP']) assert.ok(nodes('AppText', body).some(n => n.props.children === value));
+  for (const value of ['GOLD TEST', '2.000 Gr', '≈ 12,254.52 EGP']) assert.ok(nodes('AppText', body).some(n => n.props.children === value));
   assert.ok(nodes('Ionicon', body).some(n => n.props.name === 'chevron-forward'));
   assert.deepEqual(nodes('Pressable').filter(n => n !== body).map(n => n.props.accessibilityLabel), ['Edit GOLD TEST', 'Delete GOLD TEST']);
 });

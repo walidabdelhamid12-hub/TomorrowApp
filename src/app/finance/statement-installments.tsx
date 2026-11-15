@@ -1,3 +1,5 @@
+import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
+import { StatementSixChrome, StatementSixRows } from '@/features/finance/components/reporting/StatementSixUI';
 import { reportRoutePeriod, reportRouteCurrency } from '@/features/finance/utils/reportRoutePeriod';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
@@ -35,19 +37,14 @@ export default function InstallmentsStatementScreen() {
       onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
       <AppText>‹ Installments Report</AppText>
     </Pressable>
-    <AppText variant="h1">Installments Schedule Statement</AppText>
-    <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-      {period ? period.from + ' to ' + period.to : 'Invalid period'} · Scheduled due dates only. Paid, overdue and remaining balances are not verified here.
-    </AppText>
+    <StatementSixChrome kind={'Installments'} from={period?.from ?? "—"} to={period?.to ?? "—"} category={'Scheduled dues'} currency={currencyCode || undefined} />
     {!period ? <Card><AppText>Invalid statement month.</AppText></Card> :
       saved.hydration === 'blocked' ? <Card><AppText>Saved installments unavailable.</AppText></Card> :
       saved.hydration !== 'ready' ? <Card><AppText>Loading contracts...</AppText></Card> :
       statement === null ? <Card><AppText>Schedule statement unavailable.</AppText></Card> :
       !statement.reconciled ? <Card><AppText>Schedule totals do not reconcile. Details are withheld.</AppText></Card> :
       entries.length === 0 ? <Card><AppText>No installments scheduled in this period.</AppText></Card> :
-      entries.map(item => <Card key={item.id} style={{ marginBottom: spacing.sm }}>
-        <AppText variant="bodyStrong">{item.name}</AppText>
-        <AppText>{item.date} · {item.amount} {item.currency}</AppText>
-      </Card>)}
+      <StatementSixRows secondColumnLabel="Contract" rows={entries.map(item => ({ id: item.id, date: item.date, category: item.name, description: 'Scheduled due · not a recorded payment', amount: String(item.amount), currencyCode: item.currency }))} />
+  }<StatementExportActions />
   </Screen>;
 }

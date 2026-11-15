@@ -52,3 +52,10 @@ test('XLSX refuses unreconciled or unknown statements', () => {
   assert.throws(() => buildExpensesXlsx({ ...statement, reconciled: false }, { from: '2026-11-01', to: '2026-11-30' }, names), /verified/);
   assert.throws(() => buildExpensesXlsx({ ...statement, report: { unknown: [{ id: 'bad' }] } }, { from: '2026-11-01', to: '2026-11-30' }, names), /verified/);
 });
+
+test('Expenses chart serializes gap width before axis IDs in OOXML sequence', () => {
+ const chart = entries(buildExpensesXlsx(statement, { from: '2026-11-01', to: '2026-11-30' }, names)).get('xl/charts/chart1.xml');
+ const bar = chart.match(/<c:barChart>([\s\S]*?)<\/c:barChart>/)[1];
+ assert.ok(bar.lastIndexOf('</c:ser>') < bar.indexOf('<c:gapWidth '));
+ assert.ok(bar.indexOf('<c:gapWidth ') < bar.indexOf('<c:axId '));
+});

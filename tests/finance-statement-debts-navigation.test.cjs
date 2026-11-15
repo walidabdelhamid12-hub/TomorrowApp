@@ -6,13 +6,13 @@ const read = file => fs.readFileSync(path.join(__dirname, '../src/', file), 'utf
 test('debt reports preserve direction and month when opening statement', () => {
   const report = read('features/finance/components/DebtReportScreen.tsx');
   assert.match(report, /pathname: '\/finance\/statement-debts', params: \{ direction, month, from: period\.from, to: period\.to, currencyCode: activeCurrency \}/);
-  assert.match(report, /<ReportStatementLink/);
+  assert.match(report, /<ReportTableActions[^>]*statement=\{openStatement\}/);
 });
 test('statement lists period-filtered recorded payments and never writes', () => {
   const statement = read('app/finance/statement-debts.tsx');
   assert.match(statement, /aggregateDebtsReport\(debts, period, direction\)/);
   assert.match(statement, /payment\.date >= period\.from && payment\.date <= period\.to/);
-  assert.match(statement, /Recorded payments only/);
+  assert.match(statement, /category=\{'Recorded payments'\}/);
   assert.doesNotMatch(statement, /addDebtPayment|deleteDebtPayment|updateDebtPayment|setState/);
 });
 

@@ -1,3 +1,5 @@
+import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
+import { StatementSixChrome, StatementSixRows } from '@/features/finance/components/reporting/StatementSixUI';
 import { reportRoutePeriod, reportRouteCurrency } from '@/features/finance/utils/reportRoutePeriod';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
@@ -67,23 +69,14 @@ export default function AccountsStatementScreen() {
       onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
       <AppText>‹ Accounts Report</AppText>
     </Pressable>
-    <AppText variant="h1">Accounts Statement</AppText>
-    <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-      {period ? period.from + ' to ' + period.to : 'Invalid period'} · Account-currency movements only. Credit-card repayments are transfer legs, never additional expenses.
-    </AppText>
+    <StatementSixChrome kind={'Accounts'} from={period?.from ?? "—"} to={period?.to ?? "—"} category={accountId ? 'Selected account' : 'All accounts'} currency={currencyCode || undefined} />
     {!period || !selectionValid ? <Card><AppText>Invalid statement filters.</AppText></Card> :
       !ready ? <Card><AppText>Loading accounts...</AppText></Card> :
       rows === null ? <Card><AppText>Statement unavailable.</AppText></Card> :
       selected.some(row => row.status !== 'available' || !row.reconciled || row.minorUnits === null)
         ? <Card><AppText color="textSecondary">Incomplete account history. Movement details are unavailable until reconciled.</AppText></Card> :
       entries.length === 0 ? <Card><AppText>No reconciled account movements in this period.</AppText></Card> :
-      entries.map(item => {
-        const account = names.get(item.accountId);
-        return <Card key={item.id + ':' + item.accountId} style={{ marginBottom: spacing.sm }}>
-          <AppText variant="bodyStrong">{account?.name ?? 'Unknown account'} · {item.kind}</AppText>
-          <AppText>{item.date} · {account ? formatAmount(item.amount, account.currency) + ' ' + account.currency : 'Unavailable'}</AppText>
-          {item.note ? <AppText color="textSecondary">{item.note}</AppText> : null}
-        </Card>;
-      })}
+      <StatementSixRows secondColumnLabel="Account" rows={entries.map(item => ({ id: item.id + ':' + item.accountId, date: item.date, category: names.get(item.accountId)?.name ?? 'Unknown account', description: item.kind + (item.note ? ' · ' + item.note : ''), amount: names.get(item.accountId) ? formatAmount(item.amount, names.get(item.accountId)!.currency) : 'Unavailable', currencyCode: names.get(item.accountId)?.currency }))} />
+  }<StatementExportActions />
   </Screen>;
 }

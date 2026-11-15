@@ -1,4 +1,8 @@
+import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
+import { StatementUnifiedChrome } from '@/features/finance/components/reporting/StatementUnifiedChrome';
+import { StatementMobileRows } from '@/features/finance/components/reporting/StatementMobileRows';
 import { useMemo } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppText, Screen } from '@/components/ui';
@@ -9,7 +13,7 @@ import { buildExpensesStatement } from '@/features/finance/utils/expensesStateme
 import { selectExpenseCurrency } from '@/features/finance/utils/expenseReportPresentation';
 import { isSupportedCurrency } from '@/features/finance/constants/currencies';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
-import { ReportHeader, ReportTransactionRows, ReportExportActions, currencyLabel } from '@/features/finance/components/reporting/ReportPrimitives';
+import { ReportHeader, currencyLabel } from '@/features/finance/components/reporting/ReportPrimitives';
 
 function single(value: string | string[] | undefined): string | undefined {
   return typeof value === 'string' ? value : undefined;
@@ -52,19 +56,20 @@ export default function ExpensesStatementScreen() {
   const exports = useExpenseExports(statement, { from: from ?? '', to: to ?? '' }, names);
   const rows = statement?.reconciled ? statement.rows.map(row => ({ id: row.id, date: row.date,
     category: names.categories.get(row.categoryId) ?? (row.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category'),
-    description: [row.note, names.accounts.get(row.accountId)].filter(Boolean).join(' · '), amount: row.amount, currency: row.currencyCode })) : [];
+    description: [row.note, names.accounts.get(row.accountId)].filter(Boolean).join(' · '), amount: row.amount, currency: row.currencyCode, categoryIcon: categories.find(c => c.id === row.categoryId)?.icon as keyof typeof Ionicons.glyphMap | undefined, categoryColor: categories.find(c => c.id === row.categoryId)?.color })) : [];
   return <Screen scroll>
     <Pressable accessibilityRole="button" accessibilityLabel="Back to Expenses Report" onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}><AppText>‹ Expenses Report</AppText></Pressable>
-    <ReportHeader title="Expenses Statement" period={from && to ? from.slice(0, 7) : ''} />
+
     {!valid ? <AppText accessibilityRole="alert">Invalid or missing statement filters. Return to the Expenses Report.</AppText>
       : !ready || !statement ? <ActivityIndicator color={moduleColors.finance} /> : <View>
-        <AppText variant="caption" color="textSecondary">{from} – {to}</AppText>
-        <AppText variant="caption" color="textSecondary">{accountId ? names.accounts.get(accountId) ?? 'Unknown account' : 'All accounts'} · {categoryId ? names.categories.get(categoryId) ?? 'Unknown category' : 'All expense categories'} · {currencyCode ? currencyLabel(currencyCode) : 'All currencies (separate)'}</AppText>
+        <StatementUnifiedChrome kind="Expenses" from={from!} to={to!}
+          account={accountId ? names.accounts.get(accountId) ?? 'Unknown account' : 'All accounts'}
+          category={categoryId ? names.categories.get(categoryId) ?? 'Unknown category' : 'All expense categories'} currency={currencyCode}
+          totals={statement.report.currencies.map(total => ({ currencyCode: total.currencyCode, amount: formatAmount(total.expenses, total.currencyCode) }))} />
         {statement.report.unknown.length > 0 && <AppText accessibilityRole="alert">Incomplete: {statement.report.unknown.length} unverified transaction(s). Known expenses only; exports unavailable.</AppText>}
-        {statement.report.currencies.map(total => <AppText key={total.currencyCode} variant="bodyStrong" style={{ marginVertical: 6 }}>{currencyLabel(total.currencyCode)} · {formatAmount(total.expenses, total.currencyCode)}</AppText>)}
         {!statement.reconciled ? <AppText accessibilityRole="alert">Statement cannot be reconciled. Transaction details are hidden.</AppText>
-          : <><ReportTransactionRows compact={false} rows={rows} />{!rows.length && <AppText>No verified ordinary expenses for this selection.</AppText>}</>}
-        <ReportExportActions busy={exports.exporting} disabled={!exports.canExport} pdf={exports.exportPdf} excel={exports.exportExcel} share={exports.share} />
+          : <><StatementMobileRows rows={rows.map(row => ({ ...row, amount: formatAmount(row.amount, row.currency), currencyCode: row.currency }))} />{!rows.length && <AppText>No verified ordinary expenses for this selection.</AppText>}</>}
+        <StatementExportActions busy={exports.exporting} disabled={!exports.canExport} pdf={exports.exportPdf} excel={exports.exportExcel} share={exports.share} />
       </View>}
   </Screen>;
 }

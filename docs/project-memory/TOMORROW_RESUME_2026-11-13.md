@@ -149,3 +149,86 @@ When user says **"Tomorrow Resume"** or **"افتح Tomorrow Resume"**, start he
 - Verify extraction order, table geometry, row associations, and numeric accuracy before approval.
 - Keep postingAllowed=false; no automatic financial posting.
 - No production approval or merge to main.
+
+## Session Update - 2026-11-15 - Reports and Assets
+
+### Verified
+- Phase 8 Reports and Assets regression: 526/526 PASS across 28 test files.
+- TypeScript: PASS (exit 0).
+- Unified Reports UI: 33/33 PASS.
+- Updated obsolete Accounts and Assets test expectations while retaining historical-data safety checks.
+
+### Implemented locally
+- Assets Report: current holdings analysis using getAssetBalance.
+- Separate Gold, Silver and Currencies presentation.
+- Chart options: Donut, Vertical, Horizontal and Trend.
+- Fixed-size asset and currency icons.
+- Report export actions guarded against disabled callbacks.
+- Removed obsolete Report Information expectations from UI tests.
+
+### Safety and boundaries
+- Historical balances and valuations must remain verified before being treated as historical facts.
+- Unverified data must not be exported as verified.
+- postingAllowed=false remains unchanged.
+- No posting, replay, repair or adoption changes approved.
+- No Commit, Push, Reset or Clean performed for this session.
+
+### Pending before checkpoint
+1. Android visual verification of Assets Report.
+2. Check holdings, icons, chart modes, movement details and View Statement.
+3. Review git diff and tracked/untracked files, including local backups.
+4. Commit and push to the working branch only after explicit approval.
+5. Do not merge into main without approval.
+
+### Resume point
+Continue with Android Assets Report verification.
+Do not repeat the completed 526-test regression unless code changes require it.
+
+---
+
+## Phase 8 Final Handover - 2026-11-15
+
+### Completion status
+- Phase 8 financial reports and statements: implementation and user Android UI review completed.
+- Eight reports reviewed: Income, Expenses, Accounts, Assets, Installments, Loans, Receivable, Payable.
+- Reports and View Statements remain separate, linked workflows within Finance.
+- No fifth main Finance tab added.
+
+### Reports and statements
+- Unified compact reporting layouts, date and relevant account/currency filters.
+- Linked statements preserve supported report filters and exact date ranges.
+- Charts and expandable details retained where supported.
+- PDF and Excel/XLSX export workflows implemented with verified-data guards.
+- Unverified, unsafe or incomplete financial evidence must fail closed.
+- Currency amounts must remain separated unless an explicitly verified conversion applies.
+
+### Final Installments adjustment
+- Removed redundant Currency Analysis tiles from Installments Report.
+- Retained the currency selector based on currencies present in saved contracts.
+- Retained scheduled contract totals, due-in-period metrics, due dates and linked statement.
+- Installments remain schedule-only; due dates never automatically deduct money.
+- Updated the corresponding UI regression test.
+- Android UI accepted by user.
+
+### Final verification
+- TypeScript: PASS, exit 0.
+- Targeted report and statement tests: 41/41 PASS.
+- Full Finance test suite: 2153/2153 PASS, zero failures.
+- User confirmed Android report review completed.
+- Local working branch: codex/finance-8-6-expenses-redesign.
+- Pre-checkpoint HEAD: 24d71e5.
+- Final Git commit/push verification pending.
+
+### Financial safety
+- postingAllowed=false.
+- No authorization for automatic posting, replay, repair or adoption.
+- No merge into main without explicit user approval.
+- Phase 9 Documents and Native PDF Lab remain separate, not completed by Phase 8.
+
+### Next resume point
+- Review the exact Phase 8 changed/new file manifest.
+- Exclude Phase 9 files, local backups, scripts and temporary artifacts.
+- Stage approved files only.
+- Commit and push to the current working branch.
+- Verify local and remote commit hashes match.
+- After checkpoint, resume remaining Phase 9 work separately.

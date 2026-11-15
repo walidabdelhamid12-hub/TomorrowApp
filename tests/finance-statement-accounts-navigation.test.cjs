@@ -14,7 +14,8 @@ test('Accounts statement uses the same reconciled report and transfer legs witho
   assert.match(screen, /row\.status === 'available' && row\.reconciled/);
   assert.match(screen, /t\.fromAmount \?\? t\.amount/);
   assert.match(screen, /t\.toAmount \?\? t\.amount/);
-  assert.match(screen, /Credit-card repayments are transfer legs/);
+  assert.match(screen, /t\.type === 'credit_card_payment' \? 'Credit-card repayment out'/);
+  assert.match(screen, /t\.type === 'credit_card_payment' \? 'Credit-card repayment in'/);
   assert.doesNotMatch(screen, /addTransaction|updateTransaction|deleteTransaction|addTransfer|setState/);
 });
 

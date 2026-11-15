@@ -1,3 +1,5 @@
+import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
+import { StatementSixChrome, StatementSixRows } from '@/features/finance/components/reporting/StatementSixUI';
 import { reportRoutePeriod, reportRouteCurrency } from '@/features/finance/utils/reportRoutePeriod';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
@@ -44,19 +46,13 @@ export default function DebtStatementScreen() {
       onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
       <AppText>‹ Debt Report</AppText>
     </Pressable>
-    <AppText variant="h1">{direction === 'receivable' ? 'Receivable' : 'Payable'} Statement</AppText>
-    <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-      {period ? period.from + ' to ' + period.to : 'Invalid period'} · Recorded payments only. These entries do not independently prove bank or ledger posting.
-    </AppText>
+    <StatementSixChrome kind={direction === 'receivable' ? 'Receivable' : 'Payable'} from={period?.from ?? "—"} to={period?.to ?? "—"} category={'Recorded payments'} currency={currencyCode || undefined} />
     {!direction || !period ? <Card><AppText>Invalid statement filters.</AppText></Card> :
       !hydrated ? <Card><AppText>Loading finance data...</AppText></Card> :
       rows === null ? <Card><AppText>Statement data unavailable.</AppText></Card> :
       rows.some(row => row.status !== 'available') ? <Card><AppText color="textSecondary">Historical data is unverified for one or more records. Payment details are withheld to avoid misleading totals.</AppText></Card> :
       entries.length === 0 ? <Card><AppText>No recorded payments in this period.</AppText></Card> :
-      entries.map(item => <Card key={item.id} style={{ marginBottom: spacing.sm }}>
-        <AppText variant="bodyStrong">{item.person}</AppText>
-        <AppText>{item.date} · {item.amount.toFixed(getCurrencyDecimals(item.currency))} {item.currency}</AppText>
-        {item.note ? <AppText color="textSecondary">{item.note}</AppText> : null}
-      </Card>)}
+      <StatementSixRows secondColumnLabel="Person" rows={entries.map(item => ({ id: item.id, date: item.date, category: item.person, description: item.note || 'Recorded payment', amount: item.amount.toFixed(getCurrencyDecimals(item.currency)), currencyCode: item.currency }))} />
+  }<StatementExportActions />
   </Screen>;
 }

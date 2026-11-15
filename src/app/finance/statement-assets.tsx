@@ -1,3 +1,5 @@
+import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
+import { StatementSixChrome, StatementSixRows } from '@/features/finance/components/reporting/StatementSixUI';
 import { reportRoutePeriod } from '@/features/finance/utils/reportRoutePeriod';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
@@ -56,19 +58,13 @@ export default function AssetsStatementScreen() {
       onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
       <AppText>‹ Assets Report</AppText>
     </Pressable>
-    <AppText variant="h1">Assets Statement</AppText>
-    <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-      {period ? period.from + ' to ' + period.to : 'Invalid period'} · Recorded quantity movements only. Historical market valuations and unverified balances are unavailable.
-    </AppText>
+    <StatementSixChrome kind={'Assets'} from={period?.from ?? "—"} to={period?.to ?? "—"} category={assetId ? 'Selected asset' : 'All assets'} currency={undefined} />
     {!period || !selectionValid ? <Card><AppText>Invalid statement filters.</AppText></Card> :
       !hydrated ? <Card><AppText>Loading assets...</AppText></Card> :
       rows === null ? <Card><AppText>Statement unavailable.</AppText></Card> :
       incomplete ? <Card><AppText color="textSecondary">Some asset history is unverified. Movement details are withheld until the opening date and history are validated.</AppText></Card> :
       entries.length === 0 ? <Card><AppText>No verified quantity movements in this period.</AppText></Card> :
-      entries.map(item => <Card key={item.id} style={{ marginBottom: spacing.sm }}>
-        <AppText variant="bodyStrong">{item.name}</AppText>
-        <AppText>{item.date} · {item.amount} {item.unit}</AppText>
-        {item.note ? <AppText color="textSecondary">{item.note}</AppText> : null}
-      </Card>)}
+      <StatementSixRows secondColumnLabel="Asset" rows={entries.map(item => ({ id: item.id, date: item.date, category: item.name, description: item.note || 'Recorded quantity movement', amount: String(item.amount) + ' ' + item.unit }))} />
+  }<StatementExportActions />
   </Screen>;
 }

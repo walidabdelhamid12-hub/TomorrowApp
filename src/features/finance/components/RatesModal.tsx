@@ -779,7 +779,7 @@ export function RatesModal({
                 adjustsFontSizeToFit={!stackMetals}
                 minimumFontScale={0.9}
                 color="text"
-                style={{ fontWeight: '600', flexShrink: 1 }}
+                style={{ fontWeight: '800', flexShrink: 1, color: '#A97808' }}
               >
                 Gold (gram)
               </AppText>
@@ -819,7 +819,7 @@ export function RatesModal({
                 adjustsFontSizeToFit={!stackMetals}
                 minimumFontScale={0.9}
                 color="text"
-                style={{ fontWeight: '600', flexShrink: 1 }}
+                style={{ fontWeight: '800', flexShrink: 1, color: '#697586' }}
               >
                 Silver (gram)
               </AppText>

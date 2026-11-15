@@ -1,3 +1,5 @@
+import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
+import { StatementSixChrome, StatementSixRows } from '@/features/finance/components/reporting/StatementSixUI';
 import { reportRoutePeriod } from '@/features/finance/utils/reportRoutePeriod';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
@@ -45,20 +47,13 @@ export default function LoansStatementScreen() {
       onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
       <AppText>‹ Loans Report</AppText>
     </Pressable>
-    <AppText variant="h1">Loans Statement</AppText>
-    <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-      {period ? period.from + ' to ' + period.to : 'Invalid period'} · Recorded payments only. Late fees are separate and do not reduce principal. No ledger posting is inferred.
-    </AppText>
+    <StatementSixChrome kind={'Loans'} from={period?.from ?? "—"} to={period?.to ?? "—"} category={loanId ? 'Selected loan' : 'All loans'} currency={loanId ? loans.find(loan => loan.id === loanId)?.currencyCode : undefined} />
     {!period ? <Card><AppText>Invalid statement month.</AppText></Card> :
       !hydrated ? <Card><AppText>Loading loans...</AppText></Card> :
       rows === null ? <Card><AppText>Statement unavailable.</AppText></Card> :
       rows.some(row => row.status !== 'available') ? <Card><AppText color="textSecondary">Historical data is unverified for one or more records. Payment details are withheld to avoid misleading totals.</AppText></Card> :
       entries.length === 0 ? <Card><AppText>No recorded payments in this period.</AppText></Card> :
-      entries.map(item => <Card key={item.id} style={{ marginBottom: spacing.sm }}>
-        <AppText variant="bodyStrong">{item.name}</AppText>
-        <AppText>{item.date} · {item.amount.toFixed(getCurrencyDecimals(item.currency))} {item.currency}</AppText>
-        {item.lateFee > 0 ? <AppText>Late fee: {item.lateFee.toFixed(getCurrencyDecimals(item.currency))} {item.currency}</AppText> : null}
-        {item.note ? <AppText color="textSecondary">{item.note}</AppText> : null}
-      </Card>)}
+      <StatementSixRows secondColumnLabel="Loan" rows={entries.map(item => ({ id: item.id, date: item.date, category: item.name, description: (item.note || 'Recorded payment') + (item.lateFee > 0 ? ' · Late fee: ' + item.lateFee.toFixed(getCurrencyDecimals(item.currency)) : ''), amount: item.amount.toFixed(getCurrencyDecimals(item.currency)), currencyCode: item.currency }))} />
+  }<StatementExportActions />
   </Screen>;
 }

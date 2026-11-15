@@ -6,7 +6,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '../src/', file), 'utf
 test('Loans report forwards its month to View Statement', () => {
   const report = read('app/finance/report-loans.tsx');
   assert.match(report, /pathname: '\/finance\/statement-loans', params: \{ month, from: dates\.from, to: dates\.to, loanId: row\.loanId \}/);
-  assert.match(report, /<ReportStatementLink/);
+  assert.match(report, /<ReportTableActions[^>]*statement=\{\(\) => router\.push/);
 });
 test('Loans statement separates late fees and only reads payments in period', () => {
   const screen = read('app/finance/statement-loans.tsx');

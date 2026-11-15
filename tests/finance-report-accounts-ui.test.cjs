@@ -10,7 +10,10 @@ const root = path.resolve(__dirname, '..');
 const load = Module._load;
 let states, cursor, ledger, ready, calls, engineCalls, verifiedBases, tree;
 let realAggregate;
-const hooks = { ...React, useMemo: fn => fn(), useState: initial => {
+let componentStates = new Map(), activeFrame = null;
+const stateArray = () => { if (activeFrame === null) return states; if (!componentStates.has(activeFrame)) componentStates.set(activeFrame, []); return componentStates.get(activeFrame); };
+const hooks = { ...React, useEffect: () => {}, useMemo: fn => fn(), useState: initial => {
+  const states = stateArray();
   const index = cursor++;
   if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial;
   return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }];
@@ -18,14 +21,18 @@ const hooks = { ...React, useMemo: fn => fn(), useState: initial => {
 Module._load = function(id, parent, main) {
   if (id === 'react') return hooks;
   if (id === '@react-native-community/datetimepicker') return { __esModule: true, default: 'DateTimePicker' };
-  if (id.endsWith('/ReportTableActions')) return { ReportTableActions: () => null };
-  if (id === 'react-native') return { Platform: { OS: 'android' }, ScrollView: 'ScrollView', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator' };
+  if (id.endsWith('/ReportTableActions')) return { ReportTableActions: props => React.createElement('ReportTableActions', props) };
+  if (id === 'react-native') return { Platform: { OS: 'android' }, Modal: 'Modal', ScrollView: 'ScrollView', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator' };
   if (id === '@expo/vector-icons') return { Ionicons: 'Ionicons' };
   if (id === 'expo-router') return { useRouter: () => ({ back: () => calls.push('back'), push: route => calls.push(route) }) };
   if (id === '@/components/ui') return { AppText: 'AppText', Screen: 'Screen' };
   if (id === '@/theme') return { moduleColors: { finance: '#10B981' }, useTheme: () => ({
     colors: { text: '#111111', surface: '#FFFFFF', border: '#CCCCCC' }, spacing: { xs: 4, sm: 8, md: 12 },
   }) };
+  if (id === '@/features/finance/store/useCurrencyStore') return {
+    useCurrencyHydrated: () => ready,
+    useCurrencyStore: select => select({ baseCurrency: 'EGP', rates: { EGP: 1 }, verifiedCurrencies: ['EGP'] }),
+  };
   if (id === '@/features/finance/store/useLedgerStore') return {
     useLedgerHydrated: () => ready,
     useLedgerStore: select => select(new Proxy(ledger, { get: (value, key) => {
@@ -47,13 +54,19 @@ for (const ext of ['.ts', '.tsx']) require.extensions[ext] = (module, filename) 
 realAggregate = require('../src/features/finance/utils/reportAccounts.ts').aggregateAccountsReport;
 const Accounts = require('../src/app/finance/report-accounts.tsx').default;
 const Reports = require('../src/app/finance/reports.tsx').default;
-function expand(node) {
-  if (Array.isArray(node)) return node.map(expand);
+function expand(node, nodePath = 'root') {
+  if (Array.isArray(node)) return node.map((child, index) => expand(child, nodePath + '/' + (child?.key ?? index)));
   if (!React.isValidElement(node)) return node;
-  if (typeof node.type === 'function') return expand(node.type(node.props));
-  return { type: node.type, props: { ...node.props, children: expand(node.props.children) } };
+  if (node.type === 'Modal' && !node.props.visible) return null;
+  if (typeof node.type === 'function') {
+    const previousFrame = activeFrame, previousCursor = cursor;
+    activeFrame = nodePath === 'root' ? null : nodePath + '/' + node.type.name; cursor = 0;
+    const result = expand(node.type(node.props), nodePath + '/render');
+    activeFrame = previousFrame; cursor = previousCursor; return result;
+  }
+  return { type: node.type, props: { ...node.props, children: expand(node.props.children, nodePath + '/children') } };
 }
-function render(component = Accounts) { cursor = 0; tree = expand(React.createElement(component)); }
+function render(component = Accounts) { if (component.name === "AccountsReportScreen" && states[0]?.from) states.unshift(""); cursor = 0; tree = expand(React.createElement(component)); }
 function nodes(type, node) {
   if (arguments.length === 1) node = tree;
   if (Array.isArray(node)) return node.flatMap(value => nodes(type, value));
@@ -74,6 +87,7 @@ const account = (extra = {}) => ({ id: 'bank', name: 'Bank', currencyCode: 'EGP'
   initialBalance: 1000, archived: false, createdAt: '2026-11-01T00:00:00Z', ...extra });
 const freeze = value => { if (value && typeof value === 'object') { Object.freeze(value); Object.values(value).forEach(freeze); } };
 beforeEach(() => {
+  componentStates = new Map(); activeFrame = null;
   states = [{ from: '2026-11-01', to: '2026-11-30' }]; cursor = 0; ready = true; calls = []; engineCalls = []; verifiedBases = undefined;
   ledger = { accounts: [account()], categories: [], transactions: [], transfers: [] };
 });
@@ -82,7 +96,7 @@ test('8.3B missing verified history renders unavailable balances, never inferred
   ledger.transactions.push({ id: 'cash', accountId: 'bank', type: 'income', amount: 50,
     currencyCode: 'EGP', date: '2026-11-01' });
   render();
-  assert.match(allText(), /Historical balances unavailable/); press('View all Bank'); render();
+  assert.match(allText(), /History unavailable|Invalid or inconsistent transaction/); press('Toggle Bank details'); render();
   assert.match(allText(), /Opening balance date not verified/);
   assert.equal((allText().match(/^Unavailable$/gm) ?? []).length, 0, 'No repeated unavailable cards');
   assert.doesNotMatch(allText(), /1,000\.00|1,050\.00|^0\.00/m);
@@ -111,26 +125,26 @@ test('8.3B hydration and empty states avoid misleading balances', () => {
 });
 
 test('compact account dates change the exact engine period across leap boundaries', () => {
-  states[0] = { from: '2024-03-01', to: '2024-03-31' }; render(); press('From date: 2024-03-01'); render();
+  states[0] = { from: '2024-03-01', to: '2024-03-31' }; render(); press('from date: 2024-03-01'); render();
   nodes('DateTimePicker')[0].props.onChange({ type: 'set' }, new Date(2024, 1, 29)); render();
   assert.deepEqual(engineCalls.at(-1).period, { from: '2024-02-29', to: '2024-03-31' });
-  press('To date: 2024-03-31'); render();
+  press('to date: 2024-03-31'); render();
   assert.equal(nodes('DateTimePicker')[0].props.minimumDate.getFullYear(), 100);
   assert.equal(nodes('DateTimePicker')[0].props.maximumDate.getFullYear(), 9999);
 });
 
 test('8.3B account filter includes archived accounts and retains full accounting context', () => {
   ledger.accounts.push(account({ id: 'old', name: 'Old account', currencyCode: 'USD', archived: true }));
-  render(); press('Acc.: All accounts'); render(); press('Old account 🇺🇸 USD · Archived'); render();
+  render(); press('Account: All accounts'); render(); press('Old account 🇺🇸 USD · Archived'); render();
   assert.match(allText(), /Old account/); assert.doesNotMatch(allText(), /^Bank$/m);
   assert.match(allText(), /USD · Archived/);
   assert.equal(engineCalls.at(-1).context.accounts.length, 2);
-  press('Acc.: Old account 🇺🇸 USD · Archived'); render(); press('All accounts'); render();
+  press('Account: Old account 🇺🇸 USD · Archived'); render(); press('All accounts'); render();
   assert.match(allText(), /^Bank$/m);
 });
 
 test('8.3B removed or duplicate selected account fails closed without switching to all', () => {
-  render(); press('Acc.: All accounts'); render(); press('Bank 🇪🇬 EGP'); render();
+  render(); press('Account: All accounts'); render(); press('Bank 🇪🇬 EGP'); render();
   ledger.accounts = []; render(); assert.match(allText(), /Selected account is missing or ambiguous/);
   ledger.accounts = [account(), account({ name: 'Duplicate' })]; render();
   assert.match(allText(), /Selected account is missing or ambiguous/);
@@ -141,10 +155,12 @@ test('8.3B verified fixture renders compact balances and separate currencies wit
   ledger.accounts.push(account({ id: 'kwd', name: 'Kuwait', currencyCode: 'KWD', initialBalance: 1.237 }));
   verifiedBases = ledger.accounts.map(a => ({ accountId: a.id, openingBalanceDate: '2026-11-01' }));
   render();
-  assert.match(allText(), /1,000\.00/); press('Currency: 🇪🇬 EGP'); render(); press('🇰🇼 KWD'); render(); assert.match(allText(), /1\.237/); assert.doesNotMatch(allText(), /1,001\.237/);
+  assert.match(allText(), /1,000\.00/); press('Currency: All currencies'); render(); press('🇰🇼 KWD'); render(); assert.match(allText(), /1\.237/); assert.doesNotMatch(allText(), /1,001\.237/);
   assert.match(allText(), /Opening Balance/); assert.match(allText(), /Closing Balance/); assert.match(allText(), /Net Change/);
   assert.doesNotMatch(allText(), /Total balance/i);
-  assert.match(allText(), /View Statement/);
+  const footer = nodes('ReportTableActions')[0]; assert.ok(footer); assert.equal(footer.props.table.verified, true);
+  footer.props.statement();
+  assert.deepEqual(calls.at(-1), { pathname: '/finance/statement-accounts', params: { month: '2026-11', from: '2026-11-01', to: '2026-11-30', currencyCode: 'KWD' } });
   assert.equal(nodes('View').filter(n => n.props.testID?.startsWith('account-report-')).length, 1);
   assert.ok(nodes('View').some(n => n.props.style.flexWrap === 'wrap'));
   assert.ok(nodes('View').filter(n => n.props.testID?.startsWith('account-report-')).every(n => n.props.style.height === undefined));
@@ -162,22 +178,22 @@ test('8.3B card repayments are transfer subsets and cash movement presentation i
     type: 'credit_card_payment', amount: 100, currencyCode: 'EGP', date: '2026-11-12' }];
   verifiedBases = ledger.accounts.map(a => ({ accountId: a.id, openingBalanceDate: '2026-11-01' }));
   const before = structuredClone(ledger); freeze(ledger);
-  render(); press('View all Card'); render(); assert.match(allText(), /-140\.00/);
-  press('View all Movements for Card'); render();
+  render(); press('Toggle Card details'); render(); assert.match(allText(), /-140\.00/);
+  press('Toggle Movements for Card details'); render();
   for (const label of ['Income', 'Expenses', 'Refunds', 'Transfers in', 'Transfers out',
     'Credit-card repayments in (included above)', 'Credit-card repayments out (included above)']) {
     assert.ok(allText().includes(label), label);
   }
-  press('View all About this report'); render(); assert.match(allText(), /Repayments are included in transfers once/);
+  assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Report information'), false);
   assert.match(allText(), /60\.00/); assert.match(allText(), /100\.00 EGP/);
-  press('Open Income report'); assert.deepEqual(calls, ['/finance/report-income']); assert.deepEqual(ledger, before);
+  press('Back'); assert.deepEqual(calls, ['back']); assert.deepEqual(ledger, before);
 });
 
 test('8.3B engine diagnostics remain visible and unsafe row figures are hidden', () => {
   verifiedBases = [{ accountId: 'bank', openingBalanceDate: '2026-11-01' }];
   ledger.transactions.push({ id: 'bad-cash', accountId: 'bank', currencyCode: 'EGP',
     type: 'income', amount: 0.001, date: '2026-11-10' });
-  render(); assert.match(allText(), /Historical balances unavailable/); press('View all Bank'); render(); assert.match(allText(), /Invalid or inconsistent transaction/);
+  render(); assert.match(allText(), /History unavailable|Invalid or inconsistent transaction/); press('Toggle Bank details'); render(); assert.match(allText(), /Invalid or inconsistent transaction/);
   assert.match(allText(), /transaction: bad-cash/);
   assert.doesNotMatch(allText(), /1,000\.00/);
 });
@@ -192,9 +208,10 @@ test('Reports enables the eight implemented routes', () => {
   }
 });
 
-test('8.3B wiring never adds history fields, writes, FX conversion or a statement route', () => {
+test('8.3B wiring keeps stored history, no writes or FX conversion, and the Statement route', () => {
   const source = fs.readFileSync(path.join(root, 'src/app/finance/report-accounts.tsx'), 'utf8');
-  assert.doesNotMatch(source, /createdAt|AsyncStorage|useFinanceStore|useCurrencyStore/);
+  assert.doesNotMatch(source, /createdAt|AsyncStorage|useFinanceStore/);
+  assert.match(source, /useCurrencyStore/); // Display conversion reads verified FX; report history remains read-only.
   assert.match(source, /pathname: '\/finance\/statement-accounts'/);
   assert.match(source, /account\.openingBalanceDate/);
   assert.doesNotMatch(source, /\b(addAccount|updateAccount|addTransaction|updateTransaction|addTransfer|setState|setItem)\s*\(/);

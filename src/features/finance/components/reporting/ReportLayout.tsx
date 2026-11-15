@@ -45,10 +45,10 @@ export function ReportDates({ period, onChange }: { period: { from: string; to: 
   </>;
 }
 
-export function ReportDetails({ title, children, actionLabel = 'View all' }: { title: string; children: ReactNode; actionLabel?: string }) {
+export function ReportDetails({ title, children }: { title: string; children: ReactNode; actionLabel?: string }) {
   const [expanded, setExpanded] = useState(false);
-  return <><Pressable accessibilityRole="button" accessibilityLabel={`View all ${title}`} accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
-    <AppText variant="bodyStrong" style={{ flex: 1, paddingRight: 8 }}>{title}</AppText><AppText variant="caption" style={{ color: moduleColors.finance }}>{expanded ? 'Show less' : actionLabel}</AppText>
+  return <><Pressable accessibilityRole="button" accessibilityLabel={`Toggle ${title} details`} accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
+    <AppText variant="bodyStrong" style={{ flex: 1, paddingRight: 8 }}>{title}</AppText><Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={20} color={moduleColors.finance} />
   </Pressable>{expanded && children}</>;
 }
 
@@ -60,7 +60,14 @@ export function ReportCurrencyAnalysis({ currencies, value, onSelect }: { curren
 }
 
 export function ReportNotice({ summary, children, warning = false }: { summary: string; children: ReactNode; warning?: boolean }) {
-  return <><AppText variant="caption" accessibilityRole={warning ? 'alert' : undefined} color="textSecondary" style={{ marginVertical: 4 }}>{summary}</AppText><ReportDetails title="About this report" actionLabel="Details"><AppText variant="caption" color="textSecondary">{children}</AppText></ReportDetails></>;
+  const [showInfo, setShowInfo] = useState(false);
+  return <View style={{ marginVertical: 4 }}>
+    <Pressable accessibilityRole="button" accessibilityLabel="Report information" accessibilityState={{ expanded: showInfo }} onPress={() => setShowInfo(value => !value)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 }}>
+      <AppText variant="caption" accessibilityRole={warning ? 'alert' : undefined} color="textSecondary" style={{ flex: 1 }}>{summary}</AppText>
+      <Ionicons name="information-circle-outline" size={18} color={moduleColors.finance} />
+    </Pressable>
+    {showInfo && <AppText variant="caption" color="textSecondary">{children}</AppText>}
+  </View>;
 }
 
 export function ReportKeyValues({ items }: { items: { label: string; value: string }[] }) {

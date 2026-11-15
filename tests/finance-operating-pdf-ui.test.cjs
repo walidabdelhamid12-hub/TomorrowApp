@@ -12,10 +12,10 @@ for (const kind of ['income', 'expenses']) {
       assert.match(hook, /statement\.reconciled && statement\.report\.unknown\.length === 0/);
       assert.match(hook, /shareStatementPdf\(buildCompactExpensesPrintHtml/);
     } else {
-      assert.match(source, /statement\.reconciled && statement\.report\.unknown\.length === 0/);
+      assert.match(source, /if \(exporting \|\| !statement \|\| !statement\.reconciled \|\| statement\.report\.unknown\.length > 0/);
       assert.match(source, /buildOperatingStatementPrintHtml\(statement, 'income'/);
       assert.match(source, /shareStatementPdf\(html\)/);
-      assert.match(source, /disabled=\{exporting\}/);
+      assert.match(source, /disabled=\{!statement\.reconciled \|\| statement\.report\.unknown\.length > 0\}/);
     }
     assert.doesNotMatch(source, /setState\(|addTransaction\(|postingAllowed\s*=\s*true/);
   });

@@ -205,7 +205,7 @@ export default function AssetsScreen() {
             const balance = getAssetBalance(asset);
             const isMetal = asset.category === 'gold' || asset.category === 'silver';
             const originalBalance = isMetal
-              ? `${formatNumber(balance, 3)} g`
+              ? `${formatNumber(balance, 3)} Gr`
               : `${formatMoney(balance, asset.currencyCode)} ${asset.currencyCode}`;
             const valuation = getValuation(asset);
             const convertedValue = valuation === null

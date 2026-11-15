@@ -328,6 +328,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
                       style={[
                         styles.assetTypeTitle,
                         active && { color: type.color },
+                        type.value === 'gold' && { color: '#A97808', fontWeight: '800' },
+                        type.value === 'silver' && { color: '#697586', fontWeight: '800' },
                       ]}
                     >
                       {type.label}

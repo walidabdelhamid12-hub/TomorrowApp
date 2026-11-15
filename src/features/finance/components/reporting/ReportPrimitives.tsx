@@ -4,6 +4,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
 import { AppText } from '@/components/ui';
+import { MetalTypeLabel } from '@/features/finance/components/MetalTypeLabel';
 import { useTheme, moduleColors } from '@/theme';
 import { CURRENCIES } from '@/features/finance/constants/currencies';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
@@ -53,7 +54,7 @@ export function ReportHeader({ title, period, previous, next, previousDisabled, 
   </View>;
 }
 export function ReportPicker({ label, value, options, onSelect, inline = true, selectedIcon, selectedIconColor }: {
-  label: string; value: string; options: { id: string; label: string; icon?: keyof typeof Ionicons.glyphMap; color?: string }[]; onSelect: (id: string) => void; inline?: boolean; selectedIcon?: keyof typeof Ionicons.glyphMap; selectedIconColor?: string;
+  label: string; value: string; options: { id: string; label: string; icon?: keyof typeof Ionicons.glyphMap; color?: string; metalType?: 'gold' | 'silver'; metalPrefix?: string; metalSuffix?: string }[]; onSelect: (id: string) => void; inline?: boolean; selectedIcon?: keyof typeof Ionicons.glyphMap; selectedIconColor?: string;
 }) {
   const [open, setOpen] = useState(false); const { colors } = useTheme();
   const selected = options.find(item => item.id === value);
@@ -61,14 +62,14 @@ export function ReportPicker({ label, value, options, onSelect, inline = true, s
     <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${selected?.label ?? 'Unavailable selection'}`}
       accessibilityState={{ expanded: open }} onPress={() => setOpen(current => !current)}
       style={{ minHeight: inline ? 40 : 44, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 8, paddingVertical: inline ? 4 : 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-      <View style={{ flex: 1, flexDirection: inline ? 'row' : 'column', flexWrap: 'wrap', alignItems: inline ? 'center' : 'stretch', gap: inline ? 5 : 0 }}><AppText variant="caption" numberOfLines={1} style={{ fontWeight: '700', color: '#0F172A' }}>{label}</AppText><View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1, gap: 4 }}>{(selectedIcon || selected?.icon) && <Ionicons name={(selectedIcon || selected?.icon)!} size={14} color={selectedIconColor || selected?.color || colors.text} />}<AppText variant="caption" style={{ flexShrink: 1 }}>{selected?.label ?? 'Unavailable selection'}</AppText></View></View>
+      <View style={{ flex: 1, flexDirection: inline ? 'row' : 'column', flexWrap: 'wrap', alignItems: inline ? 'center' : 'stretch', gap: inline ? 5 : 0 }}><AppText variant="caption" numberOfLines={1} style={{ fontWeight: '700', color: '#0F172A' }}>{label}</AppText><View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1, gap: 4 }}>{(selectedIcon || selected?.icon) && <Ionicons name={(selectedIcon || selected?.icon)!} size={14} color={selectedIconColor || selected?.color || colors.text} />}<AppText variant="caption" style={{ flexShrink: 1 }}>{selected?.metalType ? <>{selected.metalPrefix ?? ''}<MetalTypeLabel type={selected.metalType} suffix={selected.metalSuffix ?? ''} /></> : selected?.label ?? 'Unavailable selection'}</AppText></View></View>
       <Ionicons name="chevron-down" size={16} color={colors.text} />
     </Pressable>
     {open && options.map((item, index) => <Pressable key={`${item.id}-${index}`} accessibilityRole="button" accessibilityLabel={item.label}
       accessibilityState={{ selected: item.id === value }} onPress={() => { onSelect(item.id); setOpen(false); }}
       style={{ minHeight: 44, justifyContent: 'center', padding: 8, borderBottomWidth: 1, borderColor: colors.border }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
         {item.icon && <Ionicons name={item.icon} size={16} color={item.color || colors.text} />}
-        <AppText variant="caption" style={{ flexShrink: 1 }}>{item.label}</AppText>
+        <AppText variant="caption" style={{ flexShrink: 1 }}>{item.metalType ? <>{item.metalPrefix ?? ''}<MetalTypeLabel type={item.metalType} suffix={item.metalSuffix ?? ''} /></> : item.label}</AppText>
       </View></Pressable>)}
   </View>;
 }
@@ -84,14 +85,14 @@ export function ReportSummaryCards({ cards, currency, compact = true, denseCente
     </View>)}
   </View>;
 }
-export function ReportTransactionRows({ rows, compact = true }: { rows: { id: string; date: string; category: string; description: string; amount: number; currency: string; categoryIcon?: keyof typeof Ionicons.glyphMap; categoryColor?: string; formattedAmount?: string }[]; compact?: boolean }) {
+export function ReportTransactionRows({ rows, compact = true }: { rows: { id: string; date: string; category: string; description: string; amount: number; currency: string; categoryIcon?: keyof typeof Ionicons.glyphMap; categoryColor?: string; formattedAmount?: string; percent?: number | null }[]; compact?: boolean }) {
   const { colors } = useTheme();
   if (compact) return <View style={{ width: '100%' }}>
     <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: colors.border, paddingVertical: 6 }}>
       <AppText variant="caption" style={{ width: '19%', fontSize: 10 }}>Date</AppText>
       <AppText variant="caption" style={{ width: '24%', fontSize: 10 }}>Category</AppText>
-      <AppText variant="caption" style={{ width: '25%', fontSize: 10 }}>Desc.</AppText>
-      <AppText variant="caption" style={{ width: '32%', textAlign: 'right', fontSize: 10 }}>Amount</AppText>
+      <AppText variant="caption" style={{ width: '20%', fontSize: 10 }}>Destination</AppText><AppText variant="caption" style={{ width: '13%', fontSize: 10, textAlign: 'right' }}>%</AppText>
+      <AppText variant="caption" style={{ width: '24%', textAlign: 'right', fontSize: 10 }}>Amount</AppText>
     </View>
     {rows.map(row => <View key={row.id} testID={`report-transaction-${row.id}`} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderColor: colors.border }}>
       <AppText variant="caption" numberOfLines={1} style={{ width: '19%', fontSize: 10 }}>{/^\d{4}-\d{2}-\d{2}$/.test(row.date) ? `${row.date.slice(8, 10)} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(row.date.slice(5, 7)) - 1]}` : row.date}</AppText>
@@ -99,8 +100,8 @@ export function ReportTransactionRows({ rows, compact = true }: { rows: { id: st
         {row.categoryIcon && <Ionicons name={row.categoryIcon} size={12} color={row.categoryColor || colors.text} />}
         <AppText variant="caption" numberOfLines={1} ellipsizeMode="tail" style={{ flex: 1, fontSize: 10 }}>{row.category}</AppText>
       </View>
-      <AppText variant="caption" numberOfLines={1} ellipsizeMode="tail" style={{ width: '25%', paddingRight: 3, fontSize: 10 }}>{row.description}</AppText>
-      <AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ width: '32%', textAlign: 'right', fontSize: 10, fontVariant: ['tabular-nums'] }}>{row.formattedAmount ?? formatAmount(row.amount, row.currency)} {row.currency}</AppText>
+      <AppText variant="caption" numberOfLines={1} ellipsizeMode="tail" style={{ width: '20%', paddingRight: 3, fontSize: 10 }}>{row.description}</AppText><AppText variant="caption" style={{ width: '13%', textAlign: 'right', fontSize: 10 }}>{row.percent !== null && row.percent !== undefined ? `${row.percent.toFixed(1)}%` : '—'}</AppText>
+      <AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ width: '24%', textAlign: 'right', fontSize: 10, fontVariant: ['tabular-nums'] }}>{row.formattedAmount ?? formatAmount(row.amount, row.currency)} {currencyLabel(row.currency)}</AppText>
     </View>)}
   </View>;
   return <ScrollView horizontal contentContainerStyle={{ flexGrow: 1 }}>
@@ -113,7 +114,7 @@ export function ReportTransactionRows({ rows, compact = true }: { rows: { id: st
         <AppText variant="caption" style={{ width: 84 }}>{row.date}</AppText>
         <AppText variant="caption" style={{ width: 110, paddingRight: 6 }}>{row.category}</AppText>
         <AppText variant="caption" style={{ flex: 1, minWidth: 160, paddingRight: 6 }}>{row.description}</AppText>
-        <AppText variant="caption" style={{ width: 132, textAlign: 'right', fontVariant: ['tabular-nums'] }}>{row.formattedAmount ?? formatAmount(row.amount, row.currency)} {row.currency}</AppText>
+        <AppText variant="caption" style={{ width: 132, textAlign: 'right', fontVariant: ['tabular-nums'] }}>{row.formattedAmount ?? formatAmount(row.amount, row.currency)} {currencyLabel(row.currency)}</AppText>
       </View>)}
     </View>
   </ScrollView>;

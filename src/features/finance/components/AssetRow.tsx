@@ -27,7 +27,7 @@ export function AssetRow({ asset, baseCurrency, rates, gold24PerGram, silverPerG
   const balance = getAssetBalance(asset);
   const metal = asset.category === 'gold' || asset.category === 'silver';
   const currency = 'currencyCode' in asset ? asset.currencyCode : undefined;
-  const balanceText = metal ? formatNumber(balance, 3) + ' g'
+  const balanceText = metal ? formatNumber(balance, 3) + ' Gr'
     : formatMoney(balance, currency!) + ' ' + getCurrencyFlag(currency!) + ' ' + currency;
   const category = asset.category === 'gold' ? 'Gold ' + asset.karat + 'K'
     : asset.category === 'silver' ? 'Silver'
