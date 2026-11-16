@@ -19,17 +19,17 @@ const colors: Record<string, string> = {
 export function ReportTitle({ active, title }: { active: string; title: string }) {
   const router = useRouter();
   const accent = colors[active] ?? '#0B6691';
-  return <View style={{ backgroundColor: '#0B315C', borderRadius: 12, marginBottom: 10, overflow: 'hidden' }}>
+  return <View style={{ backgroundColor: '#1E293B', borderBottomLeftRadius: 24, borderBottomRightRadius: 24, marginBottom: 10, overflow: 'hidden' }}>
     <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: 10 }}>
       <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={{ width: 40, minHeight: 44, justifyContent: 'center' }}>
         <Ionicons name="arrow-back" size={22} color="white" />
       </Pressable>
-      <AppText variant="bodyStrong" style={{ color: 'white', flex: 1, textAlign: 'center', fontSize: 17 }}>Tomorrow Finance</AppText>
+      <AppText variant="bodyStrong" style={{ color: 'white', flex: 1, textAlign: 'center', fontSize: 17 }}>Tomorrow Finance Report</AppText>
       <View style={{ width: 40 }} />
     </View>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 12 }}>
-      <Ionicons name="stats-chart" size={19} color={accent} />
-      <AppText variant="bodyStrong" style={{ color: accent, fontSize: 16 }}>{title}</AppText>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4, paddingBottom: 12 }}>
+      <Ionicons name="document-text-outline" size={20} color={accent} />
+      <AppText variant="bodyStrong" style={{ color: accent, fontSize: 16, fontWeight: '700' }}>{title}</AppText>
     </View>
   </View>;
 }

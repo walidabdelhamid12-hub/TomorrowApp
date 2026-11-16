@@ -22,6 +22,16 @@ const OUT_BG = '#F1F5F9';
 const IN_BG = '#F0F7FF';
 const BORDER = '#CBD5E1';
 const PAGE = '#F8FAFC';
+const REPORT_LABEL_COLORS: Record<string, string> = {
+  Accounts: '#475569',
+  Assets: '#B45309',
+  Income: '#22C55E',
+  Expenses: '#EF4444',
+  Loans: '#7C3AED',
+  Installments: '#2563EB',
+  'Debts Receivable': '#15803D',
+  'Debts Payable': '#DC2626',
+};
 const ITEMS = [
   [{ label: 'Installments', icon: 'calendar-clock-outline' }, { label: 'Accounts', icon: 'wallet-outline' }],
   [{ label: 'Loans', icon: 'bank-outline' }, { label: 'Assets', icon: 'diamond-stone' }],
@@ -113,7 +123,7 @@ export default function FinanceReportsScreen() {
                     minHeight: cardHeight, marginTop: 9, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                   <ReportIcon name={item.icon} size={compact ? 42 : 47}
                     badge={item.label === 'Debts Payable' ? 'minus' : item.label === 'Debts Receivable' ? 'plus' : undefined} />
-                  <AppText style={{ color: NAVY, fontSize: narrow ? 11 : 12, fontWeight: '600', textAlign: 'center' }}>
+                  <AppText style={{ color: REPORT_LABEL_COLORS[item.label] ?? NAVY, fontSize: 15, fontWeight: '700', textAlign: 'center' }}>
                     {item.label}
                   </AppText>
                 </Pressable>;
@@ -126,7 +136,7 @@ export default function FinanceReportsScreen() {
                   paddingLeft: col === 1 ? 28 : 2, paddingRight: col === 0 ? 28 : 2 }}>
                 {innerCardWidth > 0 && <NotchedShape side={last.side} width={innerCardWidth} height={comparisonHeight} />}
                 <MaterialCommunityIcons name={last.icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']} size={compact ? 48 : 55} style={{ transform: [{ scaleX: 1.1 }, { scaleY: 1.15 }] }} color={col === 0 ? INK : ICON_LIGHT} />
-                <AppText style={{ color: NAVY, fontSize: 13, fontWeight: '700' }}>{last.label}</AppText>
+                <AppText style={{ color: REPORT_LABEL_COLORS[last.label] ?? NAVY, fontSize: 15, fontWeight: '700' }}>{last.label}</AppText>
               </Pressable>
             </View>;
           })}

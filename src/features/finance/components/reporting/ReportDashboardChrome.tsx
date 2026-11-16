@@ -9,16 +9,16 @@ import { currencyLabel } from './ReportPrimitives';
 
 export function ReportDashboardHeader({ kind }: { kind: 'income' | 'expenses' }) {
   const router = useRouter();
-  return <View style={{ backgroundColor: '#0B315C', borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
+  return <View style={{ backgroundColor: '#1E293B', borderBottomLeftRadius: 24, borderBottomRightRadius: 24, marginBottom: 12, overflow: 'hidden' }}>
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, minHeight: 48 }}>
       <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()}
         style={{ width: 40, minHeight: 44, justifyContent: 'center' }}><Ionicons name="arrow-back" size={22} color="white" /></Pressable>
-      <AppText variant="bodyStrong" style={{ color: 'white', flex: 1, textAlign: 'center', fontSize: 17 }}>Tomorrow Finance</AppText>
+      <AppText variant="bodyStrong" style={{ color: 'white', flex: 1, textAlign: 'center', fontSize: 17 }}>Tomorrow Finance Report</AppText>
       <View style={{ width: 40 }} />
     </View>
-    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, gap: 8 }}>
-      <Ionicons name={kind === 'income' ? 'trending-up-outline' : 'trending-down-outline'} size={20} color={kind === 'income' ? '#22C55E' : '#EF4444'} />
-      <AppText variant="bodyStrong" style={{ color: kind === 'income' ? '#22C55E' : '#EF4444', fontSize: 16 }}>{kind === 'income' ? 'Income Report' : 'Expenses Report'}</AppText>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4, paddingBottom: 12 }}>
+      <Ionicons name="document-text-outline" size={20} color={kind === 'income' ? '#22C55E' : '#EF4444'} />
+      <AppText variant="bodyStrong" style={{ color: kind === 'income' ? '#22C55E' : '#EF4444', fontSize: 16, fontWeight: '700' }}>{kind === 'income' ? 'Income Report' : 'Expenses Report'}</AppText>
     </View>
   </View>;
 }

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { AppText, Screen } from '@/components/ui';
 import { SixReportDetails } from '@/features/finance/components/reporting/SixReportPresentation';
@@ -99,8 +100,61 @@ export default function AssetsReportScreen() {
     category === 'silver' ? '🥈' :
     getCurrencyFlag(code) || '💵';
   const quantity = (value: number | null, code: string) => value === null ? 'Unavailable' : value.toFixed(3) + ' ' + (code === 'g' ? 'Gr' : code);
-  return <Screen scroll>
-    <ReportTitle active="assets" title="Assets Report" />
+  return <Screen scroll style={{ backgroundColor: '#F4F7FA' }}>
+    <View style={{
+  backgroundColor: '#1E293B',
+  borderBottomLeftRadius: 24,
+  borderBottomRightRadius: 24,
+  marginBottom: 10,
+  overflow: 'hidden',
+  paddingTop: 12,
+  paddingBottom: 14,
+  paddingHorizontal: 10,
+}}>
+  <View style={{
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 48,
+  }}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Back"
+      onPress={() => router.back()}
+      style={{
+        width: 44,
+        minHeight: 44,
+        justifyContent: 'center',
+      }}
+    >
+      <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+    </Pressable>
+    <AppText variant="bodyStrong" style={{
+      color: '#FFFFFF',
+      flex: 1,
+      textAlign: 'center',
+      fontSize: 17,
+    }}>
+      Tomorrow Finance Report
+    </AppText>
+    <View style={{ width: 44 }} />
+  </View>
+  <View style={{
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 4,
+  }}>
+    <Ionicons name="document-text-outline" size={20} color="#B45309" />
+    <AppText variant="bodyStrong" style={{
+      color: '#B45309',
+      fontSize: 16,
+      fontWeight: '700',
+    }}>
+      Assets Report
+    </AppText>
+  </View>
+</View>
     <ReportDates period={period} onChange={setPeriod} />
     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
       <View style={{ flex: 1 }}>
