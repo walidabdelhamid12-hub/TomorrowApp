@@ -75,6 +75,6 @@ export function DebtReportScreen({ direction }: { direction: Direction }) {
       </SixReportDetails>)}
     </>}
     </ScrollView>
-    {hydrated && rows !== null && rows.length > 0 && <View style={{ paddingHorizontal: 8, paddingBottom: 8, backgroundColor: '#FFFFFF' }}><ReportTableActions table={exportTable} statement={openStatement} /></View>}
+    {hydrated && rows !== null && rows.length > 0 && <View style={{ paddingHorizontal: 8, paddingBottom: 8, backgroundColor: '#FFFFFF' }}><ReportTableActions presentation="obligations" table={exportTable} statement={openStatement} /></View>}
   </Screen>;
 }

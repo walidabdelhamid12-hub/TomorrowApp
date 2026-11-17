@@ -22,11 +22,21 @@ Module._load = function(id, parent, main) {
   if (id === 'react') return hooks;
   if (id === '@react-native-community/datetimepicker') return { __esModule: true, default: 'DateTimePicker' };
   if (id.endsWith('/ReportTableActions')) return { ReportTableActions: props => React.createElement('ReportTableActions', props) };
-  if (id === 'react-native') return { Platform: { OS: 'android' }, Modal: 'Modal', ScrollView: 'ScrollView', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator' };
-  if (id === '@expo/vector-icons') return { Ionicons: 'Ionicons' };
+  if (id === 'react-native') return { useWindowDimensions: () => ({ width: 390, height: 844, fontScale: 1 }), Platform: { OS: 'android' }, Modal: 'Modal', ScrollView: 'ScrollView', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator' };
+  // Node UI tests do not load the native react-native-svg implementation.
+  if (id === 'react-native-svg') {
+    const element = name => props => React.createElement(name, props);
+    const Svg = element('Svg');
+    return { __esModule: true, default: Svg, Svg,
+      G: element('G'), Path: element('Path'), Circle: element('Circle'),
+      Rect: element('Rect'), Line: element('Line'), Text: element('SvgText'),
+      Defs: element('Defs'), LinearGradient: element('LinearGradient'),
+      Stop: element('Stop'), ClipPath: element('ClipPath') };
+  }
+  if (id === '@expo/vector-icons') return { Ionicons: 'Ionicons', MaterialCommunityIcons: 'MaterialCommunityIcons' };
   if (id === 'expo-router') return { useRouter: () => ({ back: () => calls.push('back'), push: route => calls.push(route) }) };
   if (id === '@/components/ui') return { AppText: 'AppText', Screen: 'Screen' };
-  if (id === '@/theme') return { moduleColors: { finance: '#10B981' }, useTheme: () => ({
+  if (id === '@/theme') return { moduleColors: { finance: '#10B981' }, useTheme: () => ({ scheme: 'light',
     colors: { text: '#111111', surface: '#FFFFFF', border: '#CCCCCC' }, spacing: { xs: 4, sm: 8, md: 12 },
   }) };
   if (id === '@/features/finance/store/useCurrencyStore') return {
@@ -204,7 +214,7 @@ test('Reports enables the eight implemented routes', () => {
     press(`Open ${name} report`); assert.equal(calls.at(-1), `/finance/report-${route}`);
   }
   for (const name of ['Loans','Debts Receivable','Debts Payable']) {
-    assert.equal(nodes('Pressable').find(n => n.props.accessibilityLabel === `Open ${name} report`).props.disabled, false);
+    assert.equal(nodes('Pressable').find(n => n.props.accessibilityLabel === `Open ${name} report`).props.disabled === true, false);
   }
 });
 

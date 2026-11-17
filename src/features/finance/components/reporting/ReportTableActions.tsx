@@ -6,10 +6,11 @@ import { buildReportTableHtml, type ReportTable } from '../../utils/reportTableE
 import { shareStatementPdf } from '../../utils/shareStatementPdf';
 import { shareStatementXlsx } from '../../utils/shareStatementXlsx';
 import { buildAssetsBrandedPrintHtml } from '../../utils/assetsBrandedPrintHtml';
+import { buildBrandedReportTablePrintHtml } from '../../utils/brandedReportTablePrintHtml';
 import { buildReportTableXlsx } from '../../utils/reportTableXlsx';
 
 /** Snapshot export only. Never infers missing financial history or posts records. */
-export function ReportTableActions({ table, statement, presentation }: { table: ReportTable; statement?: () => void; presentation?: 'assets' }) {
+export function ReportTableActions({ table, statement, presentation, pdfLandscape = false }: { table: ReportTable; statement?: () => void; presentation?: 'assets' | 'obligations'; pdfLandscape?: boolean }) {
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const disabled = !table.verified || !table.rows.length || table.rows.some(row => row.some(value => value === null));
@@ -17,7 +18,7 @@ export function ReportTableActions({ table, statement, presentation }: { table: 
     if (lock.current) return; if (disabled) { Alert.alert('Export unavailable', 'Account history is incomplete or this selection cannot be safely exported. Select one currency and ensure all included accounts have verified balances.'); return; }
     lock.current = true; setBusy(true);
     try {
-      if (format === 'pdf') await shareStatementPdf(presentation === 'assets' ? buildAssetsBrandedPrintHtml(table) : buildReportTableHtml(table), presentation === 'assets' ? { width: 595, height: 842, textZoom: 100 } : { width: 842, height: 595, textZoom: 100 });
+      if (format === 'pdf') await shareStatementPdf(presentation === 'assets' ? buildAssetsBrandedPrintHtml(table) : presentation === 'obligations' ? buildBrandedReportTablePrintHtml(table, pdfLandscape) : buildReportTableHtml(table), presentation === 'obligations' && pdfLandscape ? { width: 842, height: 595, textZoom: 100 } : presentation === 'assets' || presentation === 'obligations' ? { width: 595, height: 842, textZoom: 100 } : { width: 842, height: 595, textZoom: 100 });
       else await shareStatementXlsx(buildReportTableXlsx(table), { title: table.title, filePrefix: table.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') });
     } catch (error) { Alert.alert('Export failed', error instanceof Error ? error.message : 'Unable to export report.'); }
     finally { lock.current = false; setBusy(false); }

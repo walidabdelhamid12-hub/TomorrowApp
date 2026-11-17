@@ -34,7 +34,7 @@ Module._load = function(id, parent, main) {
   if (id.endsWith('/store/installmentsStorage')) return { installmentsStorage: { subscribe: () => () => {}, getState: () => savedState } };
   if (id.endsWith('/utils/shareStatementPdf')) return { shareStatementPdf: async (value, options) => calls.push({ pdf: value, options }) };
   if (id.endsWith('/utils/shareStatementCsv')) return { shareStatementCsv: async value => calls.push({ csv: value }) };
-  if (id === '@/theme') return { moduleColors: { finance: '#10B981' }, useTheme: () => ({ colors: { text: '#111111', surface: '#FFFFFF', border: '#CCCCCC', background: '#F4F6F8' }, spacing: { xs: 4, sm: 8, md: 12, lg: 16 } }) };
+  if (id === '@/theme') return { moduleColors: { finance: '#10B981' }, useTheme: () => ({ scheme: 'light', colors: { text: '#111111', surface: '#FFFFFF', border: '#CCCCCC', background: '#F4F6F8' }, spacing: { xs: 4, sm: 8, md: 12, lg: 16 } }) };
   if (id === '@/features/finance/store/useLedgerStore') return { useLedgerHydrated: () => ready, useLedgerStore: select => selectors(ledger)(select) };
   if (id === '@/features/finance/store/useFinanceStore') return { useFinanceHydrated: () => ready, useFinanceStore: select => selectors(finance)(select) };
   // Assets valuation now reads the currency store; mock this external dependency like Finance/Ledger.
@@ -43,7 +43,7 @@ Module._load = function(id, parent, main) {
     useCurrencyStore: select => selectors(currency)(select),
   };
   if (id === 'expo-file-system') return { File, Paths: { cache: 'file:///cache/' } };
-  if (id === 'expo-print') return { printToFileAsync: async options => { assert.equal(options.width, 595); assert.equal(options.height, 842); assert.equal(options.textZoom, 100); html.push(options.html); return { base64: Buffer.from('%PDF-1.7\nfixture').toString('base64') }; } };
+  if (id === 'expo-print') return { printToFileAsync: async options => { assert.ok((options.width === 595 && options.height === 842) || (options.width === 842 && options.height === 595), 'Expected approved A4 portrait or landscape geometry'); assert.equal(options.textZoom, 100); html.push(options.html); return { base64: Buffer.from('%PDF-1.7\nfixture').toString('base64') }; } };
   if (id === 'expo-sharing') return { isAvailableAsync: async () => true, shareAsync: async (uri, options) => {
     assert.ok(files.find(file => file.uri === uri && file.exists && file.size > 0)); calls.push({ uri, options });
   } };
@@ -239,7 +239,13 @@ test('Loans show contractual and principal balances separately, preserve fees an
   savePreview('loans'); assertFooter(); assert.match(allText(), /1,080\.000/); assert.doesNotMatch(allText(), /900\.000/);
   openDetails('Loan', component); assert.match(allText(), /900\.000/);
   assert.match(allText(), /Late fee: 5 OMR/); assert.match(allText(), /Confirmed payment/);
-  press('Export PDF'); await new Promise(resolve => setImmediate(resolve)); assert.match(calls.find(value => value.pdf).pdf, /Current principal remaining/);
+  press('Export PDF');
+  for (let attempt = 0; attempt < 20 && !calls.some(value => value?.pdf); attempt++) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  const pdfExport = calls.find(value => value?.pdf);
+  assert.ok(pdfExport, 'Expected verified Loans PDF export to be recorded');
+  assert.match(pdfExport.pdf, /Current principal remaining/);
   assert.deepEqual(finance, before);
   finance.loans[0].updatedAt = '2026-12-01T00:00:00Z'; states = [{ from: '2026-11-01', to: '2026-11-12' }]; render(component);
   assert.match(allText(), /Unverified history/); assert.equal(nodes('Pressable').find(node => node.props.accessibilityLabel === 'Export PDF').props.disabled, true);

@@ -18,7 +18,7 @@ export function StatementSixChrome({ kind, from, to, category, currency }: {
       <AppText variant="h2" style={{ color: accent, flexShrink: 1 }}>{kind} Statement</AppText>
     </View>
     <View style={{ ...box, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-      <Ionicons name="calendar" size={21} color="#123C68" />
+      <Ionicons name="calendar" size={21} color="#D6B777" />
       <AppText variant="bodyStrong" style={{ flexShrink: 1 }}>From {from}    To {to}</AppText>
     </View>
     <View style={{ flexDirection: 'row', gap: 8 }}>

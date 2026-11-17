@@ -11,6 +11,7 @@ let transactions = [];
 let currency = { baseCurrency: 'EGP', rates: { EGP: 1, OMR: 100 }, verifiedCurrencies: ['EGP', 'OMR'], metals: {} };
 const ledger = () => ({ transactions, accounts: [], categories: [], transfers: [] });
 Module._load = function(id, parent, main) {
+  if (id === 'expo-router') return { useRouter: () => ({ back() {} }) };
   if (id === 'react') return { ...React, useMemo: fn => fn(), useState: x => [x, () => {}] };
   if (id === 'react-native') return { ActivityIndicator: 'ActivityIndicator', Pressable: 'Pressable', View: 'View', StyleSheet: { create: x => x, hairlineWidth: 1 } };
   if (id === '@expo/vector-icons') return { Ionicons: 'Icon' };

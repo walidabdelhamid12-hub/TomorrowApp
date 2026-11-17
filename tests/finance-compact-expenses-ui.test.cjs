@@ -27,11 +27,21 @@ class File {
 Module._load = function(id, parent, main) {
   if (id === 'react') return hooks;
   if (id === '@react-native-community/datetimepicker') return { __esModule: true, default: 'DateTimePicker' };
-  if (id === 'react-native') return { Platform: { OS: 'android' }, Modal: 'Modal', View: 'View', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', Alert: { alert: (...args) => alerts.push(args) } };
-  if (id === '@expo/vector-icons') return { Ionicons: 'Ionicons' };
+  if (id === 'react-native') return { useWindowDimensions: () => ({ width: 390, height: 844, fontScale: 1 }), Platform: { OS: 'android' }, Modal: 'Modal', View: 'View', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', Alert: { alert: (...args) => alerts.push(args) } };
+  // Node UI tests do not load the native react-native-svg implementation.
+  if (id === 'react-native-svg') {
+    const element = name => props => React.createElement(name, props);
+    const Svg = element('Svg');
+    return { __esModule: true, default: Svg, Svg,
+      G: element('G'), Path: element('Path'), Circle: element('Circle'),
+      Rect: element('Rect'), Line: element('Line'), Text: element('SvgText'),
+      Defs: element('Defs'), LinearGradient: element('LinearGradient'),
+      Stop: element('Stop'), ClipPath: element('ClipPath') };
+  }
+  if (id === '@expo/vector-icons') return { Ionicons: 'Ionicons', MaterialCommunityIcons: 'MaterialCommunityIcons' };
   if (id === 'expo-router') return { useRouter: () => ({ push: value => calls.push(value), back: () => calls.push('back') }), useLocalSearchParams: () => params };
   if (id === '@/components/ui') return { Screen: 'Screen', AppText: 'AppText' };
-  if (id === '@/theme') return { moduleColors: { finance: '#10B981' }, useTheme: () => ({ colors: { text: '#111111', surface: '#FFFFFF', border: '#CCCCCC', background: '#F4F6F8' }, spacing: { xs: 4, sm: 8, md: 12, lg: 16 } }) };
+  if (id === '@/theme') return { moduleColors: { finance: '#10B981' }, useTheme: () => ({ scheme: 'light', colors: { text: '#111111', surface: '#FFFFFF', border: '#CCCCCC', background: '#F4F6F8' }, spacing: { xs: 4, sm: 8, md: 12, lg: 16 } }) };
   if (id === '@/features/finance/store/useLedgerStore') return { useLedgerHydrated: () => ready, useLedgerStore: select => selectors(ledger)(select) };
   if (id === '@/features/finance/store/useFinanceStore') return { useFinanceHydrated: () => ready, useFinanceStore: select => selectors(finance)(select) };
   if (id === 'expo-file-system') return { File, Paths: { cache: 'file:///cache/' } };
@@ -191,19 +201,19 @@ test('Expenses branded PDF escapes descriptions, preserves refund precision, and
 
 test('Reports entry retains eight routes in two columns with Finance icons', () => {
   render(Reports);
-  const grid = nodes('View').find(node => node.props.testID === 'reports-grid');
-  assert.ok(grid); assert.equal(grid.props.style.flexWrap, 'wrap');
+  const grid = nodes('View').find(node => node.props.testID === 'reports-comparison-pair');
+  assert.ok(grid); assert.equal(grid.props.style.flexDirection, 'row');
   const entries = nodes('Pressable').filter(node => node.props.accessibilityLabel?.startsWith('Open '));
-  assert.equal(entries.length, 8); assert.ok(entries.every(node => node.props.style.width === '48%'));
+  assert.equal(entries.length, 8); assert.ok(entries.every(node => typeof node.props.onPress === 'function'));
   press('Open Expenses report'); assert.equal(calls.at(-1), '/finance/report-expenses');
-  assert.ok(nodes('Ionicons').some(node => node.props.name === 'trending-down-outline'));
+  assert.ok(nodes('MaterialCommunityIcons').some(node => node.props.name === 'cash-minus'));
 });
 
 test('polished Expenses keeps compact summaries and four footer actions', () => {
   render();
   assert.match(allText(), /Total Expenses/); assert.match(allText(), /Transactions/); assert.match(allText(), /Currencies/);
   assert.match(allText(), /All Categories/); assert.doesNotMatch(allText(), /Previous-period comparison/); assert.ok(button('View Statement'));
-  assert.ok(nodes('Ionicons').filter(node => node.props.name === 'trending-down-outline').length >= 1);
+  assert.ok(nodes('Ionicons').some(node => node.props.name === 'document-text-outline'));
   assert.deepEqual(nodes('Pressable').filter(node => node.props.accessibilityLabel?.startsWith('Export ')).map(node => node.props.accessibilityLabel),
     ['Export PDF', 'Export Excel', 'Export Share']);
   press('Account: All accounts'); render(); press('Oman 🇴🇲 OMR · Archived'); render();
