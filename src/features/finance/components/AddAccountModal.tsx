@@ -1,10 +1,9 @@
+import { FormModal } from '@/features/finance/components/FormModal';
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  Modal,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,6 +16,8 @@ import { parseAmount } from '@/features/finance/utils/money';
 import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
 import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
+import { FinanceButton } from './FinanceButton';
+import { FinanceInput } from './FinanceInput';
 
 export type AccountTypeLabel =
   | 'Cash'
@@ -168,40 +169,14 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
     selectedCurrency;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.headerRow}>
-            <Text style={styles.modalTitle}>
-              {account ? 'Edit account' : 'Add account'}
-            </Text>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeButton}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-            >
-              <Ionicons name="close" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
+    <FormModal visible={visible} title={account ? 'Edit account' : 'Add account'} onClose={onClose}>
+      <View>
             <Text style={styles.label}>Name</Text>
 
-            <TextInput
-              style={styles.input}
+            <FinanceInput
+              fieldStyle={styles.accountNameField}
+              style={styles.accountNameText}
               placeholder="e.g. CIB, CASH, فودافون كاش"
-              placeholderTextColor="#999"
               value={accountName}
               onChangeText={setAccountName}
             />
@@ -344,7 +319,8 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
               </TouchableOpacity>
             </View>}
 
-            <TouchableOpacity
+            <FinanceButton
+              title={account ? 'Save changes' : 'Add account'}
               style={styles.saveButton}
               onPress={() => {
                 const parsed = parseAmount(amount);
@@ -373,16 +349,9 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
                   selectedCurrency,
                 });
               }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.saveButtonText}>
-                {account ? 'Save changes' : 'Add account'}
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
+            />
       </View>
-    </Modal>
+    </FormModal>
   );
 };
 
@@ -394,13 +363,11 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#F8FAFC',
-    borderTopWidth: 2,
-    borderTopColor: '#D6B777',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     maxHeight: '85%',
-    paddingTop: 14,
-    paddingHorizontal: 14,
+    paddingTop: 0,
+    paddingHorizontal: 0,
   },
   headerRow: {
     backgroundColor: '#1E293B',
@@ -421,23 +388,37 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   scrollContent: {
+    paddingHorizontal: 16,
     paddingBottom: 24,
   },
   label: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: '#365575',
     marginTop: 13,
     marginBottom: 7,
     letterSpacing: 0.5,
   },
+  accountNameField: {
+    borderColor: '#D6B777',
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+    minHeight: 52,
+    paddingHorizontal: 12,
+  },
+  accountNameText: {
+    fontSize: 16,
+    color: '#111111',
+    paddingVertical: 0,
+  },
   input: {
+    minHeight: 52,
     borderWidth: 1,
     borderColor: '#D6B777',
     borderRadius: 11,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 16,
     backgroundColor: '#FFFFFF',
     color: '#111',
   },
@@ -486,7 +467,7 @@ const styles = StyleSheet.create({
     columnGap: 5,
   },
   currencyCard: {
-    width: '18.5%',
+    width: '18.5%', minWidth: 64, flexGrow: 1,
     minHeight: 70,
     alignItems: 'center',
     justifyContent: 'center',
@@ -551,6 +532,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   saveButton: {
+    minHeight: 52, justifyContent: 'center',
     backgroundColor: '#1E293B',
     borderRadius: 12,
     paddingVertical: 12,
@@ -559,7 +541,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });

@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTheme } from '@/theme';
+import { getFinanceDesignTokens } from '../constants/financeDesignTokens';
 
 interface FinanceHeaderProps {
   selectedCurrency: string;
@@ -9,30 +11,32 @@ interface FinanceHeaderProps {
 
 export const FinanceHeader: React.FC<FinanceHeaderProps> = ({ selectedCurrency, onSelectCurrency }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const { scheme } = useTheme();
+  const tokens = getFinanceDesignTokens(scheme);
   const currencies = ['EGP', 'OMR', 'SAR', 'AED', 'USD', 'EUR', 'GBP', 'JOD', 'QAR', 'KWD'];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: tokens.surface }]}>
       <TouchableOpacity 
         style={styles.headerRow} 
         onPress={() => setIsOpen(!isOpen)}
       >
-        <Text style={styles.title}>TOTAL ({selectedCurrency})</Text>
+        <Text style={[styles.title, { color: tokens.secondaryText }]}>TOTAL ({selectedCurrency})</Text>
         <Ionicons 
           name={isOpen ? "chevron-up" : "chevron-down"} 
           size={18} 
-          color="#333" 
+          color={tokens.text}
         />
       </TouchableOpacity>
 
       {isOpen && (
-        <View style={styles.dropdown}>
+        <View style={[styles.dropdown, { borderTopColor: tokens.inputBorder }]}>
           {currencies.map((curr) => (
             <TouchableOpacity
               key={curr}
               style={[
-                styles.chip, 
-                selectedCurrency === curr && styles.chipActive
+                styles.chip, { backgroundColor: tokens.background },
+                selectedCurrency === curr && [styles.chipActive, { backgroundColor: tokens.income }]
               ]}
               onPress={() => {
                 onSelectCurrency(curr);
@@ -40,7 +44,7 @@ export const FinanceHeader: React.FC<FinanceHeaderProps> = ({ selectedCurrency, 
               }}
             >
               <Text style={[
-                styles.chipText, 
+                styles.chipText, { color: tokens.text },
                 selectedCurrency === curr && styles.chipTextActive
               ]}>
                 {curr}

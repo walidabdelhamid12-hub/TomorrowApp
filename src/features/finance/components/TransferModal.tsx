@@ -7,8 +7,8 @@ import {
   AppInput,
   AppText,
   ChipSelect,
-  DateField,
 } from '@/components/ui';
+import { FinanceDateField as DateField } from '@/features/finance/components/FinanceDateField';
 import { FormModal } from '@/features/finance/components/FormModal';
 import { getCurrencyLabel } from '@/features/finance/constants/currencies';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
@@ -20,6 +20,7 @@ import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecis
 import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { moduleColors, useTheme } from '@/theme';
 import { isValidISODate } from '@/utils/input';
+import { shouldStackFinanceFields } from '../utils/formLayout';
 
 type TransferMode = 'internal' | 'credit_card_payment';
 
@@ -36,7 +37,7 @@ export function TransferModal({
 }: TransferModalProps) {
   const { colors, spacing } = useTheme();
   const { width, fontScale } = useWindowDimensions();
-  const stackFields = width / fontScale < 360;
+  const stackFields = shouldStackFinanceFields(width, fontScale);
 
   const accounts = useLedgerStore((state) => state.accounts);
   const addTransfer = useLedgerStore((state) => state.addTransfer);
@@ -375,8 +376,10 @@ export function TransferModal({
 
           <View style={{ flexDirection: stackFields ? 'column' : 'row', gap: spacing.sm }}>
             <AccountDropdown label="From account" options={sourceAccounts} value={fromAccountId}
+              containerStyle={stackFields ? { flex: 0 } : undefined}
               onChange={value => { setFromAccountId(value); setError(undefined); }} emptyMessage="No eligible source accounts" />
             <AccountDropdown label="To account" options={destinationAccounts} value={toAccountId}
+              containerStyle={stackFields ? { flex: 0 } : undefined}
               onChange={value => { setToAccountId(value); setError(undefined); }}
               emptyMessage={mode === 'credit_card_payment' ? 'Add a credit card account' : 'Choose another non-card account'} />
           </View>

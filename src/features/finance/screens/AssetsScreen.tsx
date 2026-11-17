@@ -1,3 +1,5 @@
+import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
+import { financeChrome } from '@/features/finance/components/financeChrome';
 import { validateAssetOpeningDate } from '@/features/finance/utils/assetOpeningDate';
 import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { Ionicons } from '@expo/vector-icons';
@@ -5,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { AppButton, AppText, Screen } from '@/components/ui';
+import { AppText, Screen } from '@/components/ui';
 import type { AddAssetFormData } from '@/features/finance/components/AddAssetModal';
 import { AddAssetModal } from '@/features/finance/components/AddAssetModal';
 import { AssetCard } from '@/features/finance/components/AssetCard';
@@ -171,21 +173,21 @@ export default function AssetsScreen() {
     : null;
 
   return (
-    <Screen scroll>
+    <Screen scroll style={{ backgroundColor: '#F1F5F9' }}>
       {confirmation}
-      <View style={styles.header}>
+      <View style={financeChrome.header}>
         <Pressable
           onPress={() => router.back()}
           hitSlop={10}
           accessibilityRole="button"
           accessibilityLabel="Go back"
-          style={[styles.backButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          style={financeChrome.back}
         >
-          <Ionicons name="arrow-back" size={20} color={colors.text} />
+          <Ionicons name="arrow-back" size={20} color="#D6B777" />
         </Pressable>
         <View style={styles.headerText}>
-          <AppText variant="h1">Assets</AppText>
-          <AppText color="textSecondary">{assets.length} asset(s)</AppText>
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>Assets</AppText>
+          <AppText variant="caption" style={{ color: '#CBD5E1' }}>{assets.length} asset(s)</AppText>
         </View>
       </View>
 
@@ -282,9 +284,9 @@ export default function AssetsScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
-  backButton: { width: 40, height: 40, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
-  headerText: { flex: 1, gap: 2 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16, backgroundColor: '#1E293B', borderRadius: 20, padding: 16 },
+  backButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: '#D6B777', alignItems: 'center', justifyContent: 'center' },
+  headerText: { flex: 1, minWidth: 0, gap: 2 },
   list: { gap: 12, marginBottom: 14 },
   emptyCard: { minHeight: 220, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, alignItems: 'center', justifyContent: 'center', padding: 20, gap: 12 },
 });

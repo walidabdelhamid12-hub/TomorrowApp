@@ -6,7 +6,7 @@ const path = require('node:path');
 const Module = require('node:module');
 const ts = require('typescript');
 const React = require('react');
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(path.dirname(module.filename), '..');
 const load = Module._load;
 let states, cursor, finance, currency, alerts, calls, theme, ledger, effects, params, paymentCalls;
 let appStateListener, appStateRemoved = false;
@@ -23,13 +23,29 @@ function Ionicon(props) { return React.createElement('Ionicon', props); }
 Ionicon.glyphMap = {};
 function MaterialIcon(props) { return React.createElement('MaterialIcon', props); }
 Module._load = function(id, parent, main) {
+  if (id === '@/features/finance/components/FinanceDateField') return { FinanceDateField: 'DateField' };
+  if (id === '@/features/finance/components/FinanceButton') return { FinanceButton: 'AppButton' };
+  if (id === '@/features/finance/components/FinanceInput') return { FinanceInput: 'AppInput' };
   if (id === 'react') return hooks;
   if (id === 'react-native') return { useWindowDimensions: () => dimensions, AppState: { addEventListener: (_event, callback) => { appStateListener = callback; return { remove() { appStateRemoved = true; } }; } }, View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', Modal: 'Modal', ScrollView: 'ScrollView', TextInput: 'TextInput', KeyboardAvoidingView: 'KeyboardAvoidingView',
     PanResponder: { create: handlers => ({ panHandlers: handlers }) }, Animated: { Value: function() { this.interpolate = () => 0; this.stopAnimation = () => {}; this.setValue = () => {}; }, timing: () => ({ start() {}, stop() {} }), loop: () => ({ start() {}, stop() {} }) },
     StyleSheet: { create: value => value, hairlineWidth: 1 }, Platform: { OS: 'android' },
     Alert: { alert: (...args) => alerts.push(args) } };
+  if (id === 'react-native-svg') {
+    const element = name => { function SvgMock(props) { return React.createElement(name, props); } return SvgMock; };
+    const Svg = element('Svg');
+    return {
+      __esModule: true,
+      default: Svg,
+      Svg,
+      Defs: element('Defs'),
+      LinearGradient: element('LinearGradient'),
+      Stop: element('Stop'),
+      Text: element('SvgText'),
+    };
+  }
   if (id === '@expo/vector-icons') return { Ionicons: Ionicon, MaterialCommunityIcons: MaterialIcon };
-  if (id === 'expo-router') return { useLocalSearchParams: () => params, useRouter: () => ({ back: () => calls.push('back'), replace: () => calls.push('replace') }) };
+  if (id === 'expo-router') return { useLocalSearchParams: () => params, useRouter: () => ({ push: href => calls.push({ push: href }), back: () => calls.push('back'), replace: () => calls.push('replace') }) };
   if (id === '@/features/finance/providers/RatesAutoRefreshProvider') return { useRatesAutoRefresh: () => ({ refresh: async () => null, isRefreshing: false, lastResult: null }) };
   if (id === '@/features/finance/store/useFinancePreferences') return { useFinancePreferences: select => select(privacy) };
   if (id === '@/features/finance/components/AddTransactionModal') return { AddTransactionModal: 'AddTransactionModal' };
@@ -83,7 +99,8 @@ beforeEach(() => {
   states = []; cursor = 0; alerts = []; calls = []; effects = []; params = {}; paymentCalls = [];
   dimensions = { width: 390, height: 844, fontScale: 1 };
   ledger = { accounts: [], transactions: [], transfers: [], categories: [] };
-  theme = { colors: lightColors, isDark: false, spacing: { xs: 4, sm: 8, md: 12 }, radius: { sm: 8 } };
+  theme = { scheme: 'light', colors: lightColors, isDark: false, typography: new Proxy({}, { get: () => ({}) }), spacing: { xs: 4, sm: 8, md: 12 }, radius: { sm: 8 } };
+  Object.defineProperty(theme, 'scheme', { get: () => theme.isDark ? 'dark' : 'light' });
   finance = { assets: structuredClone([gold, silver]), loans: [], debts: [], cheques: [] };
   for (const method of ['addAsset', 'updateAsset', 'deleteAsset', 'addAssetEntry', 'updateAssetEntry', 'deleteAssetEntry']) {
     finance[method] = (...args) => calls.push([method, ...args]);
@@ -217,6 +234,26 @@ test('Accounts reference uses the shared controls and retains exact record callb
 const { RatesModal } = require('../src/features/finance/components/RatesModal.tsx');
 const { AssetEntriesModal: RealEntries } = require('../src/features/finance/components/AssetEntriesModal.tsx');
 const { default: LoansScreen } = require('../src/app/finance/loans.tsx');
+for (const view of [{ width: 390, fontScale: 1, direction: 'row' }, { width: 320, fontScale: 1, direction: 'column' }, { width: 390, fontScale: 1.6, direction: 'column' }]) {
+  test('New loan keeps fields and Save/Cancel in one sheet at ' + view.width + ' / ' + view.fontScale, () => {
+    dimensions = { width: view.width, height: 640, fontScale: view.fontScale };
+    render(LoansScreen);
+    nodes('AppButton').find(n => n.props.title === 'Add loan').props.onPress();
+    render(LoansScreen);
+    const sheet = nodes('FormModal').find(n => n.props.title === 'New loan' && n.props.visible);
+    assert.ok(sheet);
+    for (const id of ['loan-name-row', 'loan-amount-row', 'loan-installment-row', 'loan-form-actions']) {
+      const row = nodes('View', sheet).find(n => n.props.testID === id);
+      assert.equal(style(row.props.style).flexDirection, view.direction);
+    }
+    assert.equal(nodes('TextInput', sheet).length, 6);
+    const actions = nodes('View', sheet).find(n => n.props.testID === 'loan-form-actions');
+    assert.deepEqual(nodes('AppButton', actions).map(n => n.props.title), ['Save loan', 'Cancel']);
+    assert.equal(nodes('ScrollView', sheet).length, 0, 'FormModal owns the only form scroll viewport');
+    sheet.props.onClose(); render(LoansScreen);
+    assert.equal(nodes('FormModal').find(n => n.props.title === 'New loan').props.visible, false);
+  });
+}
 const { default: DebtsScreen } = require('../src/app/finance/debts.tsx');
 const { AccountDetails } = require('../src/features/finance/components/AccountDetails.tsx');
 function flushEffects() { const pending = effects; effects = []; for (const fn of pending) fn(); }
@@ -475,7 +512,13 @@ test('Finance cards offer one Debts shortcut and distinguish Total Balance, Net 
   assert.equal(nodes('Pressable').filter(n => n.props.accessibilityLabel === 'Open Debts').length, 1);
   assert.equal(nodes('Pressable').some(n => ['Open Receivable', 'Open Payable'].includes(n.props.accessibilityLabel)), false);
   assert.ok(texts().includes('10,000.00 EGP'));
+  assert.equal(texts().some(t => t.startsWith('Loan future contractual payments:')), false);
+  const info = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Explain Net Worth');
+  assert.equal(info.props.accessibilityState.expanded, false);
+  info.props.onPress(); render(TotalCard, props);
+  assert.equal(nodes('Pressable').find(n => n.props.accessibilityLabel === 'Explain Net Worth').props.accessibilityState.expanded, true);
   assert.ok(texts().includes('Loan future contractual payments: 108,000.00 EGP'));
+  assert.ok(texts().some(t => t.includes('remaining received loan principal')));
   nodes('Pressable').find(n => n.props.accessibilityLabel === 'Open Debts').props.onPress(); assert.deepEqual(calls, ['debts']);
   render(TotalCard, { ...props, amountsVisible: false });
   assert.ok(texts().includes('••••••'));
@@ -529,7 +572,7 @@ test('eight shortcuts follow approved order with Categories excluded and one glo
     ['Expenses','Income','Accounts','Assets','Installments','Loans','Debts','Transfers'].map(t => 'Open ' + t));
   assert.equal(texts().some(t => /123,456|234,567|345,678|456,789|567,890|678,901|789,012|890,123|901,234/.test(t)), false);
   assert.equal(nodes('Ionicon').filter(n => n.props.name === 'eye-outline' || n.props.name === 'eye-off-outline').length, 1);
-  assert.ok(texts().includes('Coming soon'));
+  assert.equal(texts().includes('Coming soon'), false);
   assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Open Categories'), false);
   const info = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Explain Net Worth');
   assert.equal(info.props.accessibilityState.expanded, false);
@@ -791,7 +834,8 @@ for (const [mode, colors] of [['light', lightColors], ['dark', darkColors]]) {
     render(TotalCard, compactSummaryProps());
     const summary = nodes('Card')[0];
     const cardStyle = style(summary.props.style);
-    assert.equal(cardStyle.backgroundColor, colors.finance.balance.surface);
+    assert.equal(cardStyle.backgroundColor, '#F8FAFC');
+    assert.equal(cardStyle.borderColor, '#B68C42');
     assert.equal(cardStyle.paddingVertical, 0);
     assert.equal(cardStyle.height, undefined);
     assert.notEqual(cardStyle.overflow, 'hidden');
@@ -802,14 +846,18 @@ for (const [mode, colors] of [['light', lightColors], ['dark', darkColors]]) {
     assert.equal(style(worthRow.props.style).marginTop, 0);
     for (const label of ['Hide Finance amounts', 'Base currency EGP. Change currency']) {
       const control = nodes('Pressable', summary).find(n => n.props.accessibilityLabel === label);
-      assert.ok(style(control.props.style).minHeight >= 48);
+      assert.ok(style(control.props.style).minHeight >= 48, label + ' touch height');
+      assert.ok(style(control.props.style).minWidth >= 48, label + ' touch width');
     }
-    assert.ok(nodes('AppText', summary).some(n => n.props.children === 'Loan future contractual payments: 200.00 EGP'));
+    assert.equal(nodes('AppText', summary).some(n => String(n.props.children).startsWith('Loan future contractual payments:')), false);
     info.props.onPress(); render(TotalCard, compactSummaryProps());
+    assert.ok(texts().includes('Loan future contractual payments: 200.00 EGP'));
     assert.ok(texts().some(t => t.includes('Future contractual installments')));
+    nodes('Pressable').find(n => n.props.accessibilityLabel === 'Explain Net Worth').props.onPress(); render(TotalCard, compactSummaryProps());
+    assert.equal(texts().some(t => t.startsWith('Loan future contractual payments:')), false);
   });
 
-  test(`${mode} Finance date keeps its English format and location with a themed semibold accent`, () => {
+  test(`${mode} Finance date keeps its English format in the compact navy header`, () => {
     theme.colors = colors;
     theme.sizes = { inputHeight: 48 };
     currency.rateSources = { EGP: 'manual' };
@@ -818,11 +866,31 @@ for (const [mode, colors] of [['light', lightColors], ['dark', darkColors]]) {
     const date = nodes('AppText').find(n => typeof n.props.children === 'string'
       && /^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday), [A-Z][a-z]+ \d{1,2}, \d{4}$/.test(n.props.children));
     assert.ok(date);
-    assert.equal(date.props.color, colors.finance.neutral.accent);
+    assert.equal(style(date.props.style).color, '#CBD5E1');
     assert.equal(style(date.props.style).fontWeight, '600');
-    assert.equal(style(date.props.style).marginTop, theme.spacing.xs);
+    const row = nodes('View').find(n => n.props.children?.includes?.(date));
+    assert.ok(row); assert.equal(style(row.props.style).backgroundColor, '#1E293B');
+    assert.equal(style(row.props.style).marginTop, -theme.spacing.sm, 'Compact header offset');
+    assert.equal(style(date.props.style).marginTop, 0, 'Date has no negative offset');
+    assert.equal(style(date.props.style).textAlign, 'center');
+    const rates = nodes('Pressable', row).find(n => n.props.accessibilityLabel === 'Open exchange rates');
+    assert.ok(rates);
+    assert.equal(style(rates.props.style).width, 48);
+    assert.equal(style(rates.props.style).height, 48);
+    assert.ok(nodes('Ionicon', rates).some(n => n.props.name === 'refresh-outline' && n.props.size === 19));
+    const settings = nodes('Pressable', row).find(n => n.props.accessibilityLabel === 'Open Finance settings');
+    assert.ok(settings);
+    assert.equal(style(settings.props.style).width, 48);
+    assert.equal(style(settings.props.style).height, 48);
+    assert.ok(nodes('Ionicon', settings).some(n => n.props.name === 'settings-outline' && n.props.size === 19));
+    rates.props.onPress(); render(FinanceHomeScreen);
+    assert.ok(nodes('FormModal').some(n => n.props.visible && n.props.title === 'Exchange rates'));
     const labels = nodes('AppText');
-    assert.equal(labels.indexOf(date), labels.findIndex(n => n.props.children === 'Finance') + 1);
+    const walletSelector = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Select Finance wallet');
+    assert.ok(walletSelector);
+    assert.ok(nodes('AppText', walletSelector).some(n => n.props.children === 'Personal Wallet'));
+    assert.ok(nodes('SvgText').some(n => n.props.children === 'Tomorrow Finance'));
+    assert.ok(nodes('AppText').some(n => n.props.children === date.props.children));
   });
 }
 
@@ -1081,4 +1149,110 @@ test('Rates refresh then Save persists edited currency once', () => {
     1,
     'Second Save must not repeat the same write'
   );
+});
+
+
+for (const [mode, colors] of [['light', lightColors], ['dark', darkColors]]) {
+  test(mode + ' Home uses exact Outflows gray, centered plain title and working header destinations', () => {
+    theme.colors = colors; theme.sizes = { inputHeight: 48 };
+    currency.rateSources = { EGP: 'manual' }; privacy = { amountsVisible: true, toggleAmounts() {} };
+    render(FinanceHomeScreen);
+    assert.equal(style(nodes('Screen')[0].props.style).backgroundColor, '#F1F5F9');
+    const header = nodes('View').find(n => style(n.props.style).backgroundColor === '#1E293B');
+    assert.ok(header); assert.equal(style(header.props.style).borderBottomLeftRadius, 24);
+    const title = nodes('View', header).find(n => n.props.accessibilityRole === 'header'
+      && n.props.accessibilityLabel === 'Tomorrow Finance');
+    assert.ok(title, 'Finance title remains accessible');
+    assert.equal(style(title.props.style).flex, 1);
+    assert.equal(style(title.props.style).minWidth, 0);
+    assert.equal(style(title.props.style).alignItems, 'center');
+
+    const svg = nodes('Svg', title)[0];
+    assert.ok(svg, 'Title uses SVG');
+    assert.equal(svg.props.width, '100%');
+
+    const gradient = nodes('LinearGradient', svg)
+      .find(n => n.props.id === 'financeTitleGold');
+    assert.ok(gradient, 'Gradient is defined');
+
+    assert.deepEqual(
+      nodes('Stop', gradient).map(n => [n.props.offset, n.props.stopColor]),
+      [
+        ['0%', '#FFFFFF'],
+        ['52%', '#FFFFFF'],
+        ['100%', '#D6B777']
+      ]
+    );
+
+    const glyphs = nodes('SvgText', svg)
+      .find(n => n.props.children === 'Tomorrow Finance');
+    assert.ok(glyphs, 'Title text is rendered inside SVG');
+    assert.equal(glyphs.props.fill, 'url(#financeTitleGold)');
+    assert.equal(glyphs.props.textAnchor, 'middle');
+    assert.equal(nodes('View', header).some(n => style(n.props.style).height === 1), false, 'No separate underline');
+    const settingsButton = nodes('Pressable', header)
+      .find(n => n.props.accessibilityLabel === 'Open Finance settings');
+    assert.ok(settingsButton, 'Settings remains in the header');
+    assert.equal(settingsButton.props.accessibilityRole, 'button');
+    assert.ok(style(settingsButton.props.style).width >= 44);
+    assert.ok(style(settingsButton.props.style).height >= 44);
+    settingsButton.props.onPress();
+    assert.deepEqual(calls.pop(), { push: '/finance/settings' });
+
+    assert.equal(
+      nodes('Pressable', header).some(n =>
+        n.props.accessibilityLabel === 'Open Finance notifications'),
+      false,
+      'Notifications is no longer in the Home header'
+    );
+    const surface = nodes('View').find(n => style(n.props.style).backgroundColor === colors.surface
+      && nodes('AppText', n).some(t => t.props.accessibilityLabel === 'Recent Transactions'));
+    assert.ok(surface, 'Recent Transactions retains contrast on its themed surface');
+  });
+  test(mode + ' neutral summary and eight cards retain readable category accents and exact selection behavior', () => {
+    theme.colors = colors; currency.setBaseCurrency = code => calls.push({ currency: code });
+    const props = compactSummaryProps(); render(TotalCard, props);
+    const grid = nodes('View').find(n => n.props.accessibilityLabel === 'Finance sections');
+    const toneNames = ['expense', 'income', 'account', 'asset', 'transfer', 'liability', 'liability', 'transfer'];
+    assert.equal(grid.props.children.length, 8);
+    grid.props.children.forEach((card, i) => {
+      const cardStyle = style(card.props.style);
+      assert.equal(cardStyle.backgroundColor, '#F8FAFC'); assert.equal(cardStyle.borderColor, '#B68C42');
+      assert.equal(cardStyle.borderRadius, 14);
+      const amount = nodes('AppText', card).find(n => style(n.props.style).fontSize === 12);
+      const categoryIcon = nodes('Ionicon', card).find(n => n.props.size === 21);
+      assert.ok(categoryIcon); assert.equal(categoryIcon.props.color, lightColors.finance[toneNames[i]].accent);
+      const expectedAmountColors = ['#B04444', '#24764C', '#936B1E', '#936B1E', '#936B1E', '#B04444', '#936B1E', '#936B1E'];
+      assert.equal(style(amount.props.style).color, expectedAmountColors[i]);
+      assert.ok(contrast(style(amount.props.style).color, cardStyle.backgroundColor) >= 4.5);
+    });
+    const selector = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Base currency EGP. Change currency');
+    const visibleBox = nodes('View', selector).find(n => n.props.testID === 'finance-currency-visible-box');
+    assert.ok(visibleBox);
+    assert.equal(style(visibleBox.props.style).backgroundColor, '#FFFFFF');
+    assert.equal(style(visibleBox.props.style).borderColor, '#B68C42'); assert.equal(style(visibleBox.props.style).borderWidth, 1.5);
+    assert.ok(style(selector.props.style).minWidth >= 48); assert.ok(style(selector.props.style).minHeight >= 48);
+    assert.deepEqual(style(visibleBox.props.style).transform, [{ scale: 0.8 }]);
+    assert.ok(nodes('AppText', selector).some(n => n.props.children === '🇪🇬'));
+    selector.props.onPress(); render(TotalCard, props);
+    const modal = nodes('Modal').find(n => n.props.visible); assert.ok(modal);
+    const omr = nodes('Pressable', modal).find(n => nodes('AppText', n).some(t => [t.props.children].flat(Infinity).join('') === 'Omani Rial (OMR)'));
+    assert.ok(omr); omr.props.onPress(); render(TotalCard, props);
+    assert.deepEqual(calls, [{ currency: 'OMR' }]); assert.equal(nodes('Modal').some(n => n.props.visible), false);
+    render(TotalCard, { ...props, baseCurrency: 'OMR' });
+    const updated = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Base currency OMR. Change currency');
+    assert.ok(nodes('AppText', updated).some(n => n.props.children === '🇴🇲'));
+  });
+}
+test('all eight Home shortcuts preserve existing destinations and Transfers opens its modal', () => {
+  const expected = [['Expenses', '/finance/expenses'], ['Income', '/finance/income'], ['Accounts', '/finance/accounts'],
+    ['Assets', '/finance/assets'], ['Installments', '/finance/installments'], ['Loans', '/finance/loans'], ['Debts', '/finance/debts'], ['Transfers', null]];
+  for (const [label, destination] of expected) {
+    states = []; calls = []; theme.sizes = { inputHeight: 48 }; currency.rateSources = { EGP: 'manual' };
+    privacy = { amountsVisible: true, toggleAmounts() {} }; render(FinanceHomeScreen);
+    const button = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Open ' + label); assert.ok(button);
+    button.props.onPress(); render(FinanceHomeScreen);
+    if (destination) assert.deepEqual(calls, [{ push: destination }]);
+    else { assert.deepEqual(calls, []); assert.ok(nodes('TransferModal').some(n => n.props.visible)); }
+  }
 });

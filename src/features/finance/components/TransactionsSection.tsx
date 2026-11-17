@@ -100,9 +100,9 @@ export function TransactionsSection({
       <FinanceDetailsModal title={detailItem ? detailItem.kind === 'transfer' ? 'Transfer details' : 'Transaction details' : undefined} lines={detailLines} onClose={() => setDetailItem(null)} />
       <View style={styles.toolbar}>
         <View style={styles.sectionHeader}>
-          <Ionicons name="receipt-outline" size={20} color={colors.finance.balance.accent} accessible={false} />
+          <Ionicons name="receipt" size={21} color={colors.finance.balance.accent} accessible={false} />
           <AppText variant="bodyStrong" numberOfLines={1} ellipsizeMode="tail"
-            accessibilityRole="header" accessibilityLabel="Recent Transactions" style={styles.headingText}>
+            accessibilityRole="header" accessibilityLabel="Recent Transactions" style={[styles.headingText, { color: colors.text, fontWeight: '800' }]}>
             Recent Transactions
           </AppText>
         </View>
@@ -125,10 +125,10 @@ export function TransactionsSection({
       {sorted.length === 0 ? (
         <Card variant="filled"><AppText color="textSecondary">No transactions yet. Tap "Add transaction" to start.</AppText></Card>
       ) : (
-        <Card padded={false} variant="outlined" style={{ backgroundColor: colors.finance.neutral.surface, borderColor: colors.finance.neutral.border, borderRadius: 14 }}>
+        <Card padded={false} variant="outlined" style={{ backgroundColor: colors.finance.neutral.surface, borderColor: '#B68C42', borderWidth: 1.3, borderRadius: 14 }}>
           {visible.map((item, index) => {
             const rowStyle = [styles.row, stacked && styles.stacked,
-              index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.finance.neutral.border }];
+              index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#D6B777' }];
             if (item.kind === 'transfer') {
               const transfer = item.transfer;
               const fromCurrency = transfer.fromCurrencyCode ?? transfer.currencyCode;

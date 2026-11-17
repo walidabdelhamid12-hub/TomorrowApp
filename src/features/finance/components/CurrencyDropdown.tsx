@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { AppText } from '@/components/ui';
 import { CURRENCIES, getCurrencyLabel } from '@/features/finance/constants/currencies';
@@ -11,15 +11,16 @@ type Props = {
   label: string;
   value: string;
   onChange: (code: string) => void;
+  containerStyle?: StyleProp<ViewStyle>;
 };
 
-export function CurrencyDropdown({ label, value, onChange }: Props) {
+export function CurrencyDropdown({ label, value, onChange, containerStyle }: Props) {
   const [open, setOpen] = useState(false);
   const { colors } = useTheme();
   const selected = CURRENCIES.find((currency) => currency.code === value);
 
   return (
-    <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+    <View style={[{ flex: 1, minWidth: 0, gap: 4 }, containerStyle]}>
       <AppText variant="label" color="textSecondary">
         {label}
       </AppText>
@@ -29,9 +30,9 @@ export function CurrencyDropdown({ label, value, onChange }: Props) {
         accessibilityLabel="Choose transaction currency"
         onPress={() => setOpen(true)}
         style={{
-          height: 48,
+          minHeight: 52,
           borderWidth: 1,
-          borderColor: colors.border,
+          borderColor: '#D6B777',
           backgroundColor: colors.surfaceAlt,
           borderRadius: 10,
           paddingHorizontal: 10,
@@ -40,7 +41,7 @@ export function CurrencyDropdown({ label, value, onChange }: Props) {
           gap: 4,
         }}
       >
-        <AppText variant="caption" numberOfLines={1} style={{ flex: 1 }}>
+        <AppText variant="caption" style={{ flex: 1 }}>
           {selected ? getCurrencyLabel(selected.code) : value || 'Currency'}
         </AppText>
         <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
@@ -60,7 +61,7 @@ export function CurrencyDropdown({ label, value, onChange }: Props) {
               minHeight: 48,
               paddingVertical: 10,
               borderBottomWidth: 1,
-              borderColor: colors.border,
+              borderColor: '#D6B777',
               flexDirection: 'row',
               alignItems: 'center',
               gap: 8,
@@ -70,7 +71,7 @@ export function CurrencyDropdown({ label, value, onChange }: Props) {
               {getCurrencyLabel(currency.code)} - {currency.name}
             </AppText>
             {currency.code === value ? (
-              <Ionicons name="checkmark" size={18} color={colors.primary} />
+              <Ionicons name="checkmark" size={18} color="#D6B777" />
             ) : null}
           </Pressable>
         ))}

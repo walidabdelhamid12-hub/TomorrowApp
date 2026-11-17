@@ -1,10 +1,13 @@
+import { financeChrome } from '@/features/finance/components/financeChrome';
+import { FinanceInput as AppInput } from '@/features/finance/components/FinanceInput';
+import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AppButton, AppInput, AppText, Card, Screen } from '@/components/ui';
+import { AppText, Card, Screen } from '@/components/ui';
 import { CURRENCIES } from '@/features/finance/constants/currencies';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { installmentsStorage } from '@/features/finance/store/installmentsStorage';
@@ -209,14 +212,14 @@ export default function InstallmentContractScreen() {
 
   return (
     <Screen scroll>
-      <View style={styles.header}>
+      <View style={financeChrome.header}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back to Installments" onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Ionicons name="arrow-back" size={20} color={colors.text} />
+          style={financeChrome.back}>
+          <Ionicons name="arrow-back" size={20} color="#D6B777" />
         </Pressable>
         <View style={styles.headerText}>
-          <AppText variant="h1">{isNew ? 'New Contract' : wantsEdit ? 'Edit Contract' : 'Contract Details'}</AppText>
-          <AppText variant="caption" color="textSecondary">{record?.name ?? 'Standalone installments'}</AppText>
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>{isNew ? 'New Contract' : wantsEdit ? 'Edit Contract' : 'Contract Details'}</AppText>
+          <AppText variant="caption" style={{ color: '#CBD5E1' }}>{record?.name ?? 'Standalone installments'}</AppText>
         </View>
       </View>
       <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
@@ -277,7 +280,7 @@ export default function InstallmentContractScreen() {
                   rightElement={
                     <Pressable accessibilityRole="button" accessibilityLabel={'Choose due date for installment ' + (selectedIndex + 1)}
                       hitSlop={10} onPress={() => setDatePickerRow(selectedRow.key)}>
-                      <Ionicons name="calendar-outline" size={20} color={moduleColors.finance} />
+                      <Ionicons name="calendar-outline" size={20} color="#D6B777" />
                     </Pressable>
                   } />
               </View>
@@ -349,7 +352,7 @@ export default function InstallmentContractScreen() {
                   }} />
               )}
             </View>
-            <AppButton title="Add installment" accentColor={moduleColors.finance}
+            <AppButton title="Add installment" accentColor="#1E293B"
               leftIcon={<Ionicons name="add-circle-outline" size={20} color={colors.onPrimary} />} onPress={() => {
                 setRows(previous => [...previous, { key: nextKey, kind: 'regular', dueDate: '', amount: '' }]);
                 setSelectedRowKey(nextKey);
@@ -358,8 +361,8 @@ export default function InstallmentContractScreen() {
                 setDraftSummary(null);
                 setDraftError('');
               }} />
-            <AppButton title="Validate draft (no save)" accentColor={moduleColors.finance} onPress={checkDraft} />
-            <AppButton title={saveBusy ? 'Saving contract...' : editing ? 'Save Changes' : 'Save Contract'} accentColor={moduleColors.finance}
+            <AppButton title="Validate draft (no save)" accentColor="#1E293B" onPress={checkDraft} />
+            <AppButton title={saveBusy ? 'Saving contract...' : editing ? 'Save Changes' : 'Save Contract'} accentColor="#1E293B"
               disabled={saveBusy || saved.hydration !== 'ready' || saved.writeStatus !== 'idle'}
               onPress={() => { void saveContract(); }} />
              {editing && <AppButton title="Cancel Edit" variant="ghost" disabled={saveBusy}
@@ -401,8 +404,8 @@ const styles = StyleSheet.create({
   installmentSelector: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   installmentPicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, flex: 1 },
   installmentNumber: { minWidth: 32, paddingHorizontal: 8, paddingVertical: 7, alignItems: 'center', borderWidth: 1, borderRadius: 8 },
-  twoColumns: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  column: { flex: 1, minWidth: 0 },
+  twoColumns: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' },
+  column: { flexGrow: 1, flexBasis: 160, minWidth: 0 },
   currencyOptions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 7, columnGap: 5 },
   currencyCard: { width: '18.5%', minHeight: 70, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2, paddingVertical: 6, borderRadius: 9, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fafafa', gap: 2 },
   currencyCardActive: { borderColor: '#059669', backgroundColor: '#ecfdf5' },

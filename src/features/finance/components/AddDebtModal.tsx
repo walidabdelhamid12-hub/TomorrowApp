@@ -1,3 +1,4 @@
+import { FinanceModalHeader } from './FinanceModalHeader';
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -324,7 +325,7 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
         <Ionicons
           name={target === 'debt' ? 'calendar-outline' : 'time-outline'}
           size={18}
-          color="#64748b"
+          color="#D6B777"
         />
 
         <TextInput
@@ -345,7 +346,7 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
           accessibilityRole="button"
           accessibilityLabel={`Choose ${target === 'debt' ? 'debt date' : 'due date'} from calendar`}
         >
-          <Ionicons name="calendar" size={20} color="#059669" />
+          <Ionicons name="calendar" size={20} color="#D6B777" />
         </TouchableOpacity>
 
         {optional && value.length > 0 && (
@@ -375,41 +376,13 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.headerRow}>
-              <View style={styles.titleContainer}>
-                <Text style={styles.modalTitle}>
-                  {debt ? 'Edit debt' : 'Add debt'}
-                </Text>
-
-                <Text
-                  style={[
-                    styles.subtitle,
-                    {
-                      color: isReceivable ? '#059669' : '#DC2626',
-                    },
-                  ]}
-                >
-                  {isReceivable
-                    ? 'Money owed to you'
-                    : 'Money you owe'}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                onPress={onClose}
-                style={styles.closeButton}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-              >
-                <Ionicons name="close" size={22} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
+            <FinanceModalHeader title={debt ? 'Edit debt' : 'Add debt'} onClose={onClose} />
+          <ScrollView
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
+              <Text style={{ color: isReceivable ? '#059669' : '#DC2626', marginTop: 16 }}>{isReceivable ? 'Money owed to you' : 'Money you owe'}</Text>
               <Text style={styles.label}>PERSON / COMPANY NAME</Text>
 
               <TextInput
@@ -572,7 +545,7 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
                 style={[
                   styles.saveButton,
                   {
-                    backgroundColor: isReceivable ? '#059669' : '#DC2626',
+                    backgroundColor: '#1E293B',
                   },
                 ]}
                 onPress={handleSave}
@@ -700,11 +673,11 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     maxHeight: '90%',
-    paddingTop: 14,
-    paddingHorizontal: 14,
+    paddingTop: 0,
+    paddingHorizontal: 0,
   },
   headerRow: {
     flexDirection: 'row',
@@ -713,6 +686,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   titleContainer: {
+    minWidth: 0,
     flex: 1,
   },
   modalTitle: {
@@ -729,10 +703,11 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   scrollContent: {
+    paddingHorizontal: 16,
     paddingBottom: 26,
   },
   label: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: '#64748b',
     marginTop: 13,
@@ -740,12 +715,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   input: {
+    minHeight: 52,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 11,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 16,
     backgroundColor: '#fafafa',
     color: '#111',
   },
@@ -753,7 +729,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 11,
     padding: 11,
     backgroundColor: '#fafafa',
@@ -783,7 +759,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 11,
     backgroundColor: '#fafafa',
     paddingHorizontal: 12,
@@ -809,7 +785,7 @@ const styles = StyleSheet.create({
     columnGap: 5,
   },
   currencyCard: {
-    width: '18.5%',
+    width: '18.5%', minWidth: 64, flexGrow: 1,
     minHeight: 70,
     alignItems: 'center',
     justifyContent: 'center',
@@ -817,7 +793,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     backgroundColor: '#fafafa',
     gap: 2,
   },
@@ -848,11 +824,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#CBD5E1',
     borderRadius: 11,
     backgroundColor: '#fafafa',
     paddingHorizontal: 12,
-    minHeight: 44,
+    minHeight: 52,
     gap: 9,
   },
   dateInput: {
@@ -862,6 +838,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   calendarButton: {
+    minWidth: 44, minHeight: 52, alignItems: 'center', justifyContent: 'center',
     padding: 5,
   },
   helperText: {
@@ -889,6 +866,7 @@ const styles = StyleSheet.create({
     color: '#1E40AF',
   },
   saveButton: {
+    minHeight: 52, justifyContent: 'center',
     borderRadius: 12,
     paddingVertical: 13,
     alignItems: 'center',
@@ -896,7 +874,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   calendarOverlay: {
@@ -966,7 +944,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   calendarDaySelected: {
-    backgroundColor: '#059669',
+    backgroundColor: '#1E293B',
   },
   calendarDayText: {
     fontSize: 13,
@@ -989,7 +967,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 42,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1003,7 +981,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 42,
     borderRadius: 10,
-    backgroundColor: '#059669',
+    backgroundColor: '#1E293B',
     alignItems: 'center',
     justifyContent: 'center',
   },

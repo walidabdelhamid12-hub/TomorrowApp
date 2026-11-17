@@ -1,3 +1,9 @@
+import { FinanceModalHeader } from '@/features/finance/components/FinanceModalHeader';
+import { FormModal } from '@/features/finance/components/FormModal';
+import { shouldStackFinanceFields } from '@/features/finance/utils/formLayout';
+import { FinanceDateField as DateField } from '@/features/finance/components/FinanceDateField';
+import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
+import { financeChrome } from '@/features/finance/components/financeChrome';
 import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { FinanceDisclosure } from '@/features/finance/components/FinanceDisclosure';
 import { canEditLoanPayment, canReverseLoanPayment } from '@/features/finance/utils/loanPaymentPolicy';
@@ -16,10 +22,11 @@ import {
   ScrollView,
   StyleSheet,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
-import { AppButton, AppText, Card, DateField, Screen } from '@/components/ui';
+import { AppText, Card, Screen } from '@/components/ui';
 import { AddAccountModal, type AddAccountFormData } from '@/features/finance/components/AddAccountModal';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { confirmLoanReceipt, editLinkedPayment, postLinkedPayment, reverseLinkedPayment } from '@/features/finance/store/paymentOperations';
@@ -48,6 +55,8 @@ export default function LoansScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ loanId?: string }>();
   const { colors } = useTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const stackFields = shouldStackFinanceFields(width, fontScale);
   const { confirm, confirmation } = useFinanceConfirmation();
   const financeReady = useFinanceHydrated();
   const ledgerReady = useLedgerHydrated();
@@ -297,12 +306,12 @@ export default function LoansScreen() {
   if (!ready) return <Screen><View style={styles.center}><ActivityIndicator color={moduleColors.finance} /></View></Screen>;
 
   return (
-    <Screen scroll>
+    <Screen scroll style={{ backgroundColor: '#F1F5F9' }}>
       {confirmation}
       <LoanDetails loanId={detailLoanId} loan={detailLoan} onClose={() => setDetailLoanId(null)} />
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.back}><Ionicons name="arrow-back" size={20} color={colors.text} /></Pressable>
-        <View style={{ flex: 1 }}><AppText variant="h1">Loans</AppText><AppText variant="caption" color="textSecondary">{loans.length} loans</AppText></View>
+      <View style={financeChrome.header}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={financeChrome.back}><Ionicons name="arrow-back" size={20} color="#D6B777" /></Pressable>
+        <View style={{ flex: 1 }}><AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>Loans</AppText><AppText variant="caption" style={{ color: '#CBD5E1' }}>{loans.length} loans</AppText></View>
       </View>
       {params.loanId !== undefined && (
         <Card variant="filled">
@@ -313,7 +322,7 @@ export default function LoansScreen() {
       <AppText color="textSecondary" style={{ marginBottom: 16 }}>
         Track money borrowed, confirm received funds, record repayments, and monitor your outstanding loan balance.
       </AppText>
-      <AppButton title="Add loan" accentColor={moduleColors.finance} leftIcon={<Ionicons name="add" size={18} color={colors.onPrimary} />} onPress={() => setShowLoanForm(true)} />
+      <AppButton title="Add loan" accentColor="#1E293B" leftIcon={<Ionicons name="add" size={18} color={colors.onPrimary} />} onPress={() => setShowLoanForm(true)} />
       {visibleLoans.length === 0 ? <Card variant="filled"><AppText align="center" color="textSecondary">{params.loanId !== undefined ? 'Return to transactions or view all loans.' : 'No loans recorded yet. Add your first loan.'}</AppText></Card> :
         visibleLoans.map(loan => {
           const paid = getLoanPaidAmount(loan);
@@ -379,20 +388,31 @@ export default function LoansScreen() {
         if (selectedLoan && data.selectedCurrency === selectedLoan.currencyCode) { setAccountId(id); setPaymentMethod('account'); }
         else if (showLoanForm && data.selectedCurrency === currency) { setDepositAccountId(id); setDepositMethod('account'); }
       }} />
-      <Modal visible={showLoanForm} transparent animationType="slide" onRequestClose={resetLoanForm}>
-        <View style={styles.overlay}>
-          <View style={[styles.loanFormModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <AppText variant="h2">New loan</AppText>
-            <ScrollView style={styles.formScroll} contentContainerStyle={styles.formFields} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+      <FormModal visible={showLoanForm} title="New loan" onClose={resetLoanForm}>
+            <View testID="loan-name-row" style={{ flexDirection: stackFields ? 'column' : 'row', gap: 12 }}>
+              <View style={{ flex: stackFields ? 0 : 1 }}>
               <Field label="Loan name" value={loanName} onChangeText={setLoanName} />
+              </View><View style={{ flex: stackFields ? 0 : 1 }}>
               <Field label="Lender / bank" value={lender} onChangeText={setLender} />
+              </View>
+            </View>
+            <View testID="loan-amount-row" style={{ flexDirection: stackFields ? 'column' : 'row', gap: 12 }}>
+              <View style={{ flex: stackFields ? 0 : 1 }}>
               <Field label="Original principal (amount borrowed)" value={principal} onChangeText={setPrincipal} keyboardType="decimal-pad" />
+              </View><View style={{ flex: stackFields ? 0 : 1 }}>
               <Field label="Total repayment (principal + interest)" value={total} onChangeText={setTotal} keyboardType="decimal-pad" />
+              </View>
+            </View>
+            <View testID="loan-installment-row" style={{ flexDirection: stackFields ? 'column' : 'row', gap: 12 }}>
+              <View style={{ flex: stackFields ? 0 : 1 }}>
               <Field label="Monthly installment (amount per month)" value={installment} onChangeText={setInstallment} keyboardType="decimal-pad" />
+              </View><View style={{ flex: stackFields ? 0 : 1 }}>
               <Field label="Number of installments (months)" value={count} onChangeText={setCount} keyboardType="number-pad" />
+              </View>
+            </View>
               <DateField label="First due date" value={firstDue} onChange={setFirstDue} />
               <AppText variant="caption" color="textSecondary">Loan currency</AppText>
-              <Pressable onPress={() => setShowCurrencyPicker(true)} style={[styles.dropdown, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <Pressable onPress={() => setShowCurrencyPicker(true)} style={[styles.dropdown, { borderColor: '#D6B777', backgroundColor: colors.surface }]}>
                 <AppText>{currency}</AppText><Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
               </Pressable>
               <AppText variant="caption" color="textSecondary">Deposit to account / Where did you receive the loan?</AppText>
@@ -403,14 +423,11 @@ export default function LoansScreen() {
                 <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
               </Pressable>
               {depositMethod === 'custom' && <Field label="Receipt method (e.g. Cash)" value={customDepositMethod} onChangeText={setCustomDepositMethod} />}
-            </ScrollView>
-            <View style={styles.actions}>
-              <AppButton title="Save loan" onPress={saveLoan} />
-              <AppButton title="Cancel" variant="outline" onPress={resetLoanForm} />
+            <View testID="loan-form-actions" style={{ flexDirection: stackFields ? 'column' : 'row', gap: 12 }}>
+              <AppButton title="Save loan" onPress={saveLoan} style={{ flex: stackFields ? 0 : 1 }} />
+              <AppButton title="Cancel" variant="outline" onPress={resetLoanForm} style={{ flex: stackFields ? 0 : 1 }} />
             </View>
-          </View>
-        </View>
-      </Modal>
+      </FormModal>
       <Modal visible={showDepositPicker} transparent animationType="fade" onRequestClose={() => setShowDepositPicker(false)}>
         <View style={styles.pickerOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowDepositPicker(false)} />
@@ -500,7 +517,7 @@ export default function LoansScreen() {
       </Modal>
       <Modal visible={!!receivingLoan} transparent animationType="slide" onRequestClose={() => setReceivingLoan(null)}>
         <View style={styles.overlay}><Card style={styles.modal}>
-          <AppText variant="h2">Confirm loan received</AppText>
+          <View style={{ marginHorizontal: -16, marginTop: -16 }}><FinanceModalHeader title="Confirm loan received" onClose={() => setReceivingLoan(null)} /></View>
           <AppText color="textSecondary">This records the money only now, when you confirm it was actually received.</AppText>
           <Field label={`Amount received (${receivingLoan?.currencyCode ?? ''})`} value={receivedAmount} onChangeText={setReceivedAmount} keyboardType="decimal-pad" />
           <DateField label="Received date" value={receivedDate} onChange={setReceivedDate} />
@@ -526,7 +543,7 @@ export default function LoansScreen() {
       </Modal>
       <Modal visible={!!closingLoan} transparent animationType="fade" onRequestClose={() => setClosingLoan(null)}>
         <View style={styles.overlay}><Card style={styles.modal}>
-          <AppText variant="h2">Close without payment</AppText>
+          <View style={{ marginHorizontal: -16, marginTop: -16 }}><FinanceModalHeader title="Close without payment" onClose={() => { setClosingLoan(null); setClosureReason(''); }} /></View>
           <AppText color="textSecondary">No money will be deducted from any account. The loan history will be kept.</AppText>
           <Field label="Reason (required)" value={closureReason} onChangeText={setClosureReason} />
           <View style={styles.actions}>
@@ -540,7 +557,7 @@ export default function LoansScreen() {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.paymentKeyboard}>
             <ScrollView style={styles.paymentScroll} contentContainerStyle={styles.paymentScrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator>
               <Card style={styles.modal}>
-                <AppText variant="h2">{editingPayment ? 'Edit payment' : settlementMode ? 'Early settlement' : 'Record installment'}</AppText>
+                <View style={{ marginHorizontal: -16, marginTop: -16 }}><FinanceModalHeader title={editingPayment ? 'Edit payment' : settlementMode ? 'Early settlement' : 'Record installment'} onClose={closePayment} /></View>
                 <AppText color="textSecondary">Remaining contractual payments: {selectedLoan ? formatAmount(remaining(selectedLoan), selectedLoan.currencyCode) + ' ' + selectedLoan.currencyCode : ''}</AppText>
                 {settlementMode && <AppText variant="caption" color="warning">Default: remaining contractual balance, not a lender settlement quote. Enter your agreed amount; fees are separate.</AppText>}
                 <Field label={`Repayment amount, excluding fee (${selectedLoan?.currencyCode ?? ''})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" />
@@ -566,7 +583,7 @@ export default function LoansScreen() {
 
 function Field({ label, value, onChangeText, keyboardType = 'default' }: { label: string; value: string; onChangeText: (value: string) => void; keyboardType?: 'default' | 'decimal-pad' | 'number-pad' }) {
   const { colors } = useTheme();
-  return <View style={styles.field}><AppText variant="caption" color="textSecondary">{label}</AppText><TextInput value={value} onChangeText={onChangeText} keyboardType={keyboardType} placeholder="Tap here to enter" placeholderTextColor={colors.textSecondary} selectionColor={moduleColors.finance} style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]} /></View>;
+  return <View style={styles.field}><AppText variant="label" color="textSecondary">{label}</AppText><TextInput value={value} onChangeText={onChangeText} keyboardType={keyboardType} placeholder="Tap here to enter" placeholderTextColor={colors.textSecondary} selectionColor="#D6B777" style={[styles.input, { color: colors.text, borderColor: '#D6B777', backgroundColor: colors.surface }]} /></View>;
 }
 
 const styles = StyleSheet.create({
@@ -581,16 +598,16 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 7 },
   history: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#9995', paddingTop: 10, gap: 8 },
   paymentRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', paddingVertical: 4, gap: 4 },
-  overlay: { flex: 1, backgroundColor: '#0008', justifyContent: 'center', alignItems: 'center', padding: 12 },
+  overlay: { flex: 1, backgroundColor: '#0008', justifyContent: 'flex-end', alignItems: 'center' },
   formScroll: { flexShrink: 1, minHeight: 0 },
   formFields: { gap: 8, paddingVertical: 6 },
-  loanFormModal: { width: '100%', maxHeight: '94%', flexShrink: 1, borderRadius: 18, padding: 14, gap: 8, borderWidth: StyleSheet.hairlineWidth },
-  modal: { gap: 9 },
+  loanFormModal: { width: '100%', maxHeight: '94%', flexShrink: 1, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 14, gap: 12, borderWidth: StyleSheet.hairlineWidth },
+  modal: { width: '100%', borderTopLeftRadius: 24, borderTopRightRadius: 24, gap: 12 },
   paymentKeyboard: { width: '100%', maxHeight: '94%', flexShrink: 1 },
   paymentScroll: { flexGrow: 0, flexShrink: 1 },
   paymentScrollContent: { flexGrow: 1, justifyContent: 'center', paddingVertical: 4 },
   field: { gap: 5 },
-  input: { minHeight: 42, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7 },
+  input: { fontSize: 16, minHeight: 52, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7 },
   accountChoice: { padding: 10, borderWidth: 1, borderColor: '#9996', borderRadius: 10 },
   dropdown: { minHeight: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   addBankChoice: { paddingVertical: 8, paddingHorizontal: 4 },

@@ -1,3 +1,6 @@
+import { FinanceModalHeader } from '@/features/finance/components/FinanceModalHeader';
+import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
+import { financeChrome } from '@/features/finance/components/financeChrome';
 import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { FinanceDetailsModal } from '@/features/finance/components/FinanceDetailsModal';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
@@ -18,7 +21,7 @@ import {
     View,
 } from 'react-native';
 
-import { AppButton, AppText, Card, Screen } from '@/components/ui';
+import { AppText, Card, Screen } from '@/components/ui';
 import { AddDebtModal } from '@/features/finance/components/AddDebtModal';
 import { DEFAULT_CATEGORIES } from '@/features/finance/constants/defaultCategories';
 import {
@@ -521,33 +524,33 @@ export default function DebtsScreen() {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll style={{ backgroundColor: '#F1F5F9' }}>
       {confirmation}
       <View {...swipe.panHandlers}>
+      <View style={financeChrome.header}>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={financeChrome.back}
+        >
+          <Ionicons name="arrow-back" size={23} color="#D6B777" />
+        </Pressable>
+
+        <View style={styles.headerText}>
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>Debts</AppText>
+          <AppText variant="caption" style={{ color: '#CBD5E1' }}>
+            Manage money owed to you and money you owe
+          </AppText>
+        </View>
+      </View>
+
       {params.debtId !== undefined && (
         <Card variant="filled">
           <AppText>{visibleDebts.length ? 'Showing the debt linked to your transaction.' : 'The linked debt is unavailable in this tab. No other debt has been selected.'}</AppText>
           <AppButton title="View all debts" variant="ghost" onPress={() => router.replace('/finance/debts')} />
         </Card>
       )}
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          style={styles.backButton}
-        >
-          <Ionicons name="arrow-back" size={23} color={colors.text} />
-        </Pressable>
-
-        <View style={styles.headerText}>
-          <AppText variant="h1">Debts</AppText>
-          <AppText variant="caption" color="textSecondary">
-            Manage money owed to you and money you owe
-          </AppText>
-        </View>
-      </View>
-
       <View style={styles.tabs}>
         <Pressable
           accessibilityRole="tab" accessibilityState={{ selected: activeTab === 'receivable' }} onPress={() => setActiveTab('receivable')}
@@ -616,7 +619,6 @@ export default function DebtsScreen() {
 
       <AppButton
         title={activeTab === 'receivable' ? 'Add receivable' : 'Add payable'}
-        accentColor={activeTab === 'receivable' ? '#059669' : '#DC2626'}
         leftIcon={<Ionicons name="add" size={20} color="#fff" />}
         onPress={openAddDebt}
       />
@@ -893,7 +895,6 @@ function ModalPayment({
   onClose,
   onConfirm,
 }: ModalPaymentProps) {
-  const { colors } = useTheme();
 
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -979,20 +980,7 @@ function ModalPayment({
               showsVerticalScrollIndicator
               keyboardShouldPersistTaps="handled"
             >
-              <View style={styles.modalHeader}>
-                <View style={{ flex: 1 }}>
-                  <AppText variant="h2">
-                    {isReceivable ? 'Record collection' : 'Record payment'}
-                  </AppText>
-                  <AppText variant="caption" color="textSecondary">
-                    {debt.personName}
-                  </AppText>
-                </View>
-
-                <Pressable onPress={onClose} hitSlop={10}>
-                  <Ionicons name="close" size={23} color={colors.text} />
-                </Pressable>
-              </View>
+              <View style={{ marginHorizontal: -18, marginTop: -18, marginBottom: 16 }}><FinanceModalHeader title={isReceivable ? 'Record collection' : 'Record payment'} onClose={onClose} /></View><AppText>{debt.personName}</AppText>
 
               <AppText variant="caption" color="textSecondary">
                 Remaining amount
@@ -1019,7 +1007,7 @@ function ModalPayment({
                 <Ionicons
                   name="calendar-outline"
                   size={18}
-                  color="#64748b"
+                  color="#D6B777"
                 />
 
                 <TextInput
@@ -1039,7 +1027,7 @@ function ModalPayment({
                   accessibilityRole="button"
                   accessibilityLabel="Choose date from calendar"
                 >
-                  <Ionicons name="calendar" size={20} color="#059669" />
+                  <Ionicons name="calendar" size={20} color="#D6B777" />
                 </Pressable>
               </View>
 
@@ -1123,7 +1111,7 @@ function ModalPayment({
                 style={[
                   styles.confirmButton,
                   {
-                    backgroundColor: isReceivable ? '#059669' : '#DC2626',
+                    backgroundColor: '#1E293B',
                     opacity: accounts.length === 0 ? 0.5 : 1,
                   },
                 ]}
@@ -1256,7 +1244,6 @@ function ModalEditPayment({
   onClose,
   onSave,
 }: ModalEditPaymentProps) {
-  const { colors } = useTheme();
 
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
@@ -1361,18 +1348,7 @@ function ModalEditPayment({
               showsVerticalScrollIndicator
               keyboardShouldPersistTaps="handled"
             >
-              <View style={styles.modalHeader}>
-                <View style={{ flex: 1 }}>
-                  <AppText variant="h2">Edit payment</AppText>
-                  <AppText variant="caption" color="textSecondary">
-                    {debt.personName}
-                  </AppText>
-                </View>
-
-                <Pressable onPress={onClose} hitSlop={10}>
-                  <Ionicons name="close" size={23} color={colors.text} />
-                </Pressable>
-              </View>
+              <View style={{ marginHorizontal: -18, marginTop: -18, marginBottom: 16 }}><FinanceModalHeader title="Edit payment" onClose={onClose} /></View><AppText>{debt.personName}</AppText>
 
               <AppText variant="caption" color="textSecondary">
                 Maximum allowed for this payment
@@ -1399,7 +1375,7 @@ function ModalEditPayment({
                 <Ionicons
                   name="calendar-outline"
                   size={18}
-                  color="#64748b"
+                  color="#D6B777"
                 />
 
                 <TextInput
@@ -1419,7 +1395,7 @@ function ModalEditPayment({
                   accessibilityRole="button"
                   accessibilityLabel="Choose payment date"
                 >
-                  <Ionicons name="calendar" size={20} color="#059669" />
+                  <Ionicons name="calendar" size={20} color="#D6B777" />
                 </Pressable>
               </View>
 
@@ -1459,7 +1435,7 @@ function ModalEditPayment({
                 onPress={handleSave}
                 style={[
                   styles.confirmButton,
-                  { backgroundColor: moduleColors.finance },
+                  { backgroundColor: '#1E293B' },
                 ]}
               >
                 <AppText style={styles.confirmButtonText}>
@@ -1574,7 +1550,7 @@ function ModalEditPayment({
 }
 
 const styles = StyleSheet.create({
-  historyToggle: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 4 },
+  historyToggle: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 4 },
   quickHistory: { paddingHorizontal: 12, paddingBottom: 6, gap: 2 },
   quickPayment: { paddingTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#94A3B855' },
   quickPaymentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 22 },
@@ -1598,6 +1574,7 @@ const styles = StyleSheet.create({
   },
   headerText: {
     flex: 1,
+    minWidth: 0,
     gap: 3,
   },
   tabs: {
@@ -1607,9 +1584,9 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 52,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1828,9 +1805,9 @@ const styles = StyleSheet.create({
     marginBottom: 7,
   },
   modalInput: {
-    minHeight: 44,
+    minHeight: 52,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 10,
     paddingHorizontal: 12,
     color: '#111',
@@ -1841,11 +1818,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#CBD5E1',
     borderRadius: 10,
     backgroundColor: '#fafafa',
     paddingHorizontal: 12,
-    minHeight: 44,
+    minHeight: 52,
     gap: 9,
   },
   dateInput: {
@@ -1855,6 +1832,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   calendarButton: {
+    minWidth: 44, minHeight: 52, alignItems: 'center', justifyContent: 'center',
     padding: 5,
   },
   helperText: {
@@ -1869,12 +1847,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 8,
     padding: 8,
   },
   accountChoiceActive: {
-    borderColor: moduleColors.finance,
+    borderColor: '#D6B777',
     backgroundColor: '#ECFDF5',
   },
   accountChoiceName: {
@@ -1904,16 +1882,16 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 52,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   confirmButton: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 52,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1990,7 +1968,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   calendarDaySelected: {
-    backgroundColor: '#059669',
+    backgroundColor: '#1E293B',
   },
   calendarDayText: {
     fontSize: 13,
@@ -2013,7 +1991,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 42,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2027,7 +2005,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 42,
     borderRadius: 10,
-    backgroundColor: '#059669',
+    backgroundColor: '#1E293B',
     alignItems: 'center',
     justifyContent: 'center',
   },

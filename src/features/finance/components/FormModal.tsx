@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { FinanceModalHeader } from './FinanceModalHeader';
 import React from 'react';
 import {
   KeyboardAvoidingView,
@@ -11,8 +11,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppText } from '@/components/ui';
 import { useTheme } from '@/theme';
+import { financeLayoutTokens, getFinanceDesignTokens } from '@/features/finance/constants/financeDesignTokens';
 
 interface FormModalProps {
   visible: boolean;
@@ -23,7 +23,8 @@ interface FormModalProps {
 
 /** Bottom-sheet style modal shared by all finance forms. */
 export function FormModal({ visible, title, onClose, children }: FormModalProps) {
-  const { colors, spacing, radius } = useTheme();
+  const { colors, spacing, scheme } = useTheme();
+  const finance = getFinanceDesignTokens(scheme);
   const insets = useSafeAreaInsets();
 
   return (
@@ -33,9 +34,10 @@ export function FormModal({ visible, title, onClose, children }: FormModalProps)
       animationType="slide"
       onRequestClose={onClose}
       statusBarTranslucent
+      navigationBarTranslucent
     >
       <KeyboardAvoidingView
-        style={styles.root}
+        style={[styles.root, { paddingTop: insets.top + 8 }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <Pressable
@@ -45,43 +47,29 @@ export function FormModal({ visible, title, onClose, children }: FormModalProps)
         />
 
         <View
+          accessibilityViewIsModal
           style={[
             styles.sheet,
             {
-              backgroundColor: '#F8FAFC',
-              borderTopWidth: 2,
-              borderTopColor: '#D6B777',
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              paddingTop: 12,
-              paddingHorizontal: 12,
+              backgroundColor: finance.background,
+              borderTopLeftRadius: financeLayoutTokens.modalRadius,
+              borderTopRightRadius: financeLayoutTokens.modalRadius,
             },
           ]}
         >
-          <View
-            style={[
-              styles.header,
-              { padding: spacing.lg, backgroundColor: '#1E293B', borderBottomColor: '#1E293B', borderRadius: 16 },
-            ]}
-          >
-            <AppText variant="h3" style={{ color: '#FFFFFF' }}>{title}</AppText>
-            <Pressable
-              onPress={onClose}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-            >
-              <Ionicons name="close" size={24} color="#FFFFFF" />
-            </Pressable>
-          </View>
+          <FinanceModalHeader title={title} onClose={onClose} />
 
           <ScrollView
+            style={styles.scroll}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               padding: spacing.lg,
-              paddingHorizontal: 8,
+              paddingHorizontal: spacing.lg,
               paddingBottom: insets.bottom + spacing.xxl,
+              paddingLeft: Math.max(spacing.lg, insets.left),
+              paddingRight: Math.max(spacing.lg, insets.right),
               gap: spacing.lg,
             }}
           >
@@ -99,12 +87,14 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    maxHeight: '90%',
+    maxHeight: '92%',
+    minHeight: 0,
+    flexShrink: 1,
+    width: '100%',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  scroll: {
+    minHeight: 0,
+    flexShrink: 1,
+    flexGrow: 0,
   },
 });

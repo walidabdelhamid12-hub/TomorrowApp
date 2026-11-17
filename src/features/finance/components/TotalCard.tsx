@@ -1,4 +1,4 @@
-import type { FinanceTone } from '@/theme/colors';
+import { lightColors, type FinanceTone } from '@/theme/colors';
 
 import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
@@ -142,13 +142,15 @@ function NetworkCard({
   visible: boolean;
   onPress: () => void;
 }) {
-  const { colors } = useTheme();
-  const tone = colors.finance[NETWORK_TONES[item.key] ?? 'neutral'];
+  const tone = lightColors.finance[NETWORK_TONES[item.key] ?? 'neutral'];
   const hasAmount = typeof item.amount === 'number';
 
+  const rawAmount = item.amount ?? 0;
+  const signedAmount = item.key === 'expenses' || item.key === 'loans' ? -Math.abs(rawAmount) : rawAmount;
   const formattedAmount = hasAmount
-    ? `${item.sign ?? ''}${formatAmount(item.amount ?? 0, currency)} ${currency}`
+    ? `${signedAmount < 0 ? '-' : item.key === 'income' && signedAmount > 0 ? '+' : ''}${formatAmount(Math.abs(signedAmount), currency)} ${currency}`
     : null;
+  const amountColor = signedAmount < 0 ? '#B04444' : item.key === 'income' && signedAmount > 0 ? '#24764C' : '#936B1E';
 
   return (
     <View
@@ -156,8 +158,8 @@ function NetworkCard({
         styles.networkCard,
         item.key === 'categories' && { width: '100%' },
         {
-          backgroundColor: tone.surface,
-          borderColor: tone.border,
+          backgroundColor: '#F8FAFC',
+          borderColor: '#B68C42',
         },
       ]}
     >
@@ -175,22 +177,17 @@ function NetworkCard({
         <View style={styles.networkMain}>
           <View style={styles.networkInfo}>
             <View style={styles.networkTitleRow}>
-              <View style={[styles.networkIcon, { backgroundColor: colors.surface }]}>
-                <Ionicons name={item.icon} size={18} color={tone.accent} />
+              <View style={[styles.networkIcon, { backgroundColor: '#FFFFFF' }]}>
+                <Ionicons name={item.icon} size={21} color={tone.accent} />
               </View>
               <AppText style={[styles.networkLabel, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{item.label}</AppText>
             </View>
-            <AppText style={[styles.networkAmount, { color: tone.accent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
-              {item.key === 'cheques' ? 'Coming soon' : visible ? (formattedAmount ?? (item.key === 'categories' ? 'Manage categories' : 'Open to view')) : '••••••'}
+            <AppText style={[styles.networkAmount, { color: amountColor }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
+              {item.key === 'cheques' ? '' : visible ? (formattedAmount ?? (item.key === 'categories' ? 'Manage categories' : 'Open to view')) : '••••••'}
             </AppText>
           </View>
         </View>
 
-        <Ionicons
-          name="chevron-forward"
-          size={17}
-          color={colors.textSecondary}
-        />
       </Pressable>
 
     </View>
@@ -273,14 +270,14 @@ export function TotalCard({
 
   return (
     <View style={{ marginTop: spacing.lg }}>
-      <Card variant="outlined" padded={false} style={{ paddingHorizontal: 12, paddingVertical: 0, backgroundColor: colors.finance.balance.surface, borderColor: colors.finance.balance.border, borderRadius: 14 }}>
+      <Card variant="outlined" padded={false} style={{ paddingHorizontal: 12, paddingVertical: 0, backgroundColor: '#F8FAFC', borderColor: '#B68C42', borderRadius: 14 }}>
         <View style={styles.headingRow}>
           <View style={styles.netWorthHeading}>
-            <View style={[styles.netWorthIcon, { backgroundColor: colors.surfaceAlt }]}>
+            <View style={[styles.netWorthIcon, { backgroundColor: '#FFFFFF', borderColor: '#B68C42', borderWidth: 1.5 }]}>
               <Ionicons
                 name="wallet"
                 size={19}
-                color={colors.primary}
+                color="#14263C"
               />
             </View>
 
@@ -291,7 +288,7 @@ export function TotalCard({
           <Pressable accessibilityRole="button" accessibilityLabel={amountsVisible ? 'Hide Finance amounts' : 'Show Finance amounts'}
             accessibilityState={{ selected: amountsVisible }} onPress={onToggleAmounts}
             style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name={amountsVisible ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.textSecondary} />
+            <Ionicons name={amountsVisible ? 'eye-outline' : 'eye-off-outline'} size={20} color="#B68C42" />
           </Pressable>
         </View>
 
@@ -303,7 +300,7 @@ export function TotalCard({
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.35}
-              style={styles.netWorthAmount}
+              style={[styles.netWorthAmount, { color: '#14263C' }]}
             >
               {amountsVisible ? formatAmount(accountsTotal + assetsTotal, baseCurrency) : hiddenValue}
             </AppText>
@@ -313,49 +310,50 @@ export function TotalCard({
             accessibilityRole="button"
             accessibilityLabel={`Base currency ${baseCurrency}. Change currency`}
             accessibilityHint="Opens the base currency list"
-            style={[
-              styles.currencyButton,
-              { borderColor: colors.border },
-            ]}
+            style={styles.currencyTouchTarget}
             onPress={() => setCurrencyPickerOpen(true)}
           >
-            <AppText style={styles.currencyFlag}>
-              {currencyFlag}
-            </AppText>
+            <View testID="finance-currency-visible-box" pointerEvents="none" style={styles.currencyButton}>
+              <AppText style={styles.currencyFlag}>
+                {currencyFlag}
+              </AppText>
 
-            <AppText style={styles.currencyCode}>
-              {baseCurrency}
-            </AppText>
+              <AppText style={styles.currencyCode}>
+                {baseCurrency}
+              </AppText>
 
-            <Ionicons
-              name="chevron-down"
-              size={16}
-              color={colors.text}
-            />
+              <Ionicons
+                name="chevron-down"
+                size={16}
+                color="#B68C42"
+              />
+            </View>
           </Pressable>
         </View>
 
-        <View style={[styles.worthRow, { borderColor: colors.border }]}>
-          <Ionicons name="analytics-outline" size={16} color={colors.textSecondary} />
-          <AppText variant="caption" style={{ fontWeight: '800' }}>Net Worth</AppText>
+        <View style={[styles.worthRow, { borderColor: '#CBD5E1' }]}>
+          <Ionicons name="trending-up" size={19} color="#B68C42" />
+          <AppText variant="caption" style={{ fontWeight: '800', color: '#14263C' }}>Net Worth</AppText>
           <Pressable accessibilityRole="button" accessibilityLabel="Explain Net Worth" accessibilityState={{ expanded: explanationOpen }}
             onPress={() => setExplanationOpen(value => !value)} style={styles.visibilityButton}>
-            <Ionicons name="information-circle-outline" size={19} color={colors.textSecondary} />
+            <Ionicons name="information-circle-outline" size={19} color="#B68C42" />
           </Pressable>
-          <AppText variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={{ flex: 1, textAlign: 'right', fontWeight: '800' }}>
+          <AppText variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={{ flex: 1, textAlign: 'right', fontWeight: '800', color: '#14263C' }}>
             {amountsVisible ? formatAmount(netWorth ?? accountsTotal + assetsTotal + receivablesTotal - payablesTotal - loansRemainingTotal, baseCurrency) + ' ' + baseCurrency : hiddenValue}
           </AppText>
         </View>
-        {explanationOpen && <AppText variant="caption" color="textSecondary">
-          Account balances + assets + receivables − payables − remaining received loan principal. Credit-card balances are already included in accounts. Future contractual installments include financing costs and are not subtracted again. Totals use underlying precision; adding rounded displays can differ by 0.01.
-        </AppText>}
-        {loansInstallmentsRemainingTotal !== undefined && <AppText variant="caption" color="textSecondary">
-          {'Loan future contractual payments: ' + (amountsVisible ? formatAmount(loansInstallmentsRemainingTotal, baseCurrency) + ' ' + baseCurrency : hiddenValue)}
-        </AppText>}
+        {explanationOpen && <View>
+          <AppText variant="caption" color="#475569">
+            Account balances + assets + receivables − payables − remaining received loan principal. Credit-card balances are already included in accounts. Future contractual installments include financing costs and are not subtracted again. Totals use underlying precision; adding rounded displays can differ by 0.01.
+          </AppText>
+          {loansInstallmentsRemainingTotal !== undefined && <AppText variant="caption" color="#475569">
+            {'Loan future contractual payments: ' + (amountsVisible ? formatAmount(loansInstallmentsRemainingTotal, baseCurrency) + ' ' + baseCurrency : hiddenValue)}
+          </AppText>}
+        </View>}
         {missingCount > 0 ? (
           <AppText
             variant="caption"
-            color="danger"
+            color="#B42318"
             style={{ marginTop: spacing.xs }}
           >
             {`${missingCount} item(s) have unavailable valuation or principal allocation in ${baseCurrency}. Check Rates and loan details.`}
@@ -471,16 +469,19 @@ const styles = StyleSheet.create({
   netWorthIcon: {
     width: 34,
     height: 34,
-    borderRadius: 10,
+    borderRadius: 17,
     backgroundColor: '#EAF1FC',
     alignItems: 'center',
     justifyContent: 'center',
   },
   netWorthLabel: {
+    color: '#14263C',
     fontWeight: '800',
     letterSpacing: 0.5,
+    fontSize: 16,
   },
   netWorthAmount: {
+    color: '#14263C',
     fontSize: 28,
     fontWeight: '700',
   },
@@ -496,21 +497,38 @@ const styles = StyleSheet.create({
   balanceAmount: {
     flex: 1,
     minWidth: 0,
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#D6B777',
+    paddingBottom: 4,
+  },
+  currencyTouchTarget: {
+    minWidth: 48,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   currencyButton: {
+    // Retain the original layout footprint; shrink only the painted selector and its contents.
+    transform: [{ scale: 0.8 }],
+    justifyContent: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    borderWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#B68C42',
+    borderWidth: 1.5,
     borderRadius: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 5,
+    minWidth: 48,
     minHeight: 48,
-    paddingVertical: 6,
+    paddingVertical: 3,
   },
   currencyFlag: {
     fontSize: 18,
   },
   currencyCode: {
+    color: '#14263C',
     fontWeight: '700',
   },
   networkGrid: {
@@ -522,8 +540,8 @@ const styles = StyleSheet.create({
   networkCard: {
     width: '49%',
     minHeight: 72,
-    borderWidth: 1,
-    borderRadius: 15,
+    borderWidth: 1.3,
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'stretch',
     paddingHorizontal: 8,
@@ -564,11 +582,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   networkLabel: {
-    fontSize: 13,
+    color: '#14263C',
+    fontSize: 16,
     fontWeight: '800',
   },
 
   networkAmount: {
+    textAlign: 'center',
     fontSize: 12,
     fontWeight: '800',
     marginTop: 1,

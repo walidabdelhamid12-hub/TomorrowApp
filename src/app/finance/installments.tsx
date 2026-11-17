@@ -1,12 +1,14 @@
+import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
+import { financeChrome } from '@/features/finance/components/financeChrome';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
-import { AppButton, AppText, Card, Screen } from '@/components/ui';
+import { AppText, Card, Screen } from '@/components/ui';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { installmentsStorage } from '@/features/finance/store/installmentsStorage';
-import { moduleColors, useTheme } from '@/theme';
+import { useTheme } from '@/theme';
 
 export default function InstallmentsScreen() {
   const router = useRouter();
@@ -42,18 +44,18 @@ export default function InstallmentsScreen() {
     ]);
   };
   return (
-    <Screen scroll>
-      <View style={styles.header}>
+    <Screen scroll style={{ backgroundColor: '#F1F5F9' }}>
+      <View style={financeChrome.header}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back to Finance" onPress={() => router.back()}
-          style={[styles.back, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Ionicons name="arrow-back" size={20} color={colors.text} />
+          style={financeChrome.back}>
+          <Ionicons name="arrow-back" size={20} color="#D6B777" />
         </Pressable>
         <View style={styles.flex}>
-          <AppText variant="h1">Installments</AppText>
-          <AppText variant="caption" color="textSecondary">Standalone contract schedules</AppText>
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>Installments</AppText>
+          <AppText variant="caption" style={{ color: '#CBD5E1' }}>Standalone contract schedules</AppText>
         </View>
       </View>
-      <AppButton title="+ New Contract" accentColor={moduleColors.finance}
+      <AppButton title="+ New Contract" accentColor="#1E293B"
         disabled={!ready} onPress={() => router.push({ pathname: '/finance/installment-contract', params: { id: 'new' } })} />
       <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.sm }}>
         Schedules only. Payments and balance posting are not available.

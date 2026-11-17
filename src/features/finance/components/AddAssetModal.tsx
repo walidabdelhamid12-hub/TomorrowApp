@@ -1,3 +1,4 @@
+import { FormModal } from '@/features/finance/components/FormModal';
 
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import type {
@@ -13,8 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  Modal,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -236,34 +235,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
       : selectedCurrencyOption?.symbol ?? selectedCurrency;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.headerRow}>
-            <Text style={styles.modalTitle}>
-              {isEditing ? 'Edit asset' : 'Assets'}
-            </Text>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeButton}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-            >
-              <Ionicons name="close" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
+    <FormModal visible={visible} title={isEditing ? 'Edit asset' : 'Add asset'} onClose={onClose}>
+      <View>
             <Text style={styles.label}>
               {isEditing ? 'EDITING ASSET' : 'ADD TO'}
             </Text>
@@ -488,10 +461,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
                 {isEditing ? 'Update asset' : 'Create asset'}
               </Text>
             </TouchableOpacity>
-          </ScrollView>
-        </View>
       </View>
-    </Modal>
+    </FormModal>
   );
 };
 
@@ -503,13 +474,11 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#F8FAFC',
-    borderTopWidth: 2,
-    borderTopColor: '#D6B777',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     maxHeight: '82%',
-    paddingTop: 14,
-    paddingHorizontal: 14,
+    paddingTop: 0,
+    paddingHorizontal: 0,
   },
   headerRow: {
     backgroundColor: '#1E293B',
@@ -530,10 +499,11 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   scrollContent: {
+    paddingHorizontal: 16,
     paddingBottom: 24,
   },
   label: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: '#365575',
     marginTop: 13,
@@ -545,33 +515,39 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   addToChipActive: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 15,
-    backgroundColor: '#059669',
+    minHeight: 52,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#D6B777',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addToTextActive: {
-    fontSize: 12,
-    color: '#fff',
+    fontSize: 16,
+    color: '#1E293B',
     fontWeight: '600',
   },
   input: {
+    minHeight: 52,
     borderWidth: 1,
     borderColor: '#D6B777',
     borderRadius: 11,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 16,
     backgroundColor: '#FFFFFF',
     color: '#111',
   },
   assetTypesGrid: {
     flexDirection: 'row',
-    flexWrap: 'nowrap',
+    flexWrap: 'wrap',
     gap: 6,
   },
   assetTypeCard: {
-    flex: 1,
+    flexGrow: 1, flexBasis: 120,
     minWidth: 0,
     minHeight: 45,
     alignItems: 'center',
@@ -619,7 +595,7 @@ const styles = StyleSheet.create({
     columnGap: 5,
   },
   currencyCard: {
-    width: '18.5%',
+    width: '18.5%', minWidth: 64, flexGrow: 1,
     minHeight: 70,
     alignItems: 'center',
     justifyContent: 'center',
@@ -711,6 +687,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   saveButton: {
+    minHeight: 52, justifyContent: 'center',
     backgroundColor: '#1E293B',
     borderRadius: 12,
     paddingVertical: 12,
@@ -719,7 +696,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });

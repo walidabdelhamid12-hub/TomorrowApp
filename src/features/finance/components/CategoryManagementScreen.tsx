@@ -1,10 +1,12 @@
+import { FormModal } from './FormModal';
+import { FinanceButton } from './FinanceButton';
+import { financeChrome } from '@/features/finance/components/financeChrome';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import {
     Alert,
-    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -78,7 +80,7 @@ function CategoryEditor({
   onClose,
   onSave,
 }: CategoryEditorProps) {
-  const { colors, spacing, radius } = useTheme();
+  const { colors, radius } = useTheme();
 
   const [name, setName] = useState('');
   const [icon, setIcon] = useState<string>(ICON_OPTIONS[0]);
@@ -104,36 +106,7 @@ function CategoryEditor({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalBackdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-
-        <View
-          style={[
-            styles.modalContent,
-            {
-              backgroundColor: colors.surface,
-              borderTopLeftRadius: radius.xl,
-              borderTopRightRadius: radius.xl,
-              padding: spacing.lg,
-            },
-          ]}
-        >
-          <View style={styles.modalHeader}>
-            <AppText variant="h2">
-              {category ? 'Edit category' : 'Add category'}
-            </AppText>
-
-            <Pressable onPress={onClose} hitSlop={10}>
-              <Ionicons name="close" size={24} color={colors.text} />
-            </Pressable>
-          </View>
-
+    <FormModal visible={visible} title={category ? 'Edit category' : 'Add category'} onClose={onClose}>
           <AppText color="textSecondary" style={styles.fieldLabel}>
             Category name
           </AppText>
@@ -207,32 +180,11 @@ function CategoryEditor({
             ))}
           </View>
 
-          <View style={styles.modalActions}>
-            <Pressable
-              onPress={onClose}
-              style={[
-                styles.actionButton,
-                { backgroundColor: colors.surfaceAlt },
-              ]}
-            >
-              <AppText>Cancel</AppText>
-            </Pressable>
-
-            <Pressable
-              onPress={handleSave}
-              style={[
-                styles.actionButton,
-                { backgroundColor: colors.primary },
-              ]}
-            >
-              <AppText color="onPrimary" variant="label">
-                Save category
-              </AppText>
-            </Pressable>
+          <View style={{ gap: 12 }}>
+            <FinanceButton title="Save category" onPress={handleSave} />
+            <FinanceButton title="Cancel" variant="outline" onPress={onClose} />
           </View>
-        </View>
-      </View>
-    </Modal>
+    </FormModal>
   );
 }
 
@@ -332,36 +284,40 @@ export function CategoryManagementScreen({
     <View
       style={[
         styles.container,
-        { backgroundColor: colors.background },
+        { backgroundColor: '#F1F5F9' },
       ]}
     >
-      <View style={styles.header}>
+      <View style={[financeChrome.header, { marginHorizontal: 0, marginTop: 0, flexWrap: 'wrap' }]}>
         {onBack ? (
           <Pressable
             onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
             hitSlop={10}
-            style={styles.backButton}
+            style={financeChrome.back}
           >
-            <Ionicons name="arrow-back" size={23} color={colors.text} />
+            <Ionicons name="arrow-back" size={23} color="#D6B777" />
           </Pressable>
         ) : null}
 
         <View style={styles.headerText}>
-          <AppText variant="h2">Categories</AppText>
-          <AppText color="textSecondary" variant="caption">
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>Categories</AppText>
+          <AppText style={{ color: '#CBD5E1' }} variant="caption">
             Manage your income and expense categories
           </AppText>
         </View>
 
         <Pressable
           onPress={openAddEditor}
+          accessibilityRole="button"
+          accessibilityLabel="Add category"
           style={[
             styles.addButton,
-            { backgroundColor: colors.primary },
+            { backgroundColor: '#D6B777' },
           ]}
         >
-          <Ionicons name="add" size={21} color="#FFFFFF" />
-          <AppText color="onPrimary" variant="label">
+          <Ionicons name="add" size={21} color="#1E293B" />
+          <AppText style={{ color: '#1E293B' }} variant="label">
             Add
           </AppText>
         </Pressable>
@@ -505,17 +461,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 16,
+    marginHorizontal: 18,
+    marginTop: 12,
+    marginBottom: 16,
+    backgroundColor: '#1E293B',
+    borderRadius: 20,
     gap: 10,
   },
   backButton: {
-    padding: 4,
+    width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: '#D6B777',
+    alignItems: 'center', justifyContent: 'center',
   },
   headerText: {
     flex: 1,
+    minWidth: 120,
     gap: 3,
   },
   addButton: {
-    minHeight: 40,
+    minHeight: 44,
     borderRadius: 12,
     paddingHorizontal: 13,
     flexDirection: 'row',

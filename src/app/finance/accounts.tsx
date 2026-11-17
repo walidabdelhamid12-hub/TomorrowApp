@@ -1,3 +1,5 @@
+import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
+import { financeChrome } from '@/features/finance/components/financeChrome';
 import { AccountCard } from '@/features/finance/components/AccountCard';
 import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 import { AccountDetails } from '@/features/finance/components/AccountDetails';
@@ -13,7 +15,7 @@ import {
     View,
 } from 'react-native';
 
-import { AppButton, AppText, Card, Screen } from '@/components/ui';
+import { AppText, Card, Screen } from '@/components/ui';
 import {
     AddAccountModal,
     type AddAccountFormData,
@@ -155,21 +157,21 @@ export default function AccountsScreen() {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll style={{ backgroundColor: '#F1F5F9' }}>
       {confirmation}
-      <View style={styles.header}>
+      <View style={financeChrome.header}>
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
           accessibilityLabel="Go back"
-          style={styles.backButton}
+          style={financeChrome.back}
         >
-          <Ionicons name="arrow-back" size={23} color={colors.text} />
+          <Ionicons name="arrow-back" size={23} color="#D6B777" />
         </Pressable>
 
         <View style={styles.headerText}>
-          <AppText variant="h1">Accounts</AppText>
-          <AppText variant="caption" color="textSecondary">
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>Accounts</AppText>
+          <AppText variant="caption" style={{ color: '#CBD5E1' }}>
             {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
           </AppText>
         </View>
@@ -181,7 +183,7 @@ export default function AccountsScreen() {
 
       <AppButton
         title="Add account"
-        accentColor={moduleColors.finance}
+        accentColor="#1E293B"
         leftIcon={<Ionicons name="add" size={20} color={colors.onPrimary} />}
         onPress={openAdd}
       />
@@ -239,6 +241,7 @@ const styles = StyleSheet.create({
   },
   headerText: {
     flex: 1,
+    minWidth: 0,
     gap: 3,
   },
   accountRow: {

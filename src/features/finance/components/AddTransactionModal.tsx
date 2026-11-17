@@ -1,3 +1,7 @@
+import { FinanceModalHeader } from './FinanceModalHeader';
+import { FinanceDateField as DateField } from '@/features/finance/components/FinanceDateField';
+import { FinanceInput as AppInput } from '@/features/finance/components/FinanceInput';
+import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
 import { AccountDropdown } from '@/features/finance/components/AccountDropdown';
 import { CurrencyDropdown } from '@/features/finance/components/CurrencyDropdown';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
@@ -11,16 +15,11 @@ import {
   ScrollView,
   StyleSheet,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
-import {
-  AppButton,
-  AppInput,
-  AppText,
-  ChipSelect,
-  DateField,
-} from '@/components/ui';
+import { AppText, ChipSelect } from '@/components/ui';
 import { FormModal } from '@/features/finance/components/FormModal';
 import { HistoricalFxField } from '@/features/finance/components/HistoricalFxField';
 import { DirectHistoricalFxField } from '@/features/finance/components/DirectHistoricalFxField';
@@ -47,6 +46,7 @@ import { evaluateExpression } from '@/features/finance/utils/calculator';
 import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { moduleColors, useTheme } from '@/theme';
 import { isValidISODate } from '@/utils/input';
+import { shouldStackFinanceFields } from '../utils/formLayout';
 
 function resolveHistoricalRateExpression(input: string): number | null {
   const text = input.trim();
@@ -108,6 +108,9 @@ export function AddTransactionModal({
   transaction,
 }: AddTransactionModalProps) {
   const { colors, spacing, radius } = useTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const stackFields = shouldStackFinanceFields(width, fontScale);
+  const fieldColumn = { flex: stackFields ? 0 : 1, minWidth: 0, gap: 4 };
 
   const accounts = useLedgerStore((s) => s.accounts);
   const categories = useLedgerStore((s) => s.categories);
@@ -967,8 +970,8 @@ export function AddTransactionModal({
           </AppText>
         ) : (
           <>
-                         <View style={{ flexDirection: 'row', gap: 10 }}>
-               <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                         <View style={{ flexDirection: stackFields ? 'column' : 'row', gap: 10 }}>
+               <View style={fieldColumn}>
                  <AppText variant="label" color="textSecondary">TYPE</AppText>
                  <Pressable accessibilityRole="button" accessibilityLabel="Transaction type" onPress={() => !transaction && setTypePickerOpen(true)}
                    style={[styles.dropdownButton, { borderColor: '#D6B777', backgroundColor: '#FFFFFF' }]}>
@@ -977,7 +980,7 @@ export function AddTransactionModal({
                    <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
                  </Pressable>
                </View>
-               <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+               <View style={fieldColumn}>
                  <AppText variant="label" color="textSecondary">ATTACH (OPTIONAL)</AppText>
                  <Pressable accessibilityRole="button" accessibilityLabel="Scan from camera, gallery or PDF" onPress={() => setAttachPickerOpen(true)}
                    style={[styles.dropdownButton, { borderColor: '#D6B777', backgroundColor: '#FFFFFF' }]}>
@@ -1037,10 +1040,11 @@ export function AddTransactionModal({
               </>
             ) : (
               <>
-                                 <View style={{ flexDirection: 'row', gap: 10 }}>
+                                 <View style={{ flexDirection: stackFields ? 'column' : 'row', gap: 10 }}>
                    <AccountDropdown label="ACCOUNT" options={selectableAccounts} value={activeAccountId}
+                     containerStyle={stackFields ? { flex: 0 } : undefined}
                      onChange={setAccountId} emptyMessage="No accounts" />
-                   <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                   <View style={fieldColumn}>
                      <AppText variant="label" color="textSecondary">CATEGORY</AppText>
                      <Pressable accessibilityRole="button" accessibilityLabel="Choose or manage category" onPress={() => setCategoryPickerOpen(true)}
                        style={[styles.dropdownButton, { borderColor: '#D6B777', backgroundColor: '#FFFFFF' }]}>
@@ -1053,11 +1057,11 @@ export function AddTransactionModal({
 </>
             )}
             {entryMode === 'normal' && activeAccount ? (
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+              <View style={{ flexDirection: stackFields ? 'column' : 'row', alignItems: 'stretch', gap: 10 }}>
                 <AppInput
               label="Amount"
-              containerStyle={{ flex: 1, minWidth: 0 }}
-              fieldStyle={{ height: 48, minHeight: 48, borderColor: '#D6B777', backgroundColor: '#FFFFFF' }}
+              containerStyle={fieldColumn}
+              fieldStyle={{ minHeight: 52, borderColor: '#D6B777', backgroundColor: '#FFFFFF' }}
               style={{ paddingVertical: 0 }}
               value={amount}
               onChangeText={(text) => {
@@ -1094,6 +1098,7 @@ export function AddTransactionModal({
               placeholder="0"
             />
                 <CurrencyDropdown
+                  containerStyle={stackFields ? { flex: 0 } : undefined}
                   label="CURRENCY"
                   value={amountCurrencyCode ?? activeAccount.currencyCode}
                   onChange={(value) => {
@@ -1338,22 +1343,7 @@ export function AddTransactionModal({
               },
             ]}
           >
-            <View style={styles.categoryModalHeader}>
-              <View>
-                <AppText variant="h2">Edit Categories</AppText>
-                <AppText color="textSecondary" variant="caption">
-                  {type === 'expense' ? 'Expense categories' : 'Income categories'}
-                </AppText>
-              </View>
-
-              <Pressable
-                onPress={() => setCategoryManagerVisible(false)}
-                hitSlop={10}
-              >
-                <Ionicons name="close" size={24} color={colors.text} />
-              </Pressable>
-            </View>
-
+            <View style={{ marginHorizontal: -20, marginTop: -20 }}><FinanceModalHeader title="Edit Categories" onClose={() => setCategoryManagerVisible(false)} /></View>
             <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
@@ -1467,16 +1457,7 @@ export function AddTransactionModal({
               },
             ]}
           >
-            <View style={styles.categoryModalHeader}>
-              <AppText variant="h2">
-                {editingCategory ? 'Edit Category' : 'Add Category'}
-              </AppText>
-
-              <Pressable onPress={closeCategoryForm} hitSlop={10}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </Pressable>
-            </View>
-
+            <View style={{ marginHorizontal: -20, marginTop: -20 }}><FinanceModalHeader title={editingCategory ? 'Edit Category' : 'Add Category'} onClose={closeCategoryForm} /></View>
             <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
@@ -1497,7 +1478,7 @@ export function AddTransactionModal({
                   {
                     color: colors.text,
                     backgroundColor: colors.surfaceAlt,
-                    borderColor: colors.border,
+                    borderColor: '#D6B777',
                     borderRadius: radius.md,
                   },
                 ]}
@@ -1590,7 +1571,7 @@ export function AddTransactionModal({
 
       <FormModal visible={visible && typePickerOpen} title="TYPE" onClose={() => setTypePickerOpen(false)}>
         {(['expense', 'income', 'refund'] as const).map(option => (
-          <Pressable key={option} onPress={() => { handleEntryModeChange(option); setTypePickerOpen(false); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+          <Pressable key={option} onPress={() => { handleEntryModeChange(option); setTypePickerOpen(false); }} style={[styles.pickerRow, { borderColor: '#D6B777', flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
             <Ionicons name={option === 'expense' ? 'arrow-down-circle-outline' : option === 'income' ? 'arrow-up-circle-outline' : 'return-down-back-outline'} size={20} color={option === 'expense' ? '#EF4444' : option === 'income' ? '#10B981' : '#3B82F6'} />
             <AppText>{option === 'expense' ? 'Expense' : option === 'income' ? 'Income' : 'Refund'}</AppText>
           </Pressable>
@@ -1599,17 +1580,17 @@ export function AddTransactionModal({
       <FormModal visible={visible && categoryPickerOpen} title="CATEGORY" onClose={() => setCategoryPickerOpen(false)}>
         <ScrollView style={{ maxHeight: 340 }} keyboardShouldPersistTaps="handled">
           {kindCategories.map(category => (
-            <Pressable key={category.id} onPress={() => { setCategoryId(category.id); setCategoryPickerOpen(false); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+            <Pressable key={category.id} onPress={() => { setCategoryId(category.id); setCategoryPickerOpen(false); }} style={[styles.pickerRow, { borderColor: '#D6B777', flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
               <Ionicons name={category.icon as keyof typeof Ionicons.glyphMap} size={20} color={category.color} />
               <AppText style={{ flex: 1 }}>{category.name}</AppText>
               {activeCategoryId === category.id ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
             </Pressable>
           ))}
-          <Pressable onPress={() => { setCategoryPickerOpen(false); openNewCategoryForm(); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+          <Pressable onPress={() => { setCategoryPickerOpen(false); openNewCategoryForm(); }} style={[styles.pickerRow, { borderColor: '#D6B777', flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
             <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
             <AppText color={colors.primary}>Add New Category</AppText>
           </Pressable>
-          <Pressable onPress={() => { setCategoryPickerOpen(false); openCategoryManager(); }} style={[styles.pickerRow, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+          <Pressable onPress={() => { setCategoryPickerOpen(false); openCategoryManager(); }} style={[styles.pickerRow, { borderColor: '#D6B777', flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
             <Ionicons name="settings-outline" size={20} color={colors.primary} />
             <AppText color={colors.primary}>Manage Categories</AppText>
           </Pressable>
@@ -1783,7 +1764,7 @@ interface AddTransactionModalProps {
 }
 
 const styles = StyleSheet.create({
-  dropdownButton: { height: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dropdownButton: { minHeight: 52, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4 },
   pickerRow: { minHeight: 48, paddingVertical: 12, borderBottomWidth: 1 },
   compactGrid: {
     flexDirection: 'row',

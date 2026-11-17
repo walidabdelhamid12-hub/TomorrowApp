@@ -13,6 +13,8 @@ import { createDocumentImporter } from '@/features/documents/import/importDocume
 import { evaluateExtractionGate } from '@/features/documents/extraction/extractionGate';
 import { createExpoVaultFileSystem } from '@/features/documents/vault/expoVaultFileSystem';
 import { createLocalFileVault } from '@/features/documents/vault/localFileVault';
+import { FinanceButton } from '@/features/finance/components/FinanceButton';
+import { financeChrome } from '@/features/finance/components/financeChrome';
 
 const repository = createDocumentRepository(AsyncStorage);
 const vaultFs = createExpoVaultFileSystem();
@@ -214,16 +216,14 @@ export default function DocumentsScreen({ onClose }: { onClose?: () => void } = 
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.modalHeader}>
-        <Text style={styles.modalHeaderTitle}>Documents</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close documents" hitSlop={12} onPress={() => onClose ? onClose() : fromAdd === '1' ? router.navigate('/finance/add') : router.back()}>
-          <Ionicons name="close" size={26} color="#FFFFFF" />
+      <View style={[financeChrome.modalHeader, { marginHorizontal: -16, marginTop: -16 }]}>
+        <Text style={[financeChrome.title, { lineHeight: 28 }]}>Documents</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close documents" style={financeChrome.close} onPress={() => onClose ? onClose() : fromAdd === '1' ? router.navigate('/finance/add') : router.back()}>
+          <Ionicons name="close" size={24} color="#FFFFFF" />
         </Pressable>
       </View>
       <Text style={styles.hint}>Saved PDF documents · stored locally on this device</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Import PDF" disabled={importing || loading || verifyingId !== null || openingId !== null || savingCategory} onPress={importPdf} style={styles.importButton}>
-        <Text style={styles.importText}>{importing ? 'Importing…' : '+ Import PDF'}</Text>
-      </Pressable>
+      <FinanceButton accessibilityLabel="Import PDF" disabled={importing || loading || verifyingId !== null || openingId !== null || savingCategory} onPress={importPdf} title={importing ? 'Importing…' : '+ Import PDF'} />
       <Text style={styles.hint}>PDF only · maximum 1 MiB · no automatic financial transactions</Text>
       {notice ? <Text accessibilityRole="alert" style={styles.success}>{notice}</Text> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
@@ -335,15 +335,13 @@ export default function DocumentsScreen({ onClose }: { onClose?: () => void } = 
 
 const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 48, gap: 14, backgroundColor: '#F8FAFC' },
-  modalHeader: { backgroundColor: '#1E293B', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  modalHeaderTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
+  importButton: { backgroundColor: '#1E293B', padding: 14, borderRadius: 12, alignItems: 'center' },
+  importText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
   back: { color: '#D6B777', fontSize: 16, paddingVertical: 8, fontWeight: '700' },
   title: { fontSize: 24, fontWeight: '700', color: '#1E293B' },
   hint: { fontSize: 14, color: '#64748B' },
   error: { color: '#B91C1C', fontSize: 15 },
   success: { color: '#047857', fontSize: 15 },
-  importButton: { backgroundColor: '#1E293B', padding: 14, borderRadius: 12, alignItems: 'center' },
-  importText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
   empty: { padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#D6B777', backgroundColor: '#FFFFFF', gap: 8 },
   item: { padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#D6B777', backgroundColor: '#FFFFFF', gap: 5 },
   verifyButton: { paddingVertical: 12, paddingHorizontal: 12, marginTop: 6, borderWidth: 1, borderColor: '#D6B777', backgroundColor: '#FFFFFF', borderRadius: 12 },
