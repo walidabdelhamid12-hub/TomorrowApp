@@ -255,7 +255,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
               accessibilityRole="button"
               accessibilityLabel="Close"
             >
-              <Ionicons name="close" size={22} color="#333" />
+              <Ionicons name="close" size={22} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
@@ -499,10 +499,12 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 2,
+    borderTopColor: '#D6B777',
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     maxHeight: '82%',
@@ -510,6 +512,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   headerRow: {
+    backgroundColor: '#1E293B',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -518,7 +524,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 19,
     fontWeight: 'bold',
-    color: '#111',
+    color: '#FFFFFF',
   },
   closeButton: {
     padding: 4,
@@ -529,7 +535,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#64748b',
+    color: '#365575',
     marginTop: 13,
     marginBottom: 7,
     letterSpacing: 0.5,
@@ -551,12 +557,12 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 11,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    backgroundColor: '#fafafa',
+    backgroundColor: '#FFFFFF',
     color: '#111',
   },
   assetTypesGrid: {
@@ -573,9 +579,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     paddingHorizontal: 2,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 9,
-    backgroundColor: '#fafafa',
+    backgroundColor: '#FFFFFF',
     gap: 1,
   },
   disabledTypeCard: {
@@ -621,13 +627,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#fafafa',
+    borderColor: '#D6B777',
+    backgroundColor: '#FFFFFF',
     gap: 2,
   },
   currencyCardActive: {
-    borderColor: '#059669',
-    backgroundColor: '#ecfdf5',
+    borderColor: '#B38E49',
+    backgroundColor: '#FFF8E9',
   },
   currencyFlag: {
     fontSize: 14,
@@ -638,7 +644,7 @@ const styles = StyleSheet.create({
     color: '#334155',
   },
   currencyCodeActive: {
-    color: '#047857',
+    color: '#1E293B',
   },
   currencySymbol: {
     fontSize: 9,
@@ -646,7 +652,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   currencySymbolActive: {
-    color: '#047857',
+    color: '#1E293B',
   },
   karatRow: {
     flexDirection: 'row',
@@ -660,7 +666,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     backgroundColor: '#f8fafc',
   },
   karatChipActive: {
@@ -682,9 +688,9 @@ const styles = StyleSheet.create({
   },
   balanceContainer: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#D6B777',
     borderRadius: 11,
-    backgroundColor: '#fafafa',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -705,7 +711,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   saveButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#1E293B',
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',

@@ -971,7 +971,7 @@ export function AddTransactionModal({
                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                  <AppText variant="label" color="textSecondary">TYPE</AppText>
                  <Pressable accessibilityRole="button" accessibilityLabel="Transaction type" onPress={() => !transaction && setTypePickerOpen(true)}
-                   style={[styles.dropdownButton, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
+                   style={[styles.dropdownButton, { borderColor: '#D6B777', backgroundColor: '#FFFFFF' }]}>
                    <Ionicons name={entryMode === 'refund' ? 'return-down-back-outline' : type === 'income' ? 'arrow-up-circle-outline' : 'arrow-down-circle-outline'} size={19} color={entryMode === 'refund' ? '#3B82F6' : type === 'income' ? '#10B981' : '#EF4444'} />
                    <AppText style={{ flex: 1 }}>{entryMode === 'refund' ? 'Refund' : type === 'income' ? 'Income' : 'Expense'}</AppText>
                    <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
@@ -980,7 +980,7 @@ export function AddTransactionModal({
                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                  <AppText variant="label" color="textSecondary">ATTACH (OPTIONAL)</AppText>
                  <Pressable accessibilityRole="button" accessibilityLabel="Scan from camera, gallery or PDF" onPress={() => setAttachPickerOpen(true)}
-                   style={[styles.dropdownButton, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
+                   style={[styles.dropdownButton, { borderColor: '#D6B777', backgroundColor: '#FFFFFF' }]}>
                    <Ionicons name="attach-outline" size={19} color={colors.textSecondary} />
                    <AppText style={{ flex: 1 }}>— None</AppText>
                    <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
@@ -1043,7 +1043,7 @@ export function AddTransactionModal({
                    <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                      <AppText variant="label" color="textSecondary">CATEGORY</AppText>
                      <Pressable accessibilityRole="button" accessibilityLabel="Choose or manage category" onPress={() => setCategoryPickerOpen(true)}
-                       style={[styles.dropdownButton, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
+                       style={[styles.dropdownButton, { borderColor: '#D6B777', backgroundColor: '#FFFFFF' }]}>
                        {kindCategories.find(item => item.id === activeCategoryId) ? <Ionicons name={kindCategories.find(item => item.id === activeCategoryId)!.icon as keyof typeof Ionicons.glyphMap} size={19} color={kindCategories.find(item => item.id === activeCategoryId)!.color} /> : <Ionicons name="pricetag-outline" size={19} color={colors.textSecondary} />}
                        <AppText style={{ flex: 1 }}>{kindCategories.find(item => item.id === activeCategoryId)?.name ?? 'Choose category'}</AppText>
                        <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
@@ -1057,7 +1057,7 @@ export function AddTransactionModal({
                 <AppInput
               label="Amount"
               containerStyle={{ flex: 1, minWidth: 0 }}
-              fieldStyle={{ height: 48, minHeight: 48 }}
+              fieldStyle={{ height: 48, minHeight: 48, borderColor: '#D6B777', backgroundColor: '#FFFFFF' }}
               style={{ paddingVertical: 0 }}
               value={amount}
               onChangeText={(text) => {
@@ -1306,7 +1306,7 @@ export function AddTransactionModal({
                     ? 'Save changes'
                     : 'Add transaction'
               }
-              accentColor={moduleColors.finance}
+              accentColor={'#1E293B'}
               disabled={fxLoading && !isEditingRefund}
               onPress={submit}
               style={{ marginTop: spacing.xs }}
@@ -1783,7 +1783,7 @@ interface AddTransactionModalProps {
 }
 
 const styles = StyleSheet.create({
-  dropdownButton: { height: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dropdownButton: { height: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4 },
   pickerRow: { minHeight: 48, paddingVertical: 12, borderBottomWidth: 1 },
   compactGrid: {
     flexDirection: 'row',

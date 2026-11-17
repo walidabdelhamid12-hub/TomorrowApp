@@ -28,7 +28,7 @@ export function AccountDropdown({ label, options, value, onChange, emptyMessage 
     <AppText variant="label" color="textSecondary" style={{ fontWeight: '700' }}>{label}</AppText>
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open, disabled: !options.length }}
       disabled={!options.length} onPress={() => setOpen(true)}
-      style={{ height: 48, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt, borderRadius: 10, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      style={{ height: 48, borderWidth: 1, borderColor: '#D6B777', backgroundColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
       <Ionicons name={selected ? accountIcon(selected.type) : "wallet-outline"} size={19} color={colors.finance.neutral.accent} />
       <AppText variant="caption" style={{ flex: 1 }}>{selected ? selected.name + ' · ' + getCurrencyLabel(selected.currencyCode) : options.length ? 'Choose account' : emptyMessage}</AppText>
       <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />

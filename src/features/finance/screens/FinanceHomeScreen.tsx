@@ -3,9 +3,10 @@ import { useFinanceConfirmation } from '@/features/finance/components/useFinance
 import { useFinancePreferences } from '@/features/finance/store/useFinancePreferences';
 
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, type Href } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import Svg, { Defs, LinearGradient, Stop, Text as SvgText } from 'react-native-svg';
 import type { ComponentProps } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -84,8 +85,12 @@ const NETWORK_ITEMS: {
   { key: 'transfers', title: 'Transfers' },
 ];
 
-export default function FinanceHomeScreen() {
+export default function FinanceHomeScreen({ modalOnlyAction, onModalOnlyClose }: {
+  modalOnlyAction?: 'transaction' | 'transfer' | 'account' | 'asset';
+  onModalOnlyClose?: () => void;
+} = {}) {
   const router = useRouter();
+  const { financeAdd, fromAdd } = useLocalSearchParams<{ financeAdd?: string; fromAdd?: string }>();
   const { colors, spacing } = useTheme();
   const { confirm, confirmation } = useFinanceConfirmation();
   const accent = moduleColors.finance;
@@ -154,6 +159,7 @@ export default function FinanceHomeScreen() {
 
   const [ratesOpen, setRatesOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [walletMenuOpen, setWalletMenuOpen] = useState(false);
 
   const dateLabel = useFinanceDate();
 
@@ -305,6 +311,83 @@ export default function FinanceHomeScreen() {
         break;
     }
   };
+
+  // A validated route request opens an existing Home-owned modal only once.
+  // Clear the route parameter before dispatch; no financial posting occurs here.
+  const [addOriginModal, setAddOriginModal] = useState<
+    'transaction' | 'transfer' | 'account' | 'asset' | null
+  >(null);
+
+  useEffect(() => {
+    if (typeof financeAdd !== 'string' || !financeAdd) return;
+    router.setParams({ financeAdd: '' });
+    if (financeAdd === 'transaction' || financeAdd === 'transfer' ||
+        financeAdd === 'account' || financeAdd === 'asset') {
+      handleAddMenuAction(financeAdd);
+      if (fromAdd === '1') {
+        setAddOriginModal(financeAdd);
+      }
+    }
+  }, [financeAdd]);
+
+  // Add-owned modal: keep the existing Home handlers, but render no Home UI.
+  useEffect(() => {
+    if (!modalOnlyAction) return;
+    handleAddMenuAction(modalOnlyAction);
+  }, [modalOnlyAction]);
+
+  const [modalOnlyWasOpen, setModalOnlyWasOpen] = useState(false);
+  useEffect(() => {
+    if (!modalOnlyAction) return;
+    const opened = modalOnlyAction === 'transaction' ? txOpen :
+      modalOnlyAction === 'transfer' ? transferOpen :
+      modalOnlyAction === 'account' ? accountOpen : assetOpen;
+    if (opened) {
+      if (!modalOnlyWasOpen) setModalOnlyWasOpen(true);
+    } else if (modalOnlyWasOpen) {
+      setModalOnlyWasOpen(false);
+      onModalOnlyClose?.();
+    }
+  }, [modalOnlyAction, modalOnlyWasOpen, txOpen, transferOpen, accountOpen, assetOpen, onModalOnlyClose]);
+
+  const [addOriginModalWasOpen, setAddOriginModalWasOpen] = useState(false);
+
+  useEffect(() => {
+    if (!addOriginModal) {
+      if (addOriginModalWasOpen) {
+        setAddOriginModalWasOpen(false);
+      }
+      return;
+    }
+
+    const modalIsOpen =
+      addOriginModal === 'transaction' ? txOpen :
+      addOriginModal === 'transfer' ? transferOpen :
+      addOriginModal === 'account' ? accountOpen :
+      assetOpen;
+
+    if (modalIsOpen) {
+      if (!addOriginModalWasOpen) {
+        setAddOriginModalWasOpen(true);
+      }
+      return;
+    }
+
+    if (!addOriginModalWasOpen) return;
+
+    setAddOriginModalWasOpen(false);
+    setAddOriginModal(null);
+    router.setParams({ fromAdd: '' });
+    router.navigate('/finance/add' as Href);
+  }, [
+    addOriginModal,
+    addOriginModalWasOpen,
+    txOpen,
+    transferOpen,
+    accountOpen,
+    assetOpen,
+    router,
+  ]);
 
   const confirmDeleteAsset = (asset: Asset) => {
     const message =
@@ -496,14 +579,151 @@ export default function FinanceHomeScreen() {
     ? assets.find((item) => item.id === entriesAsset.id) ?? null
     : null;
 
-  return (
-    <Screen scroll>
-      {confirmation}
-      <AppText variant="h1">Finance</AppText>
+  if (modalOnlyAction) {
+    // Native Modal surfaces are rendered above the Add screen; Home stays unmounted visually.
+    return (
+      <View style={{ flex: 1 }}>
+      <AddTransactionModal
+        visible={txOpen}
+        transaction={editingTx}
+        onClose={() => setTxOpen(false)}
+      />
 
-      <AppText color={colors.finance.neutral.accent} style={{ marginTop: spacing.xs, fontWeight: '600' }}>
-        {dateLabel}
-      </AppText>
+      <TransferModal
+        visible={transferOpen}
+        transfer={editingTransfer}
+        onClose={() => {
+          setTransferOpen(false);
+          setEditingTransfer(null);
+        }}
+      />
+
+      <AddAccountModal
+        visible={accountOpen}
+        account={editingAccount}
+        onClose={() => {
+          setAccountOpen(false);
+          setEditingAccount(null);
+        }}
+        onSave={(data: AddAccountFormData) => {
+          const amount = parseAmount(data.amount);
+
+          if (
+            !data.accountName.trim() ||
+            !data.amount.trim() ||
+            amount === null
+          ) {
+            Alert.alert(
+              'Invalid account',
+              'Enter an account name and a valid starting balance.',
+            );
+            return;
+          }
+
+          const accountTypes: Record<
+            AddAccountFormData['selectedType'],
+            AccountType
+          > = {
+            Cash: 'cash',
+            Bank: 'bank',
+            Wallet: 'wallet',
+            Savings: 'savings',
+            'Credit card': 'credit_card',
+          };
+
+          const accountInput = {
+            name: data.accountName.trim(),
+            type: accountTypes[data.selectedType],
+            currencyCode: data.selectedCurrency,
+            initialBalance: amount,
+          };
+
+          if (editingAccount) {
+            updateAccount(editingAccount.id, accountInput);
+          } else {
+            addAccount(accountInput);
+          }
+
+          setAccountOpen(false);
+          setEditingAccount(null);
+        }}
+      />
+
+      <AddAssetModal
+        visible={assetOpen}
+        asset={editingAsset}
+        onClose={closeAssetModal}
+        onSave={handleSaveAsset}
+      />
+
+      </View>
+    );
+  }
+
+  return (
+    <Screen scroll style={{ backgroundColor: '#F1F5F9' }}>
+      {confirmation}
+      <View
+        style={{
+          backgroundColor: '#1E293B',
+          borderBottomLeftRadius: 24,
+          borderBottomRightRadius: 24,
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.sm,
+          paddingBottom: 0,
+          marginHorizontal: -spacing.md,
+          marginTop: -spacing.sm,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Open exchange rates"
+            onPress={() => setRatesOpen(true)}
+            style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ width: 32, height: 32, borderRadius: 16, transform: [{ translateX: -0.8 }], borderWidth: 1.5, borderColor: '#D6B777', backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="refresh-outline" size={19} color="#D6B777" />
+            </View>
+          </Pressable>
+          <View accessibilityRole="header" accessibilityLabel="Tomorrow Finance" style={{ flex: 1, alignItems: 'center', minWidth: 0 }}>
+          <Svg width="100%" height={48} viewBox="0 0 360 41" accessible={false}>
+            <Defs>
+              <LinearGradient id="financeTitleGold" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0%" stopColor="#FFFFFF" />
+                <Stop offset="52%" stopColor="#FFFFFF" />
+                <Stop offset="100%" stopColor="#D6B777" />
+              </LinearGradient>
+            </Defs>
+            <SvgText x="180" y="35" textAnchor="middle" fontSize="32" fontWeight="800" scaleX={1.05} originX={180} fill="url(#financeTitleGold)">
+              Tomorrow Finance
+            </SvgText>
+          </Svg>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Open Finance settings"
+            onPress={() => router.push('/finance/settings')}
+            style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ width: 32, height: 32, borderRadius: 16, transform: [{ translateX: 0.8 }], borderWidth: 1.5, borderColor: '#D6B777', backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="settings-outline" size={19} color="#D6B777" /></View>
+          </Pressable>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Select Finance wallet"
+          accessibilityState={{ expanded: walletMenuOpen }}
+          onPress={() => setWalletMenuOpen(value => !value)}
+          style={{ alignSelf: 'center', minHeight: 40, marginTop: -4, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 7 }}
+        >
+          <Ionicons name="wallet-outline" size={17} color="#D6B777" />
+          <AppText style={{ color: '#E2E8F0', fontWeight: '800', fontSize: 14, letterSpacing: 0.35 }}>Personal Wallet</AppText>
+          <Ionicons name={walletMenuOpen ? 'chevron-up' : 'chevron-down'} size={17} color="#D6B777" />
+        </Pressable>
+        {walletMenuOpen && (
+          <View style={{ backgroundColor: '#334155', borderColor: '#D6B777', borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 6 }}>
+            <AppText style={{ color: '#FFFFFF', fontWeight: '700' }}>Personal Wallet · Current</AppText>
+            <AppText style={{ color: '#CBD5E1', fontSize: 12, marginTop: 4 }}>Additional wallets are not enabled yet.</AppText>
+          </View>
+        )}
+        <AppText style={{ color: '#CBD5E1', fontWeight: '600', fontSize: 13, textAlign: 'center', marginTop: 0, marginBottom: 9 }}>
+          {dateLabel}
+        </AppText>
+      </View>
 
       <TotalCard
         baseCurrency={summary.baseCurrency}
@@ -577,54 +797,32 @@ export default function FinanceHomeScreen() {
       )}
 
       <View style={[styles.actionRow, { marginTop: spacing.lg }]}>
-        <View style={styles.transactionButton}>
-          <AppButton
-            title="Add transaction"
-            accentColor={accent}
-            leftIcon={
-              <Ionicons name="add" size={20} color={colors.onPrimary} />
-            }
-            onPress={() => setAddMenuOpen(true)}
-          />
-        </View>
-
-        <View style={styles.transactionButton}>
-          <AppButton title="Rates" accessibilityLabel="Open exchange rates" variant="outline" accentColor={accent}
-            leftIcon={<Ionicons name="trending-up-outline" size={20} color={accent} />}
-            onPress={() => setRatesOpen(true)} />
-        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Open Finance add"
+          onPress={() => router.push('/finance/add' as Href)}
+          style={[styles.transactionButton, { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: '#D6B777', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }]}>
+          <Ionicons name="add-circle-outline" size={20} color="#1E293B" />
+          <AppText variant="bodyStrong" style={{ color: '#1E293B' }}>Add</AppText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open financial reports"
+          onPress={() => router.push('/finance/reports' as Href)}
+          style={[styles.transactionButton, { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: '#D6B777', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }]}
+        >
+          <Ionicons name="stats-chart-outline" size={20} color="#1E293B" />
+          <AppText variant="bodyStrong" style={{ color: '#1E293B' }}>Reports</AppText>
+        </Pressable>
       </View>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Open financial reports"
-        onPress={() => router.push('/finance/reports' as Href)}
-        style={{
-          marginTop: spacing.md,
-          padding: spacing.md,
-          borderWidth: 1,
-          borderColor: colors.border,
-          backgroundColor: colors.surface,
-          borderRadius: 12,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-          <Ionicons name="bar-chart-outline" size={20} color={accent} />
-          <AppText variant="bodyStrong">Reports</AppText>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-      </Pressable>
-      <TransactionsSection
-        onManage={openLinkedTransaction}
-        amountsVisible={amountsVisible}
-        onEdit={openTransaction}
-        onDelete={confirmDeleteTransaction}
-        onEditTransfer={openTransfer}
-        onDeleteTransfer={confirmDeleteTransfer}
-      />
+      <View style={{ backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1.25, borderColor: '#B68C42', paddingHorizontal: spacing.sm, paddingBottom: spacing.sm, marginTop: spacing.md }}>
+        <TransactionsSection
+          onManage={openLinkedTransaction}
+          amountsVisible={amountsVisible}
+          onEdit={openTransaction}
+          onDelete={confirmDeleteTransaction}
+          onEditTransfer={openTransfer}
+          onDeleteTransfer={confirmDeleteTransfer}
+        />
+      </View>
 
       <AddTransactionModal
         visible={txOpen}
@@ -909,7 +1107,7 @@ export default function FinanceHomeScreen() {
                 background="#78350F"
               />
               <MenuOption
-                icon="document-text-outline"
+                icon="documents-outline"
                 title="Documents"
                 onPress={() => handleAddMenuAction('documents')}
                 accent="#38BDF8"

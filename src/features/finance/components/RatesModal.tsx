@@ -20,7 +20,7 @@ import {
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { parseAmount } from '@/features/finance/utils/money';
 import type { RefreshResult } from '@/services/liveRates';
-import { moduleColors, useTheme } from '@/theme';
+import { useTheme } from '@/theme';
 
 import type {
   MetalKey,
@@ -556,7 +556,7 @@ export function RatesModal({
     paddingHorizontal: spacing.xs,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#C9AE72',
     backgroundColor: colors.surface,
   } as const;
 
@@ -567,8 +567,8 @@ export function RatesModal({
     paddingHorizontal: spacing.xs * 0.8,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.finance.asset.border,
-    backgroundColor: colors.finance.asset.surface,
+    borderColor: '#C9AE72',
+    backgroundColor: colors.surface,
   } as const;
 
   const statusLegend = (
@@ -626,7 +626,7 @@ export function RatesModal({
           }}
         >
           <View style={{ flex: 1 }}>
-            <AppText variant="caption" color="textSecondary">
+            <AppText variant="caption" color="textSecondary" style={{ fontWeight: '700' }}>
               Last Update: {formatLocalDate(lastLiveUpdatedAt)}
             </AppText>
           </View>
@@ -678,7 +678,7 @@ export function RatesModal({
       </View>
 
       <View style={{ gap: spacing.xs, marginTop: -spacing.lg * 0.5 }}>
-        <AppText variant="label" color="textSecondary">
+        <AppText variant="label" color="textSecondary" style={{ fontWeight: '800' }}>
           CURRENCIES — VALUE IN {baseCurrency}
         </AppText>
 
@@ -735,6 +735,7 @@ export function RatesModal({
                     style={{
                       textAlign: 'center',
                       fontSize: 13,
+                      fontWeight: '700',
                       paddingHorizontal: 2,
                       paddingVertical: spacing.xs,
                       ...getInputStatusStyle(status),
@@ -757,7 +758,7 @@ export function RatesModal({
       </View>
 
       <View style={{ gap: spacing.xs }}>
-        <AppText variant="label" color="textSecondary">
+        <AppText variant="label" color="textSecondary" style={{ fontWeight: '800' }}>
           METALS — PRICE PER GRAM IN {baseCurrency}
         </AppText>
 
@@ -794,6 +795,7 @@ export function RatesModal({
               style={{
                 textAlign: 'center',
                 fontSize: 12,
+                fontWeight: '700',
                 paddingVertical: spacing.xs * 0.5,
                 ...getInputStatusStyle(getMetalSource('gold24PerGram')),
               }}
@@ -834,6 +836,7 @@ export function RatesModal({
               style={{
                 textAlign: 'center',
                 fontSize: 12,
+                fontWeight: '700',
                 paddingVertical: spacing.xs * 0.5,
                 ...getInputStatusStyle(getMetalSource('silverPerGram')),
               }}
@@ -845,7 +848,17 @@ export function RatesModal({
 
       </View>
 
-      <AppText variant="caption" color="textSecondary">Gold is 24K. Metal prices retain full source precision; valuation uses that full price. Silver reference purity is unspecified by the source. Prices are per gram in {baseCurrency}.</AppText>
+      <View style={{ gap: 2 }}>
+        <AppText variant="caption" color="textSecondary" style={{ textAlign: 'left', fontSize: 11 }}>
+          Gold is 24K, other gold karats are calculated from 24K price.
+        </AppText>
+        <AppText variant="caption" color="textSecondary" style={{ textAlign: 'left', fontSize: 11 }}>
+          Silver reference purity is unspecified by the source.
+        </AppText>
+        <AppText variant="caption" color="textSecondary" style={{ textAlign: 'left', fontSize: 11 }}>
+          Leave a metal price empty to clear the saved price.
+        </AppText>
+      </View>
       {error ? (
         <AppText variant="caption" color="danger">
           {error}
@@ -855,43 +868,17 @@ export function RatesModal({
       <AppButton
         title="Save rates"
         variant={hasUnsavedChanges ? 'primary' : 'secondary'}
-        accentColor={
-          hasUnsavedChanges ? moduleColors.finance : undefined
-        }
+        accentColor={hasUnsavedChanges ? '#202B3E' : undefined}
         disabled={!hasUnsavedChanges}
         onPress={save}
       />
 
-      <View style={{ gap: spacing.xs }}>
-        <AppText variant="caption" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-          Leave a metal price empty to clear the saved price.
-        </AppText>
-        <AppText variant="caption" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-          Other gold karats are calculated from the 24K price.
-        </AppText>
-        <AppText variant="caption" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-          Local market prices may differ from spot prices.
-        </AppText>
-      </View>
-
       <View style={{ gap: 2 }}>
-        <AppText
-          variant="caption"
-          color="textSecondary"
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.75}
-        >
-          Currency rates by Exchange Rate API (exchangerate-api.com).
+        <AppText variant="caption" color="textSecondary" style={{ textAlign: 'left', fontSize: 11 }}>
+          Currency rates by Exchange Rate API <AppText variant="caption" style={{ color: '#202B3E', fontWeight: '700', fontSize: 11 }}>(exchangerate-api.com)</AppText>
         </AppText>
-        <AppText
-          variant="caption"
-          color="textSecondary"
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.75}
-        >
-          Gold and silver spot prices by gold-api.com.
+        <AppText variant="caption" color="textSecondary" style={{ textAlign: 'left', fontSize: 11 }}>
+          Gold and silver spot prices by <AppText variant="caption" style={{ color: '#202B3E', fontWeight: '700', fontSize: 11 }}>(gold-api.com)</AppText>
         </AppText>
       </View>
     </FormModal>

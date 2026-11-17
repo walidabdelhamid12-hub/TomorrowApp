@@ -48,26 +48,30 @@ export function FormModal({ visible, title, onClose, children }: FormModalProps)
           style={[
             styles.sheet,
             {
-              backgroundColor: colors.surface,
-              borderTopLeftRadius: radius.xl,
-              borderTopRightRadius: radius.xl,
+              backgroundColor: '#F8FAFC',
+              borderTopWidth: 2,
+              borderTopColor: '#D6B777',
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingTop: 12,
+              paddingHorizontal: 12,
             },
           ]}
         >
           <View
             style={[
               styles.header,
-              { padding: spacing.lg, borderBottomColor: colors.border },
+              { padding: spacing.lg, backgroundColor: '#1E293B', borderBottomColor: '#1E293B', borderRadius: 16 },
             ]}
           >
-            <AppText variant="h3">{title}</AppText>
+            <AppText variant="h3" style={{ color: '#FFFFFF' }}>{title}</AppText>
             <Pressable
               onPress={onClose}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Close"
             >
-              <Ionicons name="close" size={24} color={colors.textSecondary} />
+              <Ionicons name="close" size={24} color="#FFFFFF" />
             </Pressable>
           </View>
 
@@ -76,6 +80,7 @@ export function FormModal({ visible, title, onClose, children }: FormModalProps)
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               padding: spacing.lg,
+              paddingHorizontal: 8,
               paddingBottom: insets.bottom + spacing.xxl,
               gap: spacing.lg,
             }}

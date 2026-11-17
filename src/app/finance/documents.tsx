@@ -4,7 +4,8 @@ import * as Sharing from 'expo-sharing';
 import { isSafeVaultRelativePath } from '@/features/documents/vault/vaultPaths';
 import * as Crypto from 'expo-crypto';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createDocumentRepository } from '@/features/documents';
 import type { DocumentCategory, DocumentRecord } from '@/features/documents';
@@ -30,8 +31,9 @@ const categoryOptions: readonly { value: DocumentCategory; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-export default function DocumentsScreen() {
+export default function DocumentsScreen({ onClose }: { onClose?: () => void } = {}) {
   const router = useRouter();
+  const { fromAdd } = useLocalSearchParams<{ fromAdd?: string }>();
   const [records, setRecords] = useState<readonly DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -212,10 +214,12 @@ export default function DocumentsScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to Finance" onPress={() => router.back()}>
-        <Text style={styles.back}>‹ Back to Finance</Text>
-      </Pressable>
-      <Text style={styles.title}>Documents</Text>
+      <View style={styles.modalHeader}>
+        <Text style={styles.modalHeaderTitle}>Documents</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close documents" hitSlop={12} onPress={() => onClose ? onClose() : fromAdd === '1' ? router.navigate('/finance/add') : router.back()}>
+          <Ionicons name="close" size={26} color="#FFFFFF" />
+        </Pressable>
+      </View>
       <Text style={styles.hint}>Saved PDF documents · stored locally on this device</Text>
       <Pressable accessibilityRole="button" accessibilityLabel="Import PDF" disabled={importing || loading || verifyingId !== null || openingId !== null || savingCategory} onPress={importPdf} style={styles.importButton}>
         <Text style={styles.importText}>{importing ? 'Importing…' : '+ Import PDF'}</Text>
@@ -330,20 +334,22 @@ export default function DocumentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingBottom: 48, gap: 16 },
-  back: { color: '#2563EB', fontSize: 16, paddingVertical: 8 },
-  title: { fontSize: 28, fontWeight: '700' },
+  container: { padding: 16, paddingBottom: 48, gap: 14, backgroundColor: '#F8FAFC' },
+  modalHeader: { backgroundColor: '#1E293B', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  modalHeaderTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
+  back: { color: '#D6B777', fontSize: 16, paddingVertical: 8, fontWeight: '700' },
+  title: { fontSize: 24, fontWeight: '700', color: '#1E293B' },
   hint: { fontSize: 14, color: '#64748B' },
   error: { color: '#B91C1C', fontSize: 15 },
   success: { color: '#047857', fontSize: 15 },
-  importButton: { backgroundColor: '#2563EB', padding: 14, borderRadius: 10, alignItems: 'center' },
+  importButton: { backgroundColor: '#1E293B', padding: 14, borderRadius: 12, alignItems: 'center' },
   importText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
-  empty: { padding: 20, borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1', gap: 8 },
-  item: { padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1', gap: 5 },
-  verifyButton: { paddingVertical: 12, marginTop: 6 },
-  detailsPanel: { padding: 12, borderRadius: 8, backgroundColor: '#E2E8F0', gap: 7 },
-  categoryOption: { paddingVertical: 9 },
-  verifyText: { color: '#2563EB', fontSize: 15, fontWeight: '600' },
-  name: { fontSize: 17, fontWeight: '600' },
+  empty: { padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#D6B777', backgroundColor: '#FFFFFF', gap: 8 },
+  item: { padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#D6B777', backgroundColor: '#FFFFFF', gap: 5 },
+  verifyButton: { paddingVertical: 12, paddingHorizontal: 12, marginTop: 6, borderWidth: 1, borderColor: '#D6B777', backgroundColor: '#FFFFFF', borderRadius: 12 },
+  detailsPanel: { padding: 12, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#D6B777', gap: 7 },
+  categoryOption: { paddingVertical: 9, paddingHorizontal: 12, borderWidth: 1, borderColor: '#D6B777', borderRadius: 10, backgroundColor: '#FFFFFF' },
+  verifyText: { color: '#365575', fontSize: 15, fontWeight: '600' },
+  name: { fontSize: 17, fontWeight: '600', color: '#1E293B' },
   detail: { fontSize: 13, color: '#64748B' },
 });

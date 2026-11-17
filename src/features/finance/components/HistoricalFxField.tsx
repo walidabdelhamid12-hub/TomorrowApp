@@ -204,7 +204,7 @@ export function HistoricalFxField({
         <View style={{ flex: 1 }}>
           <AppButton
             title="Get Rate"
-            accentColor={moduleColors.finance}
+            accentColor={'#1E293B'}
             loading={loading}
             disabled={loading}
             onPress={onFetch}
@@ -214,7 +214,7 @@ export function HistoricalFxField({
         <View style={{ flex: 1 }}>
           <AppButton
             title={manualMode ? 'Use API Rate' : 'Enter Manual Rate'}
-            accentColor={moduleColors.finance}
+            accentColor={'#1E293B'}
             disabled={loading}
             onPress={onManualMode}
           />

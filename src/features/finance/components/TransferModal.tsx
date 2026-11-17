@@ -361,12 +361,12 @@ export function TransferModal({
               {
                 value: 'internal',
                 label: 'Internal transfer',
-                color: moduleColors.finance,
+                color: '#1E293B',
               },
               {
                 value: 'credit_card_payment',
                 label: 'Credit card payment',
-                color: colors.income,
+                color: '#1E293B',
               },
             ]}
             value={mode}
@@ -387,7 +387,7 @@ export function TransferModal({
               <AppInput accessibilityLabel="Amount to transfer" accessibilityHint={selectedSource ? 'Amount in ' + selectedSource.currencyCode : 'Choose the source account currency'}
                 value={fromAmount} onChangeText={value => { setFromAmount(value); setError(undefined); }}
                 keyboardType="decimal-pad" placeholder="0" style={styles.input}
-                fieldStyle={[styles.inputField, { borderColor: colors.finance.neutral.border }]} />
+                fieldStyle={[styles.inputField, { borderColor: '#D6B777', backgroundColor: '#FFFFFF' }]} />
               <AppText variant="label" color={colors.finance.neutral.accent}>{selectedSource ? getCurrencyLabel(selectedSource.currencyCode) : '—'}</AppText>
             </View>
             <View style={[styles.field, !stackFields && { flex: 24 }]}>
@@ -396,7 +396,7 @@ export function TransferModal({
                 value={accountsSelected ? exchangeRate : ''} onChangeText={value => { setExchangeRate(value); setError(undefined); }}
                 keyboardType="decimal-pad" editable={accountsSelected && !sameCurrency && mode !== 'credit_card_payment'}
                 placeholder={accountsSelected ? '1' : '—'} style={styles.input}
-                fieldStyle={[styles.inputField, { borderColor: colors.finance.neutral.border }]} />
+                fieldStyle={[styles.inputField, { borderColor: '#D6B777', backgroundColor: '#FFFFFF' }]} />
             </View>
             <View style={[styles.field, !stackFields && { flex: 38 }]}>
               <AppText variant="label" color={colors.finance.neutral.accent} style={[styles.label, !stackFields && styles.rowLabel]}>Amount to receive</AppText>
@@ -433,7 +433,7 @@ export function TransferModal({
                   ? 'Record card payment'
                   : 'Save transfer'
             }
-            accentColor={moduleColors.finance}
+            accentColor={'#1E293B'}
             onPress={submit}
             style={{ marginTop: spacing.xs }}
             disabled={
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
   field: { minWidth: 0, gap: 4 },
   label: { fontWeight: '700', fontSize: 11, lineHeight: 14 },
   rowLabel: { minHeight: 28 },
-  inputField: { minHeight: 48, paddingHorizontal: 6, borderRadius: 10 },
+  inputField: { minHeight: 48, paddingHorizontal: 10, borderRadius: 12 },
   input: { fontSize: 14, paddingVertical: 8, fontVariant: ['tabular-nums'] },
   result: { minHeight: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 8, justifyContent: 'center' },
   resultText: { fontSize: 14, fontVariant: ['tabular-nums'], flexShrink: 1 },
