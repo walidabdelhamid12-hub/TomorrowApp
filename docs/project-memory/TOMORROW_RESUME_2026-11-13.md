@@ -290,3 +290,41 @@ Do not repeat the completed 526-test regression unless code changes require it.
 - Phase 10: voice input pending.
 - Phase 11: backup and synchronization pending.
 - Phase 12: smart recording and financial notifications pending.
+
+---
+
+## 2026-11-19 — Current i18n checkpoint and Phase 9/10 design decisions
+
+### Latest user-confirmed i18n checkpoint (supersedes historical HEAD references above)
+- Working branch: `codex/finance-8-6-expenses-redesign`.
+- User-confirmed commit and successful push: `d047b31` — `checkpoint(i18n): save Arabic English Finance UI progress`.
+- Ten committed files: `src/app/(tabs)/_layout.tsx`, `src/app/_layout.tsx`, `src/app/finance/accounts.tsx`, `src/app/finance/reports.tsx`, `src/app/finance/settings.tsx`, `src/features/finance/components/AccountCard.tsx`, `AccountDetails.tsx`, `AccountsSection.tsx`, `AddAccountModal.tsx`, `src/localization/LanguageProvider.tsx`.
+- TypeScript PASS reported for that checkpoint; Android Accounts/Reports UI review confirmed by user. This does not certify all screens or the full regression suite.
+- Other local changes and backups remain on user's Windows machine and are **not necessarily pushed**. No merge to main.
+- i18n policy: Arabic and English only; English default on first launch; user-selected language persisted; no System Default language choice. Appearance system setting is independent. Translate UI labels but preserve user-entered names, currency codes, financial values and logic; verify Arabic RTL on Android.
+- Next immediate Finance task: finish transactions/transfers localization, then assets/debts/loans/installments, remaining reports and Android RTL tests. Obtain **current local source** before applying patches; do not replay old patches.
+
+### Phase 9 — Smart Documents, PDF, Excel: agreed hybrid evaluation architecture
+- **Offline baseline 1:** Tesseract4Android with fast traineddata for Arabic/English OCR; the existing lab proof of Arabic paragraph extraction does **not** certify table accuracy.
+- **Offline baseline 2:** table/row/cell structure detection, with OpenCV as a **candidate** to test alongside Tesseract; OpenCV itself is not a second text-recognition engine. If insufficient, evaluate a genuinely suitable offline table-specific solution rather than claiming one is already selected.
+- **Native structured extraction:** use PDF text/geometry for text PDFs; read Excel/XLSX cell values, dates and numbers directly, not via OCR except image-based content.
+- **Online candidate:** optional document analysis/recognition service to benchmark and potentially correct low-confidence offline results. Provider **not yet selected**; no production integration approved. Send sensitive documents only with informed user consent.
+- Compare engines against real Arabic/English and mixed RTL tables, dates, currency amounts, Arabic/Western digits, multiple pages and ambiguous rows. Track field-level accuracy, missing/extra rows, speed, offline availability, app size, privacy and cost.
+- Decision gate: remove online service if offline meets acceptance criteria; retain online as optional correction when it adds material value; if offline is insufficient, offer online fallback where consent/connectivity permit. **Do not silently replace conflicting amounts/dates**; show them for review.
+- No automatic Finance posting. `postingAllowed=false`; extracted transactions require explicit human review/confirmation.
+- Prior independent lab: `D:\TomorrowNativePdfLab-v3`; PDF geometry and initial OCR were tested, but Kotlin native build, full Arabic table extraction and production integration were not yet accepted. Continue from existing evidence rather than restarting the OCR selection.
+- Optimize final installed app size; measure native library/model overhead before adopting a second offline engine.
+
+### Phase 10 — Voice input: approved lightweight hybrid plan (design only)
+- Arabic and English speech input, including common Egyptian phrasing.
+- Start with device/platform speech recognition where available; use offline recognition if supported, online recognition otherwise, with clear connectivity/privacy expectations. Do not promise offline support on every Android device.
+- Avoid bundling large speech models initially. Parse recognized text locally into transaction type, amount, currency, account, category and date; present uncertain fields for correction.
+- **No financial mutation or posting from voice alone.** User must review and explicitly confirm the transaction; prevent duplicate submissions.
+- Implementation plan: 10.1 Android speech engine/device test; 10.2 bilingual parsing tests; 10.3 safe UI integration and on-device verification.
+- Voice implementation has **not started**; estimated timelines are provisional and must not be treated as commitments.
+
+### Scope, sequence and documentation discipline
+- Current work focus: finish Finance localization and RTL validation; then resume Phase 9 PDF/Excel evaluation; then Phase 10 voice. Phases 11/12 remain pending.
+- This addendum records **design decisions and historical user-reported checkpoints**, not new TypeScript/Android/OCR test passes.
+- A documentation-only GitHub commit can leave the remote ahead of the user's local checkout. Before future local changes, compare local/remote HEAD and safely synchronize without overwriting local changes or untracked files.
+- No automatic dependency changes, no destructive reset/clean, no merge to main, no Finance posting.
