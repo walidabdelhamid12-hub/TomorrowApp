@@ -76,19 +76,19 @@ beforeEach(() => {
 });
 
 test('View all is accessible while collapsed and exposes all four records', () => {
-  assert.ok(texts().includes('Showing 1 of 4'));
+  assert.ok(texts().includes('Showing 3 of 4'));
   assert.equal(nodes('Card').length, 1);
   press('View all (4)');
   assert.ok(texts().includes('Showing 4 of 4'));
   assert.equal(texts().filter(t => t === 'Long category name for Android font scaling').length, 3);
   assert.ok(texts().includes('Transfer'));
 });
-test('the single toggle expands all records and Show less restores the one-record preview', () => {
+test('the single toggle expands all records and Show less restores the three-record preview', () => {
 
-  assert.ok(texts().includes('Showing 1 of 4'));
-  assert.equal(texts().filter(t => t === 'Long category name for Android font scaling').length, 1);
+  assert.ok(texts().includes('Showing 3 of 4'));
+  assert.equal(texts().filter(t => t === 'Long category name for Android font scaling').length, 3);
   press('View all (4)'); press('Show less');
-  assert.ok(texts().includes('Showing 1 of 4'));
+  assert.ok(texts().includes('Showing 3 of 4'));
 
   assert.equal(nodes('Card').length, 1);
 });
@@ -104,17 +104,17 @@ test('full amount, currency, category, date and account use uncapped scalable te
   }
   const row = nodes('Card')[0].props.children[0];
   assert.equal(styles(row.props.style).height, undefined);
-  assert.equal(styles(row.props.style).minHeight, 60);
-  assert.equal(styles(row.props.style).paddingVertical, 8);
+  assert.equal(styles(row.props.style).minHeight, 52);
+  assert.equal(styles(row.props.style).paddingVertical, 3);
   assert.equal(styles(row.props.style).maxHeight, undefined);
   assert.ok(nodes('View').some(n => styles(n.props.style).flexWrap === 'wrap'), 'Primary content can reflow instead of clipping money');
 });
 test('ordinary transaction and transfer edit/delete handlers remain usable', () => {
   press('View all (4)');
-  press('Edit transaction');
-  press('Delete transaction');
-  press('Edit transfer');
-  press('Delete transfer');
+  press('Transaction details'); press('Edit transaction');
+  press('Transaction details'); press('Delete transaction');
+  press('Transfer details'); press('Edit transfer');
+  press('Transfer details'); press('Delete transfer');
   assert.deepEqual(calls, [['edit', 'first'], ['delete', 'first'], ['editTransfer', 'transfer'], ['deleteTransfer', 'transfer']]);
 });
 test('transfer displays both complete amounts and source/destination account names', () => {
@@ -126,21 +126,20 @@ test('amount visibility hides both ordinary and transfer values', () => {
   press('View all (4)'); render({ amountsVisible: false });
   assert.equal(texts().some(t => t.includes('123,456,789') || t.includes('99,999,999')), false);
 });
-test('the entire protected row is the Manage action, with no separate action strip', () => {
+test('protected row opens read-only details and offers linked-record management only', () => {
   ledger.transactions = [{ ...base('linked', '04'), linkedEntityType: 'loan', linkedEntityId: 'loan' }]; ledger.transfers = [];
-  render(); press('Manage loan');
-  assert.deepEqual(calls, [['manage', 'linked']]);
-  const row = nodes('Card')[0].props.children[0];
-  assert.equal(row.type, 'Pressable');
-  assert.equal(nodes('Pressable', row).length, 1);
-  assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Transaction actions'), false);
+  render(); press('Transaction details');
   assert.equal(nodes('Pressable').some(n => /^(Edit|Delete) transaction$/.test(n.props.accessibilityLabel)), false);
+  press('Open linked record details');
+  assert.deepEqual(calls, [['manage', 'linked']]);
+  assert.equal(nodes('Modal').some(n => n.props.visible), false);
 });
-test('unresolved protected ownership offers explanation action, never generic edits', () => {
+test('unresolved protected ownership cannot expose generic edits or navigate an unrelated record', () => {
   ledger.transactions = [{ ...base('unknown', '04'), purpose: 'loan_payment' }]; ledger.transfers = [];
-  render(); press('Linked record unavailable');
-  assert.deepEqual(calls, [['manage', 'unknown']]);
+  render(); press('Transaction details');
   assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Edit transaction'), false);
+  press('Open linked record details');
+  assert.deepEqual(calls, [['manage', 'unknown']]);
 });
 test('touch targets are at least 48 points without fixed content heights', () => {
   press('View all (4)');
@@ -216,20 +215,20 @@ test('a protected loan payment renders a context label and no generic action con
   const previous = structuredClone({ ledger, finance });
   render();
   assert.ok(texts().includes('Loan payment'));
-  press('Manage loan');
+  press('Transaction details'); press('Open linked record details');
   assert.deepEqual(calls, [['manage', 'linked']]);
   assert.deepEqual({ ledger, finance }, previous);
 });
 
-test('direct action rechecks protection before dispatching a captured ordinary Edit handler', () => {
-  press('View all (4)');
+test('detail Edit rechecks ownership before dispatch, even if the record became protected', () => {
+  press('Transaction details');
   const edit = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Edit transaction');
+  assert.ok(edit);
   ledger.transactions[0] = { ...ledger.transactions[0], purpose: 'loan_payment', linkedEntityType: 'loan', linkedEntityId: 'loan' };
   edit.props.onPress(); render();
   assert.deepEqual(calls, [['manage', 'first']]);
   assert.equal(nodes('Modal').some(n => n.props.visible), false);
 });
-
 test('ordinary and transfer details are read-only and Back never mutates records', () => {
   press('View all (4)'); press('Transaction details');
   assert.ok(texts().includes('Transaction details'));
@@ -279,7 +278,7 @@ test('header has a single-line modest title and exactly one list toggle with acc
   assert.ok(nodes('Icon', controls()[0]).some(n => n.props.name === 'chevron-up'));
   press('Show less');
   assert.equal(controls().length, 1);
-  assert.ok(texts().includes('Showing 1 of 4'));
+  assert.ok(texts().includes('Showing 3 of 4'));
 });
 
 for (const [scheme, palette] of [['light', lightColors], ['dark', darkColors]]) {
@@ -330,7 +329,7 @@ test('one outlined card shares hairline dividers without nested cards or per-row
   rows.forEach((row, index) => {
     const style = styles(typeof row.props.style === 'function' ? row.props.style({ pressed: false }) : row.props.style);
     assert.equal(style.borderTopWidth, index ? 1 : undefined); // mocked hairlineWidth
-    if (index) assert.equal(style.borderTopColor, lightColors.finance.neutral.border);
+    if (index) assert.equal(style.borderTopColor, '#D6B777');
     assert.equal(style.elevation, undefined);
     assert.equal(style.shadowOpacity, undefined);
   });
@@ -348,16 +347,20 @@ for (const count of [0, 1]) {
   });
 }
 
-test('protected rows retain expense semantics and hide money in both text and accessibility when privacy is enabled', () => {
+test('protected rows retain expense semantics and hide money in details and row when privacy is enabled', () => {
   ledger.transactions = [{ ...base('linked', '04'), purpose: 'loan_payment', linkedEntityType: 'loan', linkedEntityId: 'loan' }];
   ledger.transfers = [];
   render({ amountsVisible: false });
   const row = nodes('Card')[0].props.children[0];
-  assert.equal(row.type, 'Pressable');
+  assert.equal(row.type, 'View');
   assert.equal(nodes('Icon', row)[0].props.color, lightColors.finance.expense.accent);
-  assert.ok(!row.props.accessibilityLabel.includes('123,456,789'));
-  assert.ok(row.props.accessibilityLabel.includes('••••••'));
-  assert.equal(nodes('Pressable', row).length, 1);
-  row.props.onPress();
+  assert.ok(texts().includes('••••••'));
+  assert.ok(!texts().some(t => t.includes('123,456,789')));
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Transaction details').props.onPress();
+  render({ amountsVisible: false });
+  assert.ok(!texts().some(t => t.includes('123,456,789')));
+  assert.ok(texts().includes('••••••'));
+  assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Edit transaction'), false);
+  press('Open linked record details');
   assert.deepEqual(calls, [['manage', 'linked']]);
 });
