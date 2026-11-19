@@ -195,11 +195,17 @@ export default function AssetsScreen() {
         Track cash holdings, foreign currencies, gold, and silver, including their recorded movements and converted values.
       </AppText>
 
+      <AppButton
+        title="Add asset"
+        accentColor="#1E293B"
+        leftIcon={<Ionicons name="add" size={20} color={colors.onPrimary} />}
+        onPress={() => openAsset(null)}
+      />
+
       {assets.length === 0 ? (
         <View style={[styles.emptyCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
           <Ionicons name="diamond-outline" size={42} color={colors.textSecondary} />
           <AppText color="textSecondary">No assets added yet.</AppText>
-          <AppButton title="Add your first asset" accentColor={accent} onPress={() => openAsset(null)} />
         </View>
       ) : (
         <View style={styles.list}>
@@ -259,15 +265,6 @@ export default function AssetsScreen() {
             );
           })}
         </View>
-      )}
-
-      {assets.length > 0 && (
-        <AppButton
-          title="Add asset"
-          accentColor={accent}
-          leftIcon={<Ionicons name="add" size={19} color={colors.onPrimary} />}
-          onPress={() => openAsset(null)}
-        />
       )}
 
       <AddAssetModal visible={assetModalOpen} asset={editingAsset} onClose={closeAssetModal} onSave={saveAsset} />

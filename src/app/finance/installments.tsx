@@ -55,11 +55,11 @@ export default function InstallmentsScreen() {
           <AppText variant="caption" style={{ color: '#CBD5E1' }}>Standalone contract schedules</AppText>
         </View>
       </View>
-      <AppButton title="+ New Contract" accentColor="#1E293B"
-        disabled={!ready} onPress={() => router.push({ pathname: '/finance/installment-contract', params: { id: 'new' } })} />
-      <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.sm }}>
+      <AppText variant="caption" color="textSecondary" style={{ marginBottom: spacing.sm }}>
         Schedules only. Payments and balance posting are not available.
       </AppText>
+      <AppButton title="+ New Contract" accentColor="#1E293B"
+        disabled={!ready} onPress={() => router.push({ pathname: '/finance/installment-contract', params: { id: 'new' } })} />
       {message ? <AppText color="textSecondary">{message}</AppText> : null}
       {saved.hydration === 'blocked' ? (
         <Card variant="filled"><AppText color="danger">Saved contracts could not be loaded.</AppText>

@@ -2,6 +2,7 @@ import { financeChrome } from '@/features/finance/components/financeChrome';
 import { FinanceInput as AppInput } from '@/features/finance/components/FinanceInput';
 import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { FinanceChoiceDropdown, FINANCE_CURRENCY_CHOICES } from '@/features/finance/components/FinanceChoiceDropdown';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -218,8 +219,8 @@ export default function InstallmentContractScreen() {
           <Ionicons name="arrow-back" size={20} color="#D6B777" />
         </Pressable>
         <View style={styles.headerText}>
-          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>{isNew ? 'New Contract' : wantsEdit ? 'Edit Contract' : 'Contract Details'}</AppText>
           <AppText variant="caption" style={{ color: '#CBD5E1' }}>{record?.name ?? 'Standalone installments'}</AppText>
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>{isNew ? 'New Contract' : wantsEdit ? 'Edit Contract' : 'Contract Details'}</AppText>
         </View>
       </View>
       <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
@@ -255,7 +256,7 @@ export default function InstallmentContractScreen() {
       {saved.hydration === 'ready' && (isNew || (record && draftOpen)) && (
       <Card variant="outlined" padded={false} style={[styles.contractCard, { borderColor: tone.border, marginTop: spacing.md }]}>
         <View style={styles.contractToggle}>
-          <Ionicons name="document-text-outline" size={20} color={moduleColors.finance} />
+          <Ionicons name="document-text-outline" size={20} color="#1E293B" />
           <AppText variant="bodyStrong" style={styles.flex}>{editing ? 'Edit Contract' : 'New Contract'}</AppText>
         </View>
         {draftOpen && (
@@ -300,31 +301,18 @@ export default function InstallmentContractScreen() {
                   }
                 }} />
             )}
-            <AppText variant="label" color="textSecondary">Currency</AppText>
-            <View style={styles.currencyOptions}>
-              {CURRENCIES.map(item => (
-                <Pressable key={item.code} accessibilityRole="button"
-                  accessibilityState={{ selected: currencyCode === item.code }}
-                  onPress={() => { setCurrencyCode(item.code); setDraftSummary(null); }}
-                  style={[styles.currencyCard, currencyCode === item.code && styles.currencyCardActive]}>
-                  <Text style={styles.currencyFlag}>{item.flag}</Text>
-                  <Text style={[styles.currencyCode, currencyCode === item.code && styles.currencyCodeActive]}>{item.code}</Text>
-                  <Text style={[styles.currencySymbol, currencyCode === item.code && styles.currencySymbolActive]}>
-                    {CURRENCY_SYMBOLS[item.code] ?? item.code}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            <AppText variant="label" color="textSecondary">Type</AppText>
-            <View style={styles.typeOptions}>
-              {(['regular', 'irregular', 'down_payment'] as const).map(kind => (
-                <Pressable key={kind} accessibilityRole="button"
-                  accessibilityState={{ selected: selectedRow.kind === kind }}
-                  onPress={() => changeRow(selectedRow.key, { kind })}
-                  style={[styles.typeOption, { borderColor: selectedRow.kind === kind ? moduleColors.finance : colors.border, backgroundColor: selectedRow.kind === kind ? tone.surface : colors.surface }]}>
-                  <AppText variant="caption" align="center">{kind === 'down_payment' ? 'Down Payment' : kind === 'regular' ? 'Regular' : 'Irregular'}</AppText>
-                </Pressable>
-              ))}
+            <View style={styles.choiceColumns}>
+              <View style={styles.choiceColumn}>
+                <FinanceChoiceDropdown label="Currency" value={currencyCode}
+                  options={FINANCE_CURRENCY_CHOICES}
+                  onChange={value => { setCurrencyCode(value); setDraftSummary(null); }} />
+              </View>
+              <View style={styles.choiceColumn}>
+                <FinanceChoiceDropdown label="Installment Type" value={selectedRow.kind}
+                  options={[{ value: 'regular', label: 'Regular' }, { value: 'irregular', label: 'Irregular' },
+                    { value: 'down_payment', label: 'Down Payment' }]}
+                  onChange={value => changeRow(selectedRow.key, { kind: value as InstallmentScheduleItem['kind'] })} />
+              </View>
             </View>
             <View style={styles.installmentSelector}>
               <AppText variant="bodyStrong">Installment</AppText>
@@ -405,6 +393,8 @@ const styles = StyleSheet.create({
   installmentPicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, flex: 1 },
   installmentNumber: { minWidth: 32, paddingHorizontal: 8, paddingVertical: 7, alignItems: 'center', borderWidth: 1, borderRadius: 8 },
   twoColumns: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' },
+  choiceColumns: { gap: 10, alignItems: 'stretch' },
+  choiceColumn: { width: '100%', minWidth: 0 },
   column: { flexGrow: 1, flexBasis: 160, minWidth: 0 },
   currencyOptions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 7, columnGap: 5 },
   currencyCard: { width: '18.5%', minHeight: 70, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2, paddingVertical: 6, borderRadius: 9, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fafafa', gap: 2 },
