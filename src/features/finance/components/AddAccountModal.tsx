@@ -1,4 +1,6 @@
 import { FormModal } from '@/features/finance/components/FormModal';
+import { useAppLanguage } from '@/localization/LanguageProvider';
+import { FinanceChoiceDropdown, FINANCE_CURRENCY_CHOICES } from './FinanceChoiceDropdown';
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
@@ -127,6 +129,7 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { t } = useAppLanguage();
   const baseCurrency = useCurrencyStore(
     (state) => state.baseCurrency,
   );
@@ -169,117 +172,31 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
     selectedCurrency;
 
   return (
-    <FormModal visible={visible} title={account ? 'Edit account' : 'Add account'} onClose={onClose}>
+    <FormModal visible={visible} title={account ? t('Edit account', 'تعديل الحساب') : t('Add account', 'إضافة حساب')} onClose={onClose}>
       <View>
-            <Text style={styles.label}>Name</Text>
+            <Text style={styles.label}>{t('Name', 'الاسم')}</Text>
 
             <FinanceInput
               fieldStyle={styles.accountNameField}
               style={styles.accountNameText}
-              placeholder="e.g. CIB, CASH, فودافون كاش"
+              placeholder={t('e.g. CIB, CASH, Vodafone Cash', 'مثال: CIB، نقدي، فودافون كاش')}
               value={accountName}
               onChangeText={setAccountName}
             />
 
-            <Text style={styles.label}>ACCOUNT TYPE</Text>
-
-            <View style={styles.typesGrid}>
-              {ACCOUNT_TYPE_OPTIONS.map((type) => {
-                const active = selectedType === type.label;
-
-                return (
-                  <TouchableOpacity
-                    key={type.value}
-                    style={[
-                      styles.typeCard,
-                      active && {
-                        borderColor: type.color,
-                        backgroundColor: type.background,
-                      },
-                    ]}
-                    onPress={() => setSelectedType(type.label)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <View
-                      style={[
-                        styles.typeIconCircle,
-                        { backgroundColor: type.background },
-                      ]}
-                    >
-                      <Ionicons
-                        name={type.icon}
-                        size={21}
-                        color={type.color}
-                      />
-                    </View>
-
-                    <Text
-                      style={[
-                        styles.typeText,
-                        active && { color: type.color },
-                      ]}
-                    >
-                      {type.label}
-                    </Text>
-
-                    {active && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={15}
-                        color={type.color}
-                        style={styles.selectedCheck}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+            <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+              <View style={{ flex: 1, minWidth: 135 }}>
+                <FinanceChoiceDropdown label={t('Account Type', 'نوع الحساب')} value={selectedType}
+                  options={ACCOUNT_TYPE_OPTIONS.map(type => ({ value: type.label, label: t(type.label, ({ Cash: 'نقدي', Bank: 'بنك', Wallet: 'محفظة', Savings: 'ادخار', 'Credit card': 'بطاقة ائتمان' } as Record<AccountTypeLabel, string>)[type.label]) }))}
+                  onChange={value => setSelectedType(value as AccountTypeLabel)} />
+              </View>
+              <View style={{ flex: 1, minWidth: 135 }}>
+                <FinanceChoiceDropdown label={t('Currency', 'العملة')} value={selectedCurrency}
+                  options={FINANCE_CURRENCY_CHOICES} onChange={setSelectedCurrency} />
+              </View>
             </View>
 
-            <Text style={styles.label}>CURRENCY</Text>
-
-            <View style={styles.currenciesGrid}>
-              {CURRENCY_OPTIONS.map((currency) => {
-                const active = selectedCurrency === currency.code;
-
-                return (
-                  <TouchableOpacity
-                    key={currency.code}
-                    style={[
-                      styles.currencyCard,
-                      active && styles.currencyCardActive,
-                    ]}
-                    onPress={() => setSelectedCurrency(currency.code)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text style={styles.currencyFlag}>
-                      {currency.flag}
-                    </Text>
-
-                    <Text
-                      style={[
-                        styles.currencyCode,
-                        active && styles.currencyCodeActive,
-                      ]}
-                    >
-                      {currency.code}
-                    </Text>
-
-                    <Text
-                      style={[
-                        styles.currencySymbol,
-                        active && styles.currencySymbolActive,
-                      ]}
-                    >
-                      {currency.symbol}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Text style={styles.label}>Starting balance</Text>
+            <Text style={styles.label}>{t('Starting balance', 'الرصيد الافتتاحي')}</Text>
 
             <View style={styles.balanceContainer}>
               <View style={styles.balanceInputRow}>
@@ -303,7 +220,7 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
             </Text>
 
             {!account && <View style={{ marginTop: 12, gap: 8 }}>
-              <Text style={styles.label}>VERIFIED OPENING DATE (OPTIONAL)</Text>
+              <Text style={styles.label}>{t('VERIFIED OPENING DATE (OPTIONAL)', 'تاريخ الرصيد الافتتاحي المؤكد (اختياري)')}</Text>
               <TextInput accessibilityLabel="New account opening date (YYYY-MM-DD)"
                 style={styles.input} value={openingDate} onChangeText={value => {
                   setOpeningDate(value); setOpeningDateConfirmed(false);
@@ -314,31 +231,31 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
                 onPress={() => setOpeningDateConfirmed(value => !value)}
                 style={{ minHeight: 44, justifyContent: 'center' }}>
                 <Text style={styles.helperText}>
-                  {openingDateConfirmed ? '☑' : '☐'} This starting balance applies before transactions on this date.
+                  {openingDateConfirmed ? '☑' : '☐'} {t('This starting balance applies before transactions on this date.', 'يسري هذا الرصيد قبل معاملات التاريخ المحدد.')}
                 </Text>
               </TouchableOpacity>
             </View>}
 
             <FinanceButton
-              title={account ? 'Save changes' : 'Add account'}
+              title={account ? t('Save changes', 'حفظ التعديلات') : t('Add account', 'إضافة حساب')}
               style={styles.saveButton}
               onPress={() => {
                 const parsed = parseAmount(amount);
                 if (!hasValidCurrencyPrecision(amount, selectedCurrency)) {
-                  Alert.alert('Invalid amount precision', `${selectedCurrency} allows up to ${getCurrencyDecimals(selectedCurrency)} decimal places. Please correct the amount before saving.`);
+                  Alert.alert(t('Invalid amount precision', 'دقة المبلغ غير صحيحة'), t(`${selectedCurrency} allows up to ${getCurrencyDecimals(selectedCurrency)} decimal places. Please correct the amount before saving.`, `العملة ${selectedCurrency} تسمح بحد أقصى ${getCurrencyDecimals(selectedCurrency)} منازل عشرية. صحّح المبلغ قبل الحفظ.`));
                   return;
                 }
                 if (parsed === null || parsed < 0 || !Number.isSafeInteger(Math.round(parsed * 1000))
                   || Math.abs(parsed * 1000 - Math.round(parsed * 1000)) > 1e-6) {
-                  Alert.alert('Invalid starting balance', 'Enter a valid non-negative amount.');
+                  Alert.alert(t('Invalid starting balance', 'الرصيد الافتتاحي غير صحيح'), t('Enter a valid non-negative amount.', 'أدخل مبلغًا صحيحًا لا يقل عن صفر.'));
                   return;
                 }
                 if (!accountName.trim()) {
-                  Alert.alert('Account name required', 'Enter a name for this account.');
+                  Alert.alert(t('Account name required', 'اسم الحساب مطلوب'), t('Enter a name for this account.', 'أدخل اسمًا للحساب.'));
                   return;
                 }
                 if (!account && openingDate.trim() && !openingDateConfirmed) {
-                  Alert.alert('Confirmation required', 'Confirm the opening balance date before saving.');
+                  Alert.alert(t('Confirmation required', 'التأكيد مطلوب'), t('Confirm the opening balance date before saving.', 'أكد تاريخ الرصيد الافتتاحي قبل الحفظ.'));
                   return;
                 }
                 onSave({

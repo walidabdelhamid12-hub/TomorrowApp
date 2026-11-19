@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 
 import { moduleColors, useTheme } from '@/theme';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -21,6 +22,7 @@ const TABS: {
 
 export default function TabLayout() {
   const { colors } = useTheme();
+  const { language } = useAppLanguage();
 
   return (
     <Tabs
@@ -38,7 +40,7 @@ export default function TabLayout() {
           key={tab.name}
           name={tab.name}
           options={{
-            title: tab.title,
+            title: language === 'ar' ? ({ Finance: 'المالية', Spiritual: 'الحياة الروحية', Health: 'الصحة', English: 'الإنجليزية' } as Record<string, string>)[tab.title] ?? tab.title : tab.title,
             tabBarActiveTintColor: tab.accent,
             tabBarIcon: ({ focused, color, size }) => (
               <Ionicons

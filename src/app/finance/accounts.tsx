@@ -28,9 +28,11 @@ import type { Account, AccountType } from '@/features/finance/types/ledger';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
 import { isValidISODate } from '@/features/finance/utils/input';
 import { moduleColors, useTheme } from '@/theme';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 
 export default function AccountsScreen() {
   const router = useRouter();
+  const { t, isRTL } = useAppLanguage();
   const { colors } = useTheme();
   const { confirm, confirmation } = useFinanceConfirmation();
   const [detailAccountId, setDetailAccountId] = useState<string | null>(null);
@@ -72,8 +74,8 @@ export default function AccountsScreen() {
       !Number.isFinite(amount)
     ) {
       Alert.alert(
-        'Invalid account',
-        'Enter an account name and a valid starting balance.',
+        t('Invalid account', 'حساب غير صالح'),
+        t('Enter an account name and a valid starting balance.', 'أدخل اسم الحساب ورصيدًا افتتاحيًا صالحًا.'),
       );
       return;
     }
@@ -104,11 +106,11 @@ export default function AccountsScreen() {
         || (!hasHistory && accountInput.currencyCode !== editingAccount.currencyCode);
       if (basisChanged && editingAccount.openingBalanceDate) {
         Alert.alert(
-          'Opening date verification will be cleared',
-          'Changing the starting balance or currency invalidates the verified opening date. The account history and existing movements will not be changed.',
+          t('Opening date verification will be cleared', 'سيتم إلغاء التحقق من تاريخ الرصيد الافتتاحي'),
+          t('Changing the starting balance or currency invalidates the verified opening date. The account history and existing movements will not be changed.', 'تغيير الرصيد الافتتاحي أو العملة يلغي التحقق من التاريخ الافتتاحي. لن تتغير الحركات والسجلات السابقة.'),
           [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Continue', onPress: () => {
+            { text: t('Cancel', 'إلغاء'), style: 'cancel' },
+            { text: t('Continue', 'متابعة'), onPress: () => {
               updateAccount(editingAccount.id, accountInput);
               closeModal();
             } },
@@ -119,17 +121,17 @@ export default function AccountsScreen() {
       updateAccount(editingAccount.id, accountInput);
     } else {
       if (data.openingBalanceDate && !isValidISODate(data.openingBalanceDate)) {
-        Alert.alert('Invalid opening date', 'Enter a real calendar date in YYYY-MM-DD format.');
+        Alert.alert(t('Invalid opening date', 'تاريخ افتتاح غير صالح'), t('Enter a real calendar date in YYYY-MM-DD format.', 'أدخل تاريخًا صحيحًا بصيغة YYYY-MM-DD.'));
         return;
       }
       const newAccountId = addAccount(accountInput);
       if (!newAccountId) {
-        Alert.alert('Account not saved', 'Check the starting balance and currency.');
+        Alert.alert(t('Account not saved', 'لم يتم حفظ الحساب'), t('Check the starting balance and currency.', 'راجع الرصيد الافتتاحي والعملة.'));
         return;
       }
       if (data.openingBalanceDate && !verifyOpeningDate(newAccountId, data.openingBalanceDate)) {
-        Alert.alert('Opening date not verified',
-          'The account was created, but its opening date could not be verified. Open account details to review and verify it.');
+        Alert.alert(t('Opening date not verified', 'لم يتم التحقق من تاريخ الافتتاح'),
+          t('The account was created, but its opening date could not be verified. Open account details to review and verify it.', 'تم إنشاء الحساب، لكن تعذر التحقق من تاريخ افتتاحه. افتح تفاصيل الحساب لمراجعته والتحقق منه.'));
       }
     }
 
@@ -138,12 +140,12 @@ export default function AccountsScreen() {
 
   const confirmDelete = (account: Account) => {
     const message =
-      'Ordinary transactions will be deleted. Accounts with transfers or loan/debt history cannot be deleted.';
+      t('Ordinary transactions will be deleted. Accounts with transfers or loan/debt history cannot be deleted.', 'سيتم حذف المعاملات العادية. لا يمكن حذف حساب مرتبط بتحويلات أو بسجل قروض أو ديون.');
     const performDelete = () => {
-      if (!deleteAccount(account.id)) Alert.alert('Cannot delete account', 'This account has transfers or loan/debt dependencies. Keep it to preserve its accounting history.');
+      if (!deleteAccount(account.id)) Alert.alert(t('Cannot delete account', 'لا يمكن حذف الحساب'), t('This account has transfers or loan/debt dependencies. Keep it to preserve its accounting history.', 'هذا الحساب مرتبط بتحويلات أو قروض أو ديون. احتفظ به للحفاظ على سجله المحاسبي.'));
     };
 
-    confirm(`Delete "${account.name}"?`, message, performDelete, 'Delete');
+    confirm(t(`Delete "${account.name}"?`, `حذف "${account.name}"؟`), message, performDelete, t('Delete', 'حذف'));
   };
 
   if (!ready) {
@@ -163,26 +165,26 @@ export default function AccountsScreen() {
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('Go back', 'رجوع')}
           style={financeChrome.back}
         >
           <Ionicons name="arrow-back" size={23} color="#D6B777" />
         </Pressable>
 
-        <View style={styles.headerText}>
-          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>Accounts</AppText>
-          <AppText variant="caption" style={{ color: '#CBD5E1' }}>
-            {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
+        <View style={[styles.headerText, isRTL && { alignItems: 'flex-end' }]}>
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20, textAlign: isRTL ? 'right' : 'left' }}>{t('Accounts', 'الحسابات')}</AppText>
+          <AppText variant="caption" style={{ color: '#CBD5E1', textAlign: isRTL ? 'right' : 'left' }}>
+            {accounts.length} {t(accounts.length === 1 ? 'account' : 'accounts', accounts.length === 1 ? 'حساب' : 'حسابات')}
           </AppText>
         </View>
       </View>
 
       <AppText color="textSecondary" style={{ marginBottom: 16 }}>
-        Manage your cash, bank, wallet, savings, and credit card balances.
+        {t('Manage your cash, bank, wallet, savings, and credit card balances.', 'إدارة أرصدة الحسابات النقدية والبنكية والمحافظ والادخار والبطاقات الائتمانية.')}
       </AppText>
 
       <AppButton
-        title="Add account"
+        title={t('Add account', 'إضافة حساب')}
         accentColor="#1E293B"
         leftIcon={<Ionicons name="add" size={20} color={colors.onPrimary} />}
         onPress={openAdd}
@@ -191,7 +193,7 @@ export default function AccountsScreen() {
       {accounts.length === 0 ? (
         <Card variant="filled">
           <AppText color="textSecondary" align="center">
-            No accounts yet. Add your first account.
+            {t('No accounts yet. Add your first account.', 'لا توجد حسابات بعد. أضف حسابك الأول.')}
           </AppText>
         </Card>
       ) : (

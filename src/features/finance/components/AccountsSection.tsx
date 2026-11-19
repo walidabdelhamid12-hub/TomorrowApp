@@ -10,6 +10,7 @@ import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import type { Account } from '@/features/finance/types/ledger';
 import { getAccountBalance } from '@/features/finance/utils/ledger';
 import { useTheme } from '@/theme';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 
 const PREVIEW_COUNT = 1;
 
@@ -29,6 +30,7 @@ export function AccountsSection({
   amountsVisible,
 }: AccountsSectionProps) {
   const { colors, spacing } = useTheme();
+  const { t } = useAppLanguage();
   const [detailAccountId, setDetailAccountId] = useState<string | null>(null);
 
   const [expanded, setExpanded] = useState(false);
@@ -60,7 +62,7 @@ export function AccountsSection({
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
-        accessibilityLabel="Toggle accounts section"
+        accessibilityLabel={t("Toggle accounts section", "إظهار أو إخفاء الحسابات")}
         onPress={() => {
           setExpanded((value) => !value);
           setShowAll(false);
@@ -76,10 +78,10 @@ export function AccountsSection({
             />
           </View>
 
-          <AppText variant="h3">Accounts</AppText>
+          <AppText variant="h3">{t("Accounts", "الحسابات")}</AppText>
 
           <AppText variant="caption" color="textSecondary">
-            {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
+            {accounts.length} {t(accounts.length === 1 ? 'account' : 'accounts', 'حساب')}
           </AppText>
         </View>
 
@@ -94,7 +96,7 @@ export function AccountsSection({
         accounts.length === 0 ? (
           <Card variant="filled">
             <AppText color="textSecondary" align="center">
-              No accounts yet. Tap "Account" to add one.
+              {t('No accounts yet. Tap "Account" to add one.', 'لا توجد حسابات بعد. اضغط «حساب» لإضافة حساب.')}
             </AppText>
           </Card>
         ) : (
@@ -113,8 +115,8 @@ export function AccountsSection({
               <AppButton
                 title={
                   showAll
-                    ? 'Show less'
-                    : `View all (${accounts.length})`
+                    ? t('Show less', 'عرض أقل')
+                    : t(`View all (${accounts.length})`, `عرض الكل (${accounts.length})`)
                 }
                 variant="ghost"
                 onPress={() => setShowAll((value) => !value)}

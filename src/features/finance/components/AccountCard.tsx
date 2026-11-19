@@ -5,6 +5,7 @@ import { FinanceActionButtons } from './FinanceActionButtons';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { useTheme } from '@/theme';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   cash: 'Cash', bank: 'Bank', wallet: 'Wallet', savings: 'Savings', credit_card: 'Credit card',
@@ -13,16 +14,17 @@ export function AccountCard({ account, balance, amountsVisible = true, onPress, 
   account: Account; balance: number; amountsVisible?: boolean; onPress: () => void; onEdit: () => void; onDelete: () => void;
 }) {
   const { colors } = useTheme();
+  const { t } = useAppLanguage();
   const tone = colors.finance.account;
   return <Card variant="outlined" padded={false} style={{ padding: 8, borderRadius: 14, backgroundColor: tone.surface, borderColor: tone.border }}>
-    <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + account.name} onPress={onPress}
+    <Pressable accessibilityRole="button" accessibilityLabel={t('Details for ', 'تفاصيل حساب ') + account.name} onPress={onPress}
       style={({ pressed }) => [styles.content, { opacity: pressed ? 0.7 : 1 }]}>
       <View style={[styles.icon, { backgroundColor: colors.surface }]}>
         <Ionicons name={account.type === 'bank' ? 'business-outline' : account.type === 'credit_card' ? 'card-outline' : 'wallet-outline'} size={20} color={tone.accent} />
       </View>
       <View style={styles.name}>
         <AppText variant="bodyStrong">{account.name}</AppText>
-        <AppText variant="caption" color={colors.finance.neutral.accent}>{ACCOUNT_TYPE_LABELS[account.type] + ' · ' + account.currencyCode}</AppText>
+        <AppText variant="caption" color={colors.finance.neutral.accent}>{t(ACCOUNT_TYPE_LABELS[account.type], ({ cash: 'نقدي', bank: 'بنك', wallet: 'محفظة', savings: 'ادخار', credit_card: 'بطاقة ائتمان' } as Record<AccountType, string>)[account.type]) + ' · ' + account.currencyCode}</AppText>
       </View>
       <AppText variant="bodyStrong" color={balance < 0 ? 'danger' : tone.accent} style={styles.balance}>
         {amountsVisible ? formatAmount(balance, account.currencyCode) + ' ' + account.currencyCode : '••••••'}
