@@ -1,18 +1,18 @@
-# TomorrowApp — TOMORROW RESUME — 2026-11-13
+# TomorrowApp ΓÇö TOMORROW RESUME ΓÇö 2026-11-13
 
 ## Resume instruction
-When user says **"Tomorrow Resume"** or **"افتح Tomorrow Resume"**, start here, then reconcile with actual current branch, git status, and latest commits. This is a handover snapshot, not proof of later work. Read docs/project-memory/MASTER_ROADMAP.md, CURRENT_STATE.md, DAILY_HANDOVER.md, ACCOUNTING_DECISIONS.md, WORK_RULES.md, FUTURE_MODULES_AND_ZAKAT.md. Some older files contain superseded status; prefer the verified 2026-11-13 checkpoint below.
+When user says **"Tomorrow Resume"** or **"╪º┘ü╪¬╪¡ Tomorrow Resume"**, start here, then reconcile with actual current branch, git status, and latest commits. This is a handover snapshot, not proof of later work. Read docs/project-memory/MASTER_ROADMAP.md, CURRENT_STATE.md, DAILY_HANDOVER.md, ACCOUNTING_DECISIONS.md, WORK_RULES.md, FUTURE_MODULES_AND_ZAKAT.md. Some older files contain superseded status; prefer the verified 2026-11-13 checkpoint below.
 
 ## Project and last verified checkpoint
 - Repository: `walidabdelhamid12-hub/TomorrowApp`
 - Local Windows project: `D:\Mobile Apps\TomorrowApp`
 - Working branch: `codex/finance-8-6-expenses-redesign` (never merge to main without approval).
-- Last **user-confirmed local code checkpoint and push**: `bcc6b72` — `feat(documents): add isolated local file vault foundation`.
+- Last **user-confirmed local code checkpoint and push**: `bcc6b72` ΓÇö `feat(documents): add isolated local file vault foundation`.
 - User's output showed `COMMIT EXIT: 0`, `PUSH EXIT: 0`, branch updated `d47157c..bcc6b72`, and no tracked changes afterward.
 - Many unrelated untracked backup, script, report and Documents files remain on local disk; DO NOT delete, reset, clean, stage or assume these are pushed. Git's tracked working tree was clean.
 - If this handover is committed separately on GitHub, the remote branch may be **ahead of local bcc6b72**. Verify and safely fast-forward before the next code task; preserve untracked files. Do not assume local/remote parity.
 
-## Phase 9: Documents and smart receipts — progress
+## Phase 9: Documents and smart receipts ΓÇö progress
 - 9.2B-1F: module-scoped Documents mutation queue serializes create(), createIfHashAbsent(), update(), recoverUnindexed() across wrappers sharing one loaded JS module in one runtime. Does NOT guarantee cross-runtime/process/module safety. Checkpoint `d47157c`.
 - **9.2C-1B-1 DONE, COMMITTED, PUSHED**: five new files only:
   1. `src/features/documents/vault/vaultTypes.ts`
@@ -23,10 +23,10 @@ When user says **"Tomorrow Resume"** or **"افتح Tomorrow Resume"**, start he
 - Foundation is isolated, uses fake filesystem port, staged file promotion and final SHA-256/size verification, no overwrite, failure-safe behavior and same-runtime serialization. **Not yet an Expo adapter or Android-tested native file vault; no repository integration, Finance posting, OCR or UI**.
 - Verification on user's project: new Vault tests **13/13 PASS**, full Documents tests **72/72 PASS** (8 test files), TypeScript `npx tsc --noEmit` EXIT 0, scoped ESLint EXIT 0, staged diff check EXIT 0; five files / 284 inserted lines.
 - PowerShell LF/CRLF warning during git add was benign; staging recovered and push succeeded.
-- **NEXT TASK: 9.2C-1B-2 — Expo FileSystem adapter**, one narrowly scoped task, review real SDK 58 types and runtime assumptions, adapter + injected fake tests, then Android native verification before claiming persistent file storage. No automatic deletion of orphan/staging files; no file+metadata atomicity claim. Define approved file scope and test plan before implementation.
+- **NEXT TASK: 9.2C-1B-2 ΓÇö Expo FileSystem adapter**, one narrowly scoped task, review real SDK 58 types and runtime assumptions, adapter + injected fake tests, then Android native verification before claiming persistent file storage. No automatic deletion of orphan/staging files; no file+metadata atomicity claim. Define approved file scope and test plan before implementation.
 - Phase 9 remains in progress; capture/import integration, repository linking, OCR and other smart receipts capabilities are not finished.
 
-## Approved Finance home design — 2026-11-13
+## Approved Finance home design ΓÇö 2026-11-13
 - User provided a portrait TomorrowApp Finance dashboard mockup and approved its revised layout.
 - **Remove standalone Documents action button**. Row below eight tiles has exactly **two wide buttons: green "+ Add" and blue "Reports"**.
 - **Documents becomes an option INSIDE the + Add menu**, alongside relevant creation actions (transactions, transfers, accounts, assets, debts, loans, installments). Final menu grouping and actual routing will be designed/implemented later.
@@ -39,7 +39,7 @@ When user says **"Tomorrow Resume"** or **"افتح Tomorrow Resume"**, start he
 2. Return to **Phase 8** to reconcile and finish eight Finance Reports/Statements, PDF and Excel export, UI/device acceptance and remaining fixes. Do not assume Phase 8 is fully accepted.
 3. Implement the approved Finance dashboard visual and + Add menu (including Documents), preserving Reports as separate button.
 4. Then proceed to Phase 10 voice, Phase 11 backup/sync, Phase 12 smart reminders, subject to separate approval.
-- Do not renumber or discard the canonical Finance 12-phase roadmap. Earlier phases 1–7 are substantially implemented but not blanket-finalized.
+- Do not renumber or discard the canonical Finance 12-phase roadmap. Earlier phases 1ΓÇô7 are substantially implemented but not blanket-finalized.
 - Keep `postingAllowed=false`; dormant V3 journal; no live posting/replay/repair/adoption or unintended Finance mutation. No merge to main.
 
 ## Workflow
@@ -49,17 +49,17 @@ When user says **"Tomorrow Resume"** or **"افتح Tomorrow Resume"**, start he
 - User requested that today's decisions and resume context be saved; don't claim local files or image were updated without actual evidence.
 - On return, first verify branch/HEAD and GitHub/local synchronization (especially if this handover created a new GitHub commit), then plan 9.2C-1B-2. No further implementation was authorized by this handover alone.
 
-## 2026-11-13 — Latest checkpoint and approved design addendum (supersedes older status above)
+## 2026-11-13 ΓÇö Latest checkpoint and approved design addendum (supersedes older status above)
 - **Verified GitHub branch HEAD:** `76e249cee96ede3175e1bb6cc37ecda328ce0b41` (`76e249c`), message: `test(documents): checkpoint Android import integration pending device verification`. Earlier `bcc6b72` status is historical, NOT the current remote HEAD.
 - The Android import integration test harness is committed at `src/app/vault-test.tsx`. Commit inspection confirms a dedicated test AsyncStorage namespace (`tomorrow:vault-test:v1:`), real importer and local vault wiring, write-once evidence, production Documents namespace read-only comparisons, and a separate read-only persistence check after restart. **Committed test code is not evidence of Android execution.**
 - **Android Import: PENDING on-device execution and evidence review. Android Persistence: PENDING restart/reopen and read-only verification.** No device PASS is claimed. Prior unit/TypeScript results from older checkpoints must not be presented as fresh results for `76e249c` without rerunning.
 - Next work sequence: run Android Import on the actual Android device; preserve its run ID and PASS/FAIL evidence; fully close/reopen the app; run read-only Verify Persistence; record both outcomes separately. Do not erase test evidence or backups.
 
-## Finance visual reference — latest user-selected image
+## Finance visual reference ΓÇö latest user-selected image
 - **Canonical current design reference:** `TomorrowApp_Finance_Design(8).png` (user-supplied image, 2026-11-13). The image is currently in the conversation/library; **its presence inside this Git repository has NOT been verified**. Do not silently substitute `TomorrowApp Finance Dashboard(4).png` or the older `docs/project-memory/assets/TomorrowApp_Final_Dashboard.png`. Keep old assets for history; do not delete backups.
 - Reference shows dark navy TomorrowApp header, notifications/settings, financial profile selector, full date row with **blue circular Rates refresh arrows and green check status**, Total Balance with visibility eye/currency, Net Worth, two-column tiles (Expenses | Income; Accounts | Assets; Installments | Loans; Debts | Transfers), green Add and blue Reports buttons, Financial Planning (Trips, Events, Budget), and four bottom navigation items.
 - Image values, labels and dates are mockup examples, not live balances, test outcomes, or requirements to hardcode.
-- **Approved follow-up not yet drawn in the reference image:** add a centered **teal circular balance-scale ⚖️ control between Expenses (left) and Income (right)** without losing access to either tile. Tapping the scale opens an Income-vs-Expenses comparison report.
+- **Approved follow-up not yet drawn in the reference image:** add a centered **teal circular balance-scale ΓÜû∩╕Å control between Expenses (left) and Income (right)** without losing access to either tile. Tapping the scale opens an Income-vs-Expenses comparison report.
 - **Comparison report reference requirements:** Total Income, Total Expenses, Net Difference, Spending Ratio; clear visual comparison and filters for period and account. Detailed layout and calculations must be checked against Phase 8 Reports/Statements design before implementation. No claim that this report or scale is already implemented.
 - Rates icon/refresh behavior and its exact placement must be reconciled with the latest image before coding; a static mockup does not prove animation or rate-refresh behavior.
 - Keep Documents inside the + Add menu (not a third standalone bottom button), Reports as a separate button, and the eight-tile layout described above.
@@ -70,7 +70,7 @@ When user says **"Tomorrow Resume"** or **"افتح Tomorrow Resume"**, start he
 - Preserve unrelated files, backups, existing evidence and untracked files. Do not run destructive cleanup, change Finance posting, or merge to `main` without explicit user approval. Keep `postingAllowed=false`.
 - Claude may handle scoped implementation, Codex is reserved for final/complex review, and ChatGPT Work is optional only when needed. Follow one-task-at-a-time workflow and use clipboard-ending PowerShell helpers.
 
-## 2026-11-13 — Android on-device verification results (latest)
+## 2026-11-13 ΓÇö Android on-device verification results (latest)
 - **Android Import Integration: PASS**, confirmed by user-provided Expo Go Android screenshots. Run ID: `41c22797-bc00-421a-a9d5-37125ff5e1e0`. Test document ID: `vt-41c22797-bc00-421a-a9d5-37125ff5e1e0`. Expected file length **80 bytes**. Reported checks PASS: test/production namespace separation, no unfinished import, source creation and size, write-once start evidence, importer created record, vault stored object, SHA-256 and byte size/path matches, repository readback/listing, production Documents state unchanged, write-once result evidence. Terminal line: `RESULT: PASS (device run complete; persistence NOT yet verified across restart)` (true at time of initial import).
 - **Android Persistence (read-only): PASS after full Expo Go close and reopen** on the same device, as confirmed by subsequent user screenshot. Output: `PASS: No pending-import state in test namespace`; `PASS: Repository lists 1 test document(s)`; `Runs found: 1`; `PASS: run 41c22797: file 80 bytes, SHA-256 f746ea719eb7..., readback, listing, isolation`; `RESULT: PASS - 1 run(s) verified after restart (0 warning(s))`; `Read-only: nothing was written or deleted.`
 - These are **actual Android Expo Go device test results**, not merely committed test harnesses. Scope is isolated test importer/vault and persistence for one run; it is **not** proof of all production Documents flows, OCR, user-facing document picker, or cross-process guarantees.
@@ -78,7 +78,7 @@ When user says **"Tomorrow Resume"** or **"افتح Tomorrow Resume"**, start he
 - Next: assess remaining Phase 9 tasks and separately approve a narrow implementation/test scope. Preserve evidence, local modifications and backup files. No Finance posting changes, no merge to `main`.
 
 
-## 2026-11-13 — Native Android PDF picker acceptance (later checkpoint)
+## 2026-11-13 ΓÇö Native Android PDF picker acceptance (later checkpoint)
 - User-confirmed on-device Expo Go Android **Native File Picker read-only probe: PASS**; this uses `File.pickFileAsync` instead of the older `expo-document-picker` cache URI path that failed with Android unreadable-file errors.
 - User-confirmed on-device **Native PDF Picker (Import Test): PASS**. This imports a non-sensitive PDF into the existing local vault and isolated test repository; not the production Documents UI.
 - User-provided Android screenshot after closing/reopening Expo Go shows **Verify Native PDF Persistence (read-only): PASS** for document ID `vt-native-df498044-d47e-4e65-ab3c-90acb8449489`, **221199 bytes**, SHA-256 verified, **1 native picker import**. The verifier checked file presence, size, digest, repository readback/listing and absence of a production record-key collision. It performed no writes or deletions.
@@ -86,7 +86,7 @@ When user says **"Tomorrow Resume"** or **"افتح Tomorrow Resume"**, start he
 - Acceptance scope: **Android native PDF test import and post-restart persistence only**. Do not claim production Documents UI, camera/gallery, image import, OCR, transaction posting, broader file types, iOS, backup/restore or Phase 9 complete.
 - Next proposed scoped work: review and design Documents V1 production-facing entry/list/import/view flow; preserve user-approved Documents entry inside Finance **+ Add**, not as a third bottom button. Define UX and files before implementation. Continue with explicit user confirmation for consequential scope.
 
-## 2026-11-14 — Native PDF Geometry Lab checkpoint
+## 2026-11-14 ΓÇö Native PDF Geometry Lab checkpoint
 
 ### Scope and isolation
 - Separate Android lab: `D:\TomorrowNativePdfLab-v3`.
@@ -293,18 +293,18 @@ Do not repeat the completed 526-test regression unless code changes require it.
 
 ---
 
-## 2026-11-19 — Current i18n checkpoint and Phase 9/10 design decisions
+## 2026-11-19 ΓÇö Current i18n checkpoint and Phase 9/10 design decisions
 
 ### Latest user-confirmed i18n checkpoint (supersedes historical HEAD references above)
 - Working branch: `codex/finance-8-6-expenses-redesign`.
-- User-confirmed commit and successful push: `d047b31` — `checkpoint(i18n): save Arabic English Finance UI progress`.
+- User-confirmed commit and successful push: `d047b31` ΓÇö `checkpoint(i18n): save Arabic English Finance UI progress`.
 - Ten committed files: `src/app/(tabs)/_layout.tsx`, `src/app/_layout.tsx`, `src/app/finance/accounts.tsx`, `src/app/finance/reports.tsx`, `src/app/finance/settings.tsx`, `src/features/finance/components/AccountCard.tsx`, `AccountDetails.tsx`, `AccountsSection.tsx`, `AddAccountModal.tsx`, `src/localization/LanguageProvider.tsx`.
 - TypeScript PASS reported for that checkpoint; Android Accounts/Reports UI review confirmed by user. This does not certify all screens or the full regression suite.
 - Other local changes and backups remain on user's Windows machine and are **not necessarily pushed**. No merge to main.
 - i18n policy: Arabic and English only; English default on first launch; user-selected language persisted; no System Default language choice. Appearance system setting is independent. Translate UI labels but preserve user-entered names, currency codes, financial values and logic; verify Arabic RTL on Android.
 - Next immediate Finance task: finish transactions/transfers localization, then assets/debts/loans/installments, remaining reports and Android RTL tests. Obtain **current local source** before applying patches; do not replay old patches.
 
-### Phase 9 — Smart Documents, PDF, Excel: agreed hybrid evaluation architecture
+### Phase 9 ΓÇö Smart Documents, PDF, Excel: agreed hybrid evaluation architecture
 - **Offline baseline 1:** Tesseract4Android with fast traineddata for Arabic/English OCR; the existing lab proof of Arabic paragraph extraction does **not** certify table accuracy.
 - **Offline baseline 2:** table/row/cell structure detection, with OpenCV as a **candidate** to test alongside Tesseract; OpenCV itself is not a second text-recognition engine. If insufficient, evaluate a genuinely suitable offline table-specific solution rather than claiming one is already selected.
 - **Native structured extraction:** use PDF text/geometry for text PDFs; read Excel/XLSX cell values, dates and numbers directly, not via OCR except image-based content.
@@ -315,7 +315,7 @@ Do not repeat the completed 526-test regression unless code changes require it.
 - Prior independent lab: `D:\TomorrowNativePdfLab-v3`; PDF geometry and initial OCR were tested, but Kotlin native build, full Arabic table extraction and production integration were not yet accepted. Continue from existing evidence rather than restarting the OCR selection.
 - Optimize final installed app size; measure native library/model overhead before adopting a second offline engine.
 
-### Phase 10 — Voice input: approved lightweight hybrid plan (design only)
+### Phase 10 ΓÇö Voice input: approved lightweight hybrid plan (design only)
 - Arabic and English speech input, including common Egyptian phrasing.
 - Start with device/platform speech recognition where available; use offline recognition if supported, online recognition otherwise, with clear connectivity/privacy expectations. Do not promise offline support on every Android device.
 - Avoid bundling large speech models initially. Parse recognized text locally into transaction type, amount, currency, account, category and date; present uncertain fields for correction.
@@ -331,7 +331,7 @@ Do not repeat the completed 526-test regression unless code changes require it.
 
 
 <!-- TOMORROW_PDF_SMART_COCKTAIL_PLAN_20261122 -->
-## 2026-11-22 — PDF Smart Cocktail plan and safe resume checkpoint
+## 2026-11-22 ΓÇö PDF Smart Cocktail plan and safe resume checkpoint
 
 ### Status and scope
 - This is a user-agreed PLAN, not implemented or Android-accepted functionality. Do not claim the PDF table failures have been fixed.
@@ -351,15 +351,15 @@ Do not repeat the completed 526-test regression unless code changes require it.
 3. Fix PDF-only extraction/grid/trust-policy bypass: no unverified Arabic candidate may masquerade as a verified cell; preserve every source fragment in a cell or an unplaced list, including multiline notes. Keep raw text/coordinates and evidence.
 4. Add reversible, traceable correction suggestions and a review UI: editable cells/column mapping, labelled Arabic correction suggestion (not an automatic rewrite toggle), original and candidate visible, explicit approval. Ambiguous encoded years and incomplete dates must remain flagged, never guessed.
 5. Run both PDFs on a real Android device; verify reference output remains identical, D11 agrees with ground truth or flags each uncertain value, zero silently wrong year/date/amount values, no lost text, Excel unchanged, `postingAllowed=false` verified by test. Record APK size, memory and timing against pre-agreed thresholds.
-6. Only after core success: benchmark PDF→Excel offline/online alternatives; consider one layout-only template slot (exact fingerprint or manual mapping, storing no document content/amounts). Defer Loan/Installment suggestions and broader template system until separately approved. Remove redundant components only after measured comparisons.
+6. Only after core success: benchmark PDFΓåÆExcel offline/online alternatives; consider one layout-only template slot (exact fingerprint or manual mapping, storing no document content/amounts). Defer Loan/Installment suggestions and broader template system until separately approved. Remove redundant components only after measured comparisons.
 
 ### Estimate and risk
-- Independent reviewer estimates were 24–36 and 30–45 working hours. Plan conservatively for **30–45 hours** for the core if native work remains contained; **50+ hours** possible if native/OCR issues arise. These are judgement estimates, not measurements; PDF→Excel production integration may require extra time.
+- Independent reviewer estimates were 24ΓÇô36 and 30ΓÇô45 working hours. Plan conservatively for **30ΓÇô45 hours** for the core if native work remains contained; **50+ hours** possible if native/OCR issues arise. These are judgement estimates, not measurements; PDFΓåÆExcel production integration may require extra time.
 - Principal risks: Android PDFBox clipping/geometry variability, Arabic/RTL/font encoding, silent plausible but incorrect numeric/date values, Excel regressions and APK/memory growth.
 - One narrow task and one device gate at a time; no claim of complete PDF extraction, OCR accuracy or app integration without device evidence. Preserve the earlier paused/failed PDF checkpoint as historical evidence.
 
 <!-- LOCAL_PDF_LAB_CHECKPOINTS_20261119_20261122 -->
-## PDF-LAB-CP01 — 2026-11-19
+## PDF-LAB-CP01 ΓÇö 2026-11-19
 
 ### Scope
 Independent native PDF/OCR lab:
@@ -418,7 +418,7 @@ Do not treat CP01 as a complete rollback point yet.
 - No merge to main without approval.
 - No new APK until the next change passes verification.
 
-## PDF Lab Checkpoint — 2026-11-20
+## PDF Lab Checkpoint ΓÇö 2026-11-20
 
 ### Project and backup
 - Independent lab: D:\TomorrowNativePdfLab-v3
@@ -462,7 +462,7 @@ Do not treat CP01 as a complete rollback point yet.
 - Never permanently delete automatically.
 - Review a proposed cleanup manifest before moving anything.
 
-## 2026-11-20 — Safe cleanup completed (append-only update)
+## 2026-11-20 ΓÇö Safe cleanup completed (append-only update)
 
 **Status:** CLOSED, based on successful PowerShell run reports. No permanent deletion.
 
@@ -477,7 +477,7 @@ Do not treat CP01 as a complete rollback point yet.
 - This update is prepared for append to `docs/project-memory/TOMORROW_RESUME_2026-11-13.md`; it has **not** been written to the local Windows checkout or pushed to GitHub by this chat.
 
 <!-- TOMORROW_PDF_STOP_CHECKPOINT_2026_11_22 -->
-## 2026-11-22 â€” Native PDF Lab STOP / handover
+## 2026-11-22 ├óΓé¼ΓÇ¥ Native PDF Lab STOP / handover
 - User explicitly paused Native PDF Lab after repeated unsuccessful fixes; move to another TomorrowApp phase. Do not resume without request.
 - Lab: `D:\TomorrowNativePdfLab-v3` (no Git). Freeze accepted Excel (including D11.xlsx date display) and protect prior PDF reference baselines.
 - Huawei diagnostic D11.pdf: 808 chars, 0 vector lines, 103 post-clip quarantined, no verified cells. Payment_Plans.pdf: 744 chars, 6 lines, 49 quarantined, no verified cells.
@@ -486,7 +486,7 @@ Do not treat CP01 as a complete rollback point yet.
 - No automatic financial posting (`postingAllowed=false`), no PDF APK/build/retest without explicit reopening. See lab `docs/project-memory/TOMORROW_PDF_STOP_CHECKPOINT_2026-11-22.md`.
 <!-- /TOMORROW_PDF_STOP_CHECKPOINT_2026_11_22 -->
 <!-- PDF_SMART_COCKTAIL_PLAN_2026_11_22 -->
-## Phase 9 â€” PDF Smart Cocktail plan (agreed discussion, 2026-11-22; NOT implemented)
+## Phase 9 ├óΓé¼ΓÇ¥ PDF Smart Cocktail plan (agreed discussion, 2026-11-22; NOT implemented)
 
 ### Goal and user workflow
 - Offline-first Android PDF upload -> automatic evidence-preserving extraction -> suggested table -> editable review -> explicit user approval. No automatic financial posting (`postingAllowed=false`).
@@ -520,3 +520,26 @@ Do not treat CP01 as a complete rollback point yet.
 
 ### Status
 - PLAN RECORDED ONLY; implementation, Android acceptance, and PDF->XLSX fallback are NOT complete. Preserve the previous 2026-11-22 PDF STOP checkpoint and frozen Excel baseline.
+
+<!-- TOMORROW_PHASE123_PAUSE_2026_11_23_START -->
+
+## Finance Phase 1-3 Pause Checkpoint ΓÇö 2026-11-23
+
+Status: NO-GO. Phases 1, 2 and 3 are paused until Codex weekly quota renews (approximately 7% remaining).
+
+Last audited branch: codex/finance-8-6-expenses-redesign
+Last audited HEAD: d047b316c7838d7bfb4d58b1f099df2f27a1aca7
+Source snapshot: Tomorrow-Phase1-3-FAST-20261123-002300.zip (319 files)
+Snapshot SHA256: 65DF3CA319F75B593A388529B43B036F3FE6B670865FFA9EDAD66AD7686D9716
+
+Last audit: TypeScript PASS; Finance 2114 PASS, 65 FAIL out of 2179; ESLint 17 errors and 17 warnings. Worktree had 122 modified/untracked entries. Reverify before resuming.
+
+Outstanding: acknowledged persistence; fail-closed hydration preserving persisted evidence; currency precision; duplicate submission and idempotency; opening balance dates; date/currency validation; refund accounting; full regression and Android restart tests.
+
+Existing consolidated patches are REVIEW ONLY and must not be applied as final fixes.
+
+Restrictions: postingAllowed=false; no automatic financial posting or replay; frozen Excel/XLSX, PDF Lab and unrelated Documents must remain unchanged. No reset, clean, merge, or code commit/push without approval. Preserve unrelated local changes.
+
+Resume with Codex after quota renewal. Verify current checkout, implement remaining fixes, run tests, and close phases only after successful validation.
+
+<!-- TOMORROW_PHASE123_PAUSE_2026_11_23_END -->
