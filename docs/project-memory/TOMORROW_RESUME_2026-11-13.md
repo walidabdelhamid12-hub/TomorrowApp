@@ -328,3 +328,32 @@ Do not repeat the completed 526-test regression unless code changes require it.
 - This addendum records **design decisions and historical user-reported checkpoints**, not new TypeScript/Android/OCR test passes.
 - A documentation-only GitHub commit can leave the remote ahead of the user's local checkout. Before future local changes, compare local/remote HEAD and safely synchronize without overwriting local changes or untracked files.
 - No automatic dependency changes, no destructive reset/clean, no merge to main, no Finance posting.
+
+
+<!-- TOMORROW_PDF_SMART_COCKTAIL_PLAN_20261122 -->
+## 2026-11-22 — PDF Smart Cocktail plan and safe resume checkpoint
+
+### Status and scope
+- This is a user-agreed PLAN, not implemented or Android-accepted functionality. Do not claim the PDF table failures have been fixed.
+- Independent lab: `D:\TomorrowNativePdfLab-v3`; main app: `D:\Mobile Apps\TomorrowApp`.
+- The user reported a local update to this Resume on 2026-11-22 (SHA-256 `0DE42E217E158E369477EF363887FDB63A0B3B45C2489213B87F5CCDF3EED5E8`) with a separate backup. This GitHub addendum records the agreed plan; it is NOT proof that the entire local file is byte-identical to GitHub. Before local synchronization, compare files and preserve the local addendum and any unrelated local changes.
+- Preserve frozen accepted Android Excel/XLSX implementation, especially D11.xlsx date rendering. Do not edit Excel extraction, formatting, or shared rendering for PDF changes without separate explicit review. Check frozen file hashes and Excel regression tests.
+- `postingAllowed=false`: no automatic financial posting, loan/installment creation, replay or mutation. No merge to `main`.
+
+### Two complementary PDF paths
+1. **Primary offline-first PDF path:** positioned glyphs/text, coordinates and vector lines; reconstruct grid, rows, columns and multiline notes; retain immutable raw values, provenance and all unplaced text. Diagnose clipping and trust-policy issues first. Use deterministic, labelled, reversible suggestions for Arabic RTL/reversal, font-encoded years, dates and amounts; never silently invent or overwrite values. Editable column roles/cells, original-versus-suggested display and explicit user approval.
+2. **Optional fallback / benchmark: PDF to Excel (XLSX):** test conversion outside the app first (offline if feasible, online only after explicit user consent to upload a document). Feed converted XLSX to the already-accepted Excel reader and compare cell-by-cell with the primary path and ground truth. Successful XLSX parsing does NOT prove the conversion was accurate. Keep this option in the roadmap; defer production integration until evidence shows benefit, and avoid unnecessary APK size.
+- OCR is a conditional region-specific fallback for unreadable text, not a guaranteed first-release dependency; defer integration until core geometry/grid/review passes. Do not upload private financial PDFs to online services without consent; use synthetic examples for external benchmarking.
+
+### Execution sequence and gates
+1. Safety baseline: preserve backups, current lab files, accepted Payment_Plans reference, frozen Excel hashes/tests, baseline APK size and device timing. Do a small **diagnostics-only Android run** before changing clipping behavior; observed candidate-line loss does not by itself prove its root cause.
+2. Agree exact ground-truth rows/columns/years/dates/amounts/notes for `D11.pdf` before measuring accuracy; retain `Payment_Plans.pdf` reference output and regression fixtures for clipped/unclipped files.
+3. Fix PDF-only extraction/grid/trust-policy bypass: no unverified Arabic candidate may masquerade as a verified cell; preserve every source fragment in a cell or an unplaced list, including multiline notes. Keep raw text/coordinates and evidence.
+4. Add reversible, traceable correction suggestions and a review UI: editable cells/column mapping, labelled Arabic correction suggestion (not an automatic rewrite toggle), original and candidate visible, explicit approval. Ambiguous encoded years and incomplete dates must remain flagged, never guessed.
+5. Run both PDFs on a real Android device; verify reference output remains identical, D11 agrees with ground truth or flags each uncertain value, zero silently wrong year/date/amount values, no lost text, Excel unchanged, `postingAllowed=false` verified by test. Record APK size, memory and timing against pre-agreed thresholds.
+6. Only after core success: benchmark PDF→Excel offline/online alternatives; consider one layout-only template slot (exact fingerprint or manual mapping, storing no document content/amounts). Defer Loan/Installment suggestions and broader template system until separately approved. Remove redundant components only after measured comparisons.
+
+### Estimate and risk
+- Independent reviewer estimates were 24–36 and 30–45 working hours. Plan conservatively for **30–45 hours** for the core if native work remains contained; **50+ hours** possible if native/OCR issues arise. These are judgement estimates, not measurements; PDF→Excel production integration may require extra time.
+- Principal risks: Android PDFBox clipping/geometry variability, Arabic/RTL/font encoding, silent plausible but incorrect numeric/date values, Excel regressions and APK/memory growth.
+- One narrow task and one device gate at a time; no claim of complete PDF extraction, OCR accuracy or app integration without device evidence. Preserve the earlier paused/failed PDF checkpoint as historical evidence.
