@@ -357,3 +357,166 @@ Do not repeat the completed 526-test regression unless code changes require it.
 - Independent reviewer estimates were 24–36 and 30–45 working hours. Plan conservatively for **30–45 hours** for the core if native work remains contained; **50+ hours** possible if native/OCR issues arise. These are judgement estimates, not measurements; PDF→Excel production integration may require extra time.
 - Principal risks: Android PDFBox clipping/geometry variability, Arabic/RTL/font encoding, silent plausible but incorrect numeric/date values, Excel regressions and APK/memory growth.
 - One narrow task and one device gate at a time; no claim of complete PDF extraction, OCR accuracy or app integration without device evidence. Preserve the earlier paused/failed PDF checkpoint as historical evidence.
+
+<!-- LOCAL_PDF_LAB_CHECKPOINTS_20261119_20261122 -->
+## PDF-LAB-CP01 — 2026-11-19
+
+### Scope
+Independent native PDF/OCR lab:
+D:\TomorrowNativePdfLab-v3
+
+Production TomorrowApp remains separate.
+No automatic financial posting.
+
+### Verified achievements
+- Android ARM64 APK version 0.2.1, versionCode 2.
+- Native PDFBox text/geometry extraction successfully
+  demonstrated on Huawei P30 Lite.
+- Payment_Plans.pdf processed using native-pdf path.
+- Reference document identity verified in device results.
+- Approximately 0.9 seconds for one-page native extraction.
+- Important dates, amounts and totals preserved.
+- Mobile table review UI implemented and device-tested.
+- Technical diagnostics can be hidden.
+- TypeScript PASS.
+- 36 tests PASS, 0 FAIL.
+- ARM64 release build PASS.
+
+### Known limitations
+- Arabic RTL reconstruction and split fragments.
+- Some unresolved or mixed table cells.
+- Row and column associations need further validation.
+- Wide table is inconvenient on mobile.
+- Numeric/date candidate lists clutter normal results.
+- Financial values still require human review.
+
+### Proposed next phase
+1. Compact mobile cards for each reconstructed row.
+2. Move candidate lists into technical diagnostics.
+3. Improve Arabic reconstruction without changing raw evidence.
+4. Improve geometric cell association with regression tests.
+5. Compare with independent Gemini technical feedback.
+6. Preserve offline support and minimize APK size.
+
+### Checkpoint status
+Reference name: PDF-LAB-CP01
+Status: PARTIAL / NOT YET VERIFIED AS RESTORABLE.
+
+Initial checkpoint copy saved src and tests, then failed
+while copying generated Gradle build artifacts under modules.
+
+Checkpoint must be rebuilt excluding generated build folders,
+then validated with a SHA-256 manifest and preserved APK.
+
+Do not treat CP01 as a complete rollback point yet.
+
+### Rules
+- Keep native PDF extraction as the current working baseline.
+- Do not silently correct uncertain financial values.
+- No automatic financial posting.
+- Do not modify production Finance.
+- No merge to main without approval.
+- No new APK until the next change passes verification.
+
+## PDF Lab Checkpoint — 2026-11-20
+
+### Project and backup
+- Independent lab: D:\TomorrowNativePdfLab-v3
+- Local backup: D:\TomorrowPdfLab-Backups\Checkpoint-20261120-062355
+- Local backup completed successfully.
+- Debug APK backup SHA-256 verified:
+  CE1D1990C7DB49D92F79ED7A67728F8948067E7F4CB1E89E8D7B83D9DED80C90
+- PDF Lab is not currently a Git repository at its project path.
+- GitHub backup NOT completed. A separate repository must be identified or created.
+- Do not assume the lab is part of the TomorrowApp Git repository.
+
+### Technical checkpoint
+- Android debug build succeeded.
+- Native PDF reading and SHA-256 fingerprinting were tested.
+- Payment_Plans.pdf: PDFBox extracted 744 glyphs; 34 reconstructed rows, with remaining review issues.
+- PDF_Geometry_Independent_Test.pdf: 13 rows detected, but cell assignment remains incomplete.
+- JPG Arabic/English table: offline OCR succeeded, with 74 words and a 100-cell candidate grid; Arabic, dates and cell assignment need improvement.
+- V1/V2/V3 reconstruction prototypes passed synthetic tests but have not been validated against all three real examples.
+
+### Confirmed decisions
+- Offline-only OCR and table processing.
+- No paid or cloud OCR services, including benchmarking.
+- Prioritize Arabic/English, RTL/LTR, dates, amounts and table geometry.
+- Compare V1/V2/V3 against real diagnostics before replacing or integrating algorithms.
+- Preserve original extraction evidence and fail closed on uncertain financial data.
+- No automatic financial posting; postingAllowed=false.
+- Keep final Android app size as small as practical without sacrificing functionality.
+- Avoid unnecessary rebuilds, repeated tests and USB/ADB usage.
+
+### Next session
+1. Establish a separate GitHub repository for the PDF Lab and verify the push.
+2. Read-only review of V1/V2/V3 against the three real test outputs.
+3. Identify missing words, row/column alignment and date/amount assignment errors.
+4. Implement only evidence-supported corrections.
+5. Run focused tests, then Android verification when necessary.
+6. Keep TomorrowApp main branch and production Finance untouched.
+
+### Desktop and Downloads cleanup
+- Audit Tomorrow-related files first.
+- Protect project source, backups, test PDFs, diagnostics, patches, APKs and handover files.
+- Never permanently delete automatically.
+- Review a proposed cleanup manifest before moving anything.
+
+## 2026-11-20 — Safe cleanup completed (append-only update)
+
+**Status:** CLOSED, based on successful PowerShell run reports. No permanent deletion.
+
+- Duplicate files: 4 archived; restore manifest `D:\Tomorrow-Cleanup-Archive\Archive-20261120-062947\Restore-Manifest.csv`.
+- Identical folders: 2 archived; restore manifest `D:\Tomorrow-Cleanup-Archive\FolderArchive-20261120-063917\Restore-Manifest.csv`.
+- Desktop Backup folders: 16 archived; precheck confirmed exact approvals and original SHA-256 hashes; 2 verified copies + quarantined originals. Restore manifest `D:\Tomorrow-Cleanup-Archive\FolderArchive16-20261120-064222-266\Restore-Manifest.csv`.
+- Remaining review folders: 12 archived (2 Desktop + 10 Downloads); exact precheck passed; 2 verified copies + quarantined originals. Restore manifest `D:\Tomorrow-Cleanup-Archive\FolderArchive12-20261120-064419-565\Restore-Manifest.csv`.
+- **Totals:** 30 folders and 4 duplicate files archived. Six protected folders excluded; main TomorrowApp checkout and native PDF lab outside cleanup scope.
+- Precheck errors resolved before successful runs: backup candidate count 18 vs 16; empty-folder metadata handling in final batch.
+- Do not rerun cleanup or delete the archives. The archived folders may contain unique historical project versions.
+- **Next:** resume offline PDF table extraction diagnostics. Compare V1/V2/V3 with real JSON, quantify row/column and unassigned-word errors, then improve Arabic/English RTL/LTR dates/amounts with fail-closed rules. No online/cloud/paid OCR. `postingAllowed=false`.
+- This update is prepared for append to `docs/project-memory/TOMORROW_RESUME_2026-11-13.md`; it has **not** been written to the local Windows checkout or pushed to GitHub by this chat.
+
+<!-- TOMORROW_PDF_STOP_CHECKPOINT_2026_11_22 -->
+## 2026-11-22 â€” Native PDF Lab STOP / handover
+- User explicitly paused Native PDF Lab after repeated unsuccessful fixes; move to another TomorrowApp phase. Do not resume without request.
+- Lab: `D:\TomorrowNativePdfLab-v3` (no Git). Freeze accepted Excel (including D11.xlsx date display) and protect prior PDF reference baselines.
+- Huawei diagnostic D11.pdf: 808 chars, 0 vector lines, 103 post-clip quarantined, no verified cells. Payment_Plans.pdf: 744 chars, 6 lines, 49 quarantined, no verified cells.
+- Dates/amounts exist as candidates, but Year/Description/Due Date/Amount cell mapping remains unresolved; Arabic RTL reversed/mixed. Coordinate-only is not proof of table cell membership.
+- APK SHA256 `F1EC0EE55F63E9730039718C2948BE9E1213F3DAEE1542ADE9341C7490FA8A41`; APK v2 signature verified, installed Huawei signer comparison unavailable. Functional extraction NOT accepted.
+- No automatic financial posting (`postingAllowed=false`), no PDF APK/build/retest without explicit reopening. See lab `docs/project-memory/TOMORROW_PDF_STOP_CHECKPOINT_2026-11-22.md`.
+<!-- /TOMORROW_PDF_STOP_CHECKPOINT_2026_11_22 -->
+<!-- PDF_SMART_COCKTAIL_PLAN_2026_11_22 -->
+## Phase 9 â€” PDF Smart Cocktail plan (agreed discussion, 2026-11-22; NOT implemented)
+
+### Goal and user workflow
+- Offline-first Android PDF upload -> automatic evidence-preserving extraction -> suggested table -> editable review -> explicit user approval. No automatic financial posting (`postingAllowed=false`).
+- Preserve immutable raw glyph/text values, bounding boxes, source/provenance, and an always-visible list of unplaced text. Never silently drop notes or fabricate numbers/years.
+- Suggest (do not silently rewrite) Arabic RTL corrections, Year, Date (day/month/year), Amount, Description, Notes/Remarks, and potential Loan/Installment associations. The user can change column roles, edit cells, inspect original versus candidate, and approve. Arabic correction must be reversible and never reverse digits/dates.
+- Reusable layout templates are a later enhancement: layout/fingerprint only, no financial document contents; manual fallback if layout mismatch.
+
+### Two paths retained
+- A PRIMARY: direct PDF geometry/text extraction, clip-safe grid reconstruction, regional OCR fallback only when necessary, contextual deterministic suggestions, review UI.
+- B OPTIONAL FALLBACK/BENCHMARK: test PDF -> XLSX conversion offline and, with explicit consent and privacy review, online. Compare against direct extraction on the same PDFs. The conversion path is NOT approved as a production dependency yet; only integrate if tests demonstrate a real benefit. The frozen Excel/XLSX implementation must remain untouched; converter-generated XLSX is not assumed accurate.
+
+### Implementation order and gates
+1. Read-only baseline and backups; capture current file hashes, Excel regression baseline, APK size/device memory/performance. One small Android diagnostics run to verify clip-capture and trust-policy bypass hypotheses before changing code.
+2. PDF-only clip-safe extraction/grid fix, preserving every raw span, row, coordinate, multiline note and unplaced text; protect the known-good geometry reference.
+3. Layered, idempotent suggestions for Arabic, encoded years, dates, amounts and descriptions. OCR output is an unverified alternative; do not guess missing years or values.
+4. Editable review UI with manual column role selection, original-versus-suggested display, reversible Arabic correction and explicit approval. Keep `postingAllowed=false` enforced and tested.
+5. Android validation on Payment_Plans.pdf and D11.pdf against agreed ground truth (define D11 expected values before testing). Then benchmark optional PDF->XLSX fallback in isolation; never upload real financial documents online without explicit consent.
+6. Only after the core passes: consider one layout template, Loan/Installment suggestions, further OCR integration, and pruning redundant components to minimize APK size.
+
+### Acceptance / safety
+- Both real PDFs pass on Android, not only unit tests. Every date/year/amount is either correct against ground truth or clearly flagged; zero silent wrong values.
+- Raw text is never lost; unplaced and multiline notes remain reviewable. Corrections are traceable and reversible. No guessed or silently auto-approved values.
+- Existing Excel/XLSX reader, including accepted D11.xlsx Android date display, remains STRICTLY FROZEN: unchanged file hashes and passing regressions. No edits to shared Excel renderer.
+- `postingAllowed=false` and no automatic financial posting; explicit review approval does not itself post transactions.
+- Record APK size, device timing and memory versus baseline; choose practical thresholds before release approval.
+- No merge, commit, push, clean, reset, build or code changes are authorized by this planning note.
+
+### Effort estimate (not measured)
+- Initial proposal 18-28 hours; external reviews estimated 24-36 and 30-45 hours. Planning range: approximately 30-45 working hours, possibly 50+ with native/OCR complications; optional PDF->XLSX conversion may add time.
+- Build incrementally and test each layer, even though the final UX is one integrated 'cocktail'.
+
+### Status
+- PLAN RECORDED ONLY; implementation, Android acceptance, and PDF->XLSX fallback are NOT complete. Preserve the previous 2026-11-22 PDF STOP checkpoint and frozen Excel baseline.
