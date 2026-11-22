@@ -543,3 +543,16 @@ Restrictions: postingAllowed=false; no automatic financial posting or replay; fr
 Resume with Codex after quota renewal. Verify current checkout, implement remaining fixes, run tests, and close phases only after successful validation.
 
 <!-- TOMORROW_PHASE123_PAUSE_2026_11_23_END -->
+
+<!-- PHASE9_RESUME_AGREEMENT_2026_11_23 -->
+## Phase 9 resume agreement — 2026-11-23 (diagnostics only)
+
+- User explicitly requested resuming Phase 9 (smart documents / PDF / OCR) after the 2026-11-22 pause. This reopens planning and read-only diagnostic review only; it does **not** authorize modifying PDF code, building an APK, running Android tests, or removing the STOP checkpoint.
+- First task: inspect the existing Native PDF Lab source and diagnostic outputs for D11.pdf and Payment_Plans.pdf; compare V1/V2/V3 table reconstruction against actual evidence. Do not restart implementation from scratch or rerun accepted tests without a reason.
+- Last documented Huawei diagnostics: D11.pdf 808 characters, 0 verified cells; Payment_Plans.pdf 744 characters, 0 verified cells. These figures are prior checkpoint evidence, not newly retested results. Prioritize lost/quarantined text, Arabic RTL, geometry/column association, dates, years, amounts, notes and uncertain cells.
+- Preserve original raw fragments and coordinates, surface unplaced text, and keep ambiguous values explicitly unverified. No fabricated dates/amounts or silent correction; user reviews editable proposed results and explicitly approves before any subsequent financial action. Keep postingAllowed=false and no automatic financial posting.
+- Accepted Excel/XLSX behavior is strictly frozen, including D11.xlsx Android date display. Do not modify Excel reader, shared Excel renderer, or its tests for PDF changes. Protect existing PDF references and backups.
+- Offline-first approach remains the baseline. Optional online/PDF-to-XLSX comparisons are not authorized for private files and require separate explicit consent; retain the 2026-11-20 offline-only decision as a constraint until the user resolves any conflict.
+- Before implementation: obtain the current independent lab source and diagnostic ZIP (excluding build/node_modules/APK artifacts), verify baseline and scope, report a narrowly defined PDF-only change, and seek explicit approval. No production Finance changes, Git merge, reset, clean, or unapproved commit/push.
+- Finance Phases 1–3 remain paused NO-GO. This documentation update does not imply they passed.
+<!-- /PHASE9_RESUME_AGREEMENT_2026_11_23 -->
