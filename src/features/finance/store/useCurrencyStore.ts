@@ -387,6 +387,7 @@ export const useCurrencyStore = create<CurrencyStore>()(
       ...initialData,
 
       setBaseCurrency: (code) => {
+        if (!useCurrencyStore.persist.hasHydrated()) return;
         if (typeof code !== 'string') return;
 
         const normalizedCode = code.trim().toUpperCase();
@@ -401,6 +402,7 @@ export const useCurrencyStore = create<CurrencyStore>()(
       },
 
       setRate: (code, rate) => {
+        if (!useCurrencyStore.persist.hasHydrated()) return false;
         if (typeof code !== 'string') return false;
 
         const normalizedCode = code.trim().toUpperCase();
@@ -440,6 +442,7 @@ export const useCurrencyStore = create<CurrencyStore>()(
       },
 
       setMetalPrice: (kind, value) => {
+        if (!useCurrencyStore.persist.hasHydrated()) return false;
         if (
           (kind !== 'gold24PerGram' && kind !== 'silverPerGram') ||
           (value !== null && !isValidRate(value))
@@ -467,6 +470,7 @@ export const useCurrencyStore = create<CurrencyStore>()(
       },
 
       setManualRates: (rates, metals) => {
+        if (!useCurrencyStore.persist.hasHydrated()) return false;
         if (!isValidManualPayload(rates, metals)) {
           return false;
         }
@@ -533,6 +537,7 @@ export const useCurrencyStore = create<CurrencyStore>()(
       },
 
       applyLiveRates: (payload) => {
+        if (!useCurrencyStore.persist.hasHydrated()) return false;
         if (
           !isRecord(payload) ||
           !isRecord(payload.rates) ||
@@ -655,6 +660,7 @@ export const useCurrencyStore = create<CurrencyStore>()(
       },
 
       markRatesUnconfirmed: (currencyCodes, metalKeys) => {
+        if (!useCurrencyStore.persist.hasHydrated()) return;
         set((state) => {
           const rateSources = { ...state.rateSources };
           const metalSources = { ...state.metalSources };
@@ -691,7 +697,8 @@ export const useCurrencyStore = create<CurrencyStore>()(
         });
       },
 
-      resetRates: () =>
+      resetRates: () => {
+        if (!useCurrencyStore.persist.hasHydrated()) return;
         set({
           rates: normalizeRates(DEFAULT_RATES_TO_EGP),
           verifiedCurrencies: [RATE_ANCHOR],
@@ -713,7 +720,8 @@ export const useCurrencyStore = create<CurrencyStore>()(
           lastLiveUpdatedAt: null,
           lastManualUpdatedAt: null,
           source: 'default',
-        }),
+        });
+      },
     }),
     {
       name: 'tomorrow:currency',
