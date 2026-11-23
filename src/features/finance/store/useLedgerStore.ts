@@ -993,6 +993,7 @@ const account = accounts.find(
       /* ------------------------------ Transfers ---------------------------- */
 
       addTransfer: (input) => {
+        if (!useLedgerStore.persist.hasHydrated() || !useFinanceStore.persist.hasHydrated()) return null;
         const { accounts, transactions, transfers } = get();
 
         const fromAccount = accounts.find(
@@ -1050,6 +1051,7 @@ const account = accounts.find(
       },
 
       updateTransfer: (id, patch) => {
+        if (!useLedgerStore.persist.hasHydrated() || !useFinanceStore.persist.hasHydrated()) return false;
         const { accounts, transactions, transfers } = get();
 
         const current = transfers.find((item) => item.id === id);
@@ -1165,12 +1167,14 @@ const account = accounts.find(
         return true;
       },
 
-      removeTransfer: (id) =>
+      removeTransfer: (id) => {
+        if (!useLedgerStore.persist.hasHydrated() || !useFinanceStore.persist.hasHydrated()) return;
         set((state) => ({
           transfers: state.transfers.filter(
             (transfer) => transfer.id !== id
           ),
-        })),
+        }));
+      },
 
       /* -------------------------------- Reset ------------------------------ */
 

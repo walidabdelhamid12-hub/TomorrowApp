@@ -291,20 +291,20 @@ Do not repeat the completed 526-test regression unless code changes require it.
 - Phase 11: backup and synchronization pending.
 - Phase 12: smart recording and financial notifications pending.
 
----
 
-## 2026-11-19 — Current i18n checkpoint and Phase 9/10 design decisions
+---
+## 2026-11-19 ΓÇö Current i18n checkpoint and Phase 9/10 design decisions
 
 ### Latest user-confirmed i18n checkpoint (supersedes historical HEAD references above)
 - Working branch: `codex/finance-8-6-expenses-redesign`.
-- User-confirmed commit and successful push: `d047b31` — `checkpoint(i18n): save Arabic English Finance UI progress`.
+- User-confirmed commit and successful push: `d047b31` ΓÇö `checkpoint(i18n): save Arabic English Finance UI progress`.
 - Ten committed files: `src/app/(tabs)/_layout.tsx`, `src/app/_layout.tsx`, `src/app/finance/accounts.tsx`, `src/app/finance/reports.tsx`, `src/app/finance/settings.tsx`, `src/features/finance/components/AccountCard.tsx`, `AccountDetails.tsx`, `AccountsSection.tsx`, `AddAccountModal.tsx`, `src/localization/LanguageProvider.tsx`.
 - TypeScript PASS reported for that checkpoint; Android Accounts/Reports UI review confirmed by user. This does not certify all screens or the full regression suite.
 - Other local changes and backups remain on user's Windows machine and are **not necessarily pushed**. No merge to main.
 - i18n policy: Arabic and English only; English default on first launch; user-selected language persisted; no System Default language choice. Appearance system setting is independent. Translate UI labels but preserve user-entered names, currency codes, financial values and logic; verify Arabic RTL on Android.
 - Next immediate Finance task: finish transactions/transfers localization, then assets/debts/loans/installments, remaining reports and Android RTL tests. Obtain **current local source** before applying patches; do not replay old patches.
 
-### Phase 9 — Smart Documents, PDF, Excel: agreed hybrid evaluation architecture
+### Phase 9 ΓÇö Smart Documents, PDF, Excel: agreed hybrid evaluation architecture
 - **Offline baseline 1:** Tesseract4Android with fast traineddata for Arabic/English OCR; the existing lab proof of Arabic paragraph extraction does **not** certify table accuracy.
 - **Offline baseline 2:** table/row/cell structure detection, with OpenCV as a **candidate** to test alongside Tesseract; OpenCV itself is not a second text-recognition engine. If insufficient, evaluate a genuinely suitable offline table-specific solution rather than claiming one is already selected.
 - **Native structured extraction:** use PDF text/geometry for text PDFs; read Excel/XLSX cell values, dates and numbers directly, not via OCR except image-based content.
@@ -315,7 +315,7 @@ Do not repeat the completed 526-test regression unless code changes require it.
 - Prior independent lab: `D:\TomorrowNativePdfLab-v3`; PDF geometry and initial OCR were tested, but Kotlin native build, full Arabic table extraction and production integration were not yet accepted. Continue from existing evidence rather than restarting the OCR selection.
 - Optimize final installed app size; measure native library/model overhead before adopting a second offline engine.
 
-### Phase 10 — Voice input: approved lightweight hybrid plan (design only)
+### Phase 10 ΓÇö Voice input: approved lightweight hybrid plan (design only)
 - Arabic and English speech input, including common Egyptian phrasing.
 - Start with device/platform speech recognition where available; use offline recognition if supported, online recognition otherwise, with clear connectivity/privacy expectations. Do not promise offline support on every Android device.
 - Avoid bundling large speech models initially. Parse recognized text locally into transaction type, amount, currency, account, category and date; present uncertain fields for correction.
@@ -331,7 +331,7 @@ Do not repeat the completed 526-test regression unless code changes require it.
 
 
 <!-- TOMORROW_PDF_SMART_COCKTAIL_PLAN_20261122 -->
-## 2026-11-22 — PDF Smart Cocktail plan and safe resume checkpoint
+## 2026-11-22 ΓÇö PDF Smart Cocktail plan and safe resume checkpoint
 
 ### Status and scope
 - This is a user-agreed PLAN, not implemented or Android-accepted functionality. Do not claim the PDF table failures have been fixed.
@@ -351,14 +351,15 @@ Do not repeat the completed 526-test regression unless code changes require it.
 3. Fix PDF-only extraction/grid/trust-policy bypass: no unverified Arabic candidate may masquerade as a verified cell; preserve every source fragment in a cell or an unplaced list, including multiline notes. Keep raw text/coordinates and evidence.
 4. Add reversible, traceable correction suggestions and a review UI: editable cells/column mapping, labelled Arabic correction suggestion (not an automatic rewrite toggle), original and candidate visible, explicit approval. Ambiguous encoded years and incomplete dates must remain flagged, never guessed.
 5. Run both PDFs on a real Android device; verify reference output remains identical, D11 agrees with ground truth or flags each uncertain value, zero silently wrong year/date/amount values, no lost text, Excel unchanged, `postingAllowed=false` verified by test. Record APK size, memory and timing against pre-agreed thresholds.
-6. Only after core success: benchmark PDF→Excel offline/online alternatives; consider one layout-only template slot (exact fingerprint or manual mapping, storing no document content/amounts). Defer Loan/Installment suggestions and broader template system until separately approved. Remove redundant components only after measured comparisons.
+6. Only after core success: benchmark PDFΓåÆExcel offline/online alternatives; consider one layout-only template slot (exact fingerprint or manual mapping, storing no document content/amounts). Defer Loan/Installment suggestions and broader template system until separately approved. Remove redundant components only after measured comparisons.
 
 ### Estimate and risk
-- Independent reviewer estimates were 24–36 and 30–45 working hours. Plan conservatively for **30–45 hours** for the core if native work remains contained; **50+ hours** possible if native/OCR issues arise. These are judgement estimates, not measurements; PDF→Excel production integration may require extra time.
+- Independent reviewer estimates were 24ΓÇô36 and 30ΓÇô45 working hours. Plan conservatively for **30ΓÇô45 hours** for the core if native work remains contained; **50+ hours** possible if native/OCR issues arise. These are judgement estimates, not measurements; PDFΓåÆExcel production integration may require extra time.
 - Principal risks: Android PDFBox clipping/geometry variability, Arabic/RTL/font encoding, silent plausible but incorrect numeric/date values, Excel regressions and APK/memory growth.
 - One narrow task and one device gate at a time; no claim of complete PDF extraction, OCR accuracy or app integration without device evidence. Preserve the earlier paused/failed PDF checkpoint as historical evidence.
 
 <!-- LOCAL_PDF_LAB_CHECKPOINTS_20261119_20261122 -->
+
 ## PDF-LAB-CP01 — 2026-11-19
 
 ### Scope
@@ -520,3 +521,70 @@ Do not treat CP01 as a complete rollback point yet.
 
 ### Status
 - PLAN RECORDED ONLY; implementation, Android acceptance, and PDF->XLSX fallback are NOT complete. Preserve the previous 2026-11-22 PDF STOP checkpoint and frozen Excel baseline.
+
+## PERMANENT COMMUNICATION PREFERENCE
+- Never address the user with the Arabic title "يا ريس".
+- This preference applies to all future TomorrowApp sessions and conversations.
+- Use direct, respectful Egyptian Arabic without unwanted titles.
+
+<!-- TOMORROW_PHASE123_PAUSE_2026_11_23_START -->
+
+## Finance Phase 1-3 Pause Checkpoint — 2026-11-23
+
+Status: NO-GO. Phases 1, 2 and 3 are paused until Codex weekly quota renews (approximately 7% remaining).
+
+Last audited branch: codex/finance-8-6-expenses-redesign
+Last audited HEAD: d047b316c7838d7bfb4d58b1f099df2f27a1aca7
+Source snapshot: Tomorrow-Phase1-3-FAST-20261123-002300.zip (319 files)
+Snapshot SHA256: 65DF3CA319F75B593A388529B43B036F3FE6B670865FFA9EDAD66AD7686D9716
+
+Last audit: TypeScript PASS; Finance 2114 PASS, 65 FAIL out of 2179; ESLint 17 errors and 17 warnings. Worktree had 122 modified/untracked entries. Reverify before resuming.
+
+Outstanding: acknowledged persistence; fail-closed hydration preserving persisted evidence; currency precision; duplicate submission and idempotency; opening balance dates; date/currency validation; refund accounting; full regression and Android restart tests.
+
+Existing consolidated patches are REVIEW ONLY and must not be applied as final fixes.
+
+Restrictions: postingAllowed=false; no automatic financial posting or replay; frozen Excel/XLSX, PDF Lab and unrelated Documents must remain unchanged. No reset, clean, merge, or code commit/push without approval. Preserve unrelated local changes.
+
+Resume with Codex after quota renewal. Verify current checkout, implement remaining fixes, run tests, and close phases only after successful validation.
+
+<!-- TOMORROW_PHASE123_PAUSE_2026_11_23_END -->
+
+<!-- TOMORROW_PDF_CHECKPOINT_2026_11_23 -->
+## 2026-11-23 — PDF Smart Cocktail review / STOP checkpoint
+- User requested STOP and local + Tomorrow Resume save; no further implementation.
+- Gemini and Claude reviewed PDF table extraction. No device-specific root cause conclusively confirmed.
+- Huawei baseline remains Payment_Plans.pdf 744 chars / 6 vector lines / 49 quarantined / 0 verified cells; D11.pdf 808 chars / 0 lines / 103 quarantined / no verified cells.
+- Claude code observations: RawTableLines.kt clipping recovery can quarantine fractional lines; rawPdfTable.ts requires a verified closed grid and returns unresolved otherwise; quarantined lines are not promoted to TS table borders.
+- Existing pdfLayoutRows.ts and pdfCoordinateReview.ts already contain candidate logic; first task on resume is to inspect their integration, not create a new engine or duplicate logic.
+- Next approved sequence: existing positional row candidate integration; column/field evidence; Arabic RTL; conservative clipping audit; Huawei comparison; approved OCR workflow.
+- PDF-only; Excel/XLSX and Finance frozen; no new engine/library without approval; postingAllowed=false, needsReview=true, scored=false; no unverified success claims.
+- Lab detailed checkpoint: `D:\TomorrowNativePdfLab-v3\docs\project-memory\TOMORROW_PDF_CHECKPOINT_2026-11-23.md`.
+<!-- /TOMORROW_PDF_CHECKPOINT_2026_11_23 -->
+<!-- PHASE45_FUNCTIONAL_CLOSURE_2026-11-23 -->
+## Finance Phase 4 / Phase 5 â€” Functional closure checkpoint (2026-11-23)
+
+**Status:** Phase 4 Transfers and Phase 5 Currencies / Exchange Rates are functionally complete within the agreed tested scope, following user-reported Android PASS 4/4. This is not a claim that the entire Finance test suite passes.
+
+- Phase 4: hydration guard applied to `src/features/finance/store/useLedgerStore.ts`; SHA-256 `180402219730111A74C202D0A04297CA66F7BC112B8A1DD89F987E51AC26BBE4` is the BEFORE-change baseline, not the current patched-file hash. Local commit `55a28c3` records the guard change.
+- Phase 5: hydration guard applied to `src/features/finance/store/useCurrencyStore.ts`; verified SHA-256 `CDD5F0632DB9AE9B4192873763DBC2963386AA9A0011A2FF2A3439871092F1C3`.
+- TypeScript: PASS (exit 0). Targeted pre-Android Finance regression test files: 6/6 PASS. Read-only pre-Android check failures: 0.
+- User-reported Android PASS 4/4: transfer Edit/Cancel preserves state; manual Rates save; Refresh preserves unsaved draft; app restart preserves transfers/balances/saved rates.
+- Earlier full Finance suite: 100 test files, 87 PASS, 13 FAIL. Failures remain separately tracked and must not be reclassified as passing or ignored. Reported categories include language-hook test harness, literal-source assertions, asset movement UI, and XLSX/report tests; exact causes require independent investigation.
+- Phase 1–3: remain OPEN until deferred Codex audit. No automatic financial posting (`postingAllowed=false`).
+- PDF/Excel: unchanged and out of scope. No Git commit, push, or merge is authorized by this checkpoint.
+- Next: proceed to next approved roadmap task; do not repeat Android testing absent new evidence or changed behavior.
+<!-- END_PHASE45_FUNCTIONAL_CLOSURE_2026-11-23 -->
+
+<!-- TOMORROW_FINANCE_PHASE45_GIT_CHECKPOINT_2026_11_23 -->
+## 2026-11-23 — Finance Phase 4/5 local Git verification and synchronization hold
+- Phase 4 Transfers local commit: `55a28c3` (`fix(finance): guard transfer mutations before hydration`); committed file only `src/features/finance/store/useLedgerStore.ts`.
+- Phase 5 Currencies/Exchange Rates local commit: `b0abdf1` (`fix(finance): guard currency mutations before hydration`); committed file only `src/features/finance/store/useCurrencyStore.ts`.
+- Phase 1–3 pause local commit: `0bd9572` (`docs: save Phase 1-3 pause checkpoint`). Phases 1–3 remain open pending Codex audit.
+- Local branch `codex/finance-8-6-expenses-redesign`, HEAD `55a28c3`; Git index clean at read-only audit. Tracking status: ahead 3, behind 3 versus `origin/codex/finance-8-6-expenses-redesign`.
+- Remote-only commits at audit: `25ad1e6`, `865f4b8`, `e0d2209` (PDF/OCR/voice documentation). Common ancestor: `d047b316c7838d7bfb4d58b1f099df2f27a1aca7`.
+- The only overlapping committed path and the only overlap with modified worktree: `docs/project-memory/TOMORROW_RESUME_2026-11-13.md`. Other worktree changes and untracked files must be preserved.
+- Three Resume versions were backed up locally in Downloads and supplied for a read-only consolidation. This document is a proposed merged artifact, NOT applied to the Windows checkout.
+- Do not run pull, merge, rebase, reset, clean, force push, or overwrite the original Resume without explicit review and approval. No push has been performed for these local commits.
+- Scope acceptance remains Phase 4/5 targeted functional PASS, not a claim of full Finance regression PASS. `postingAllowed=false`; frozen Excel/XLSX and independent PDF Lab remain untouched.
+<!-- /TOMORROW_FINANCE_PHASE45_GIT_CHECKPOINT_2026_11_23 -->
