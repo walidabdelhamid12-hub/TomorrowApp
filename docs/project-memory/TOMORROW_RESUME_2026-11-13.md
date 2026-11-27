@@ -1126,3 +1126,106 @@ Status: APPROVED PLAN — IMPLEMENTATION PENDING. User approved the unified comp
 - Claude Browser native coexistence review pending: whisper.rn and react-native-sherpa-onnx in one isolated Android dev build with Expo SDK 58, RN 0.88.1 and Hermes; check ARM64, native dependency conflicts, minimum Android and safe removal of losing runtime. Do not claim compatibility until verified. Append new material findings after review.
 - Approved V3 strategy remains a unified isolated lab with individual sequential model runs and one winner shipped; no implementation or download started.
 - postingAllowed=false.
+
+
+## 2026-11-27 — Finance I1 integrated locally; publication gate; Phase 10 V3 research disposition
+
+This checkpoint supersedes earlier statements that Finance integration has not started. It does not supersede historical evidence. postingAllowed=false.
+
+### Finance integration acceptance and evidence
+- I1 selected the accepted V7 R6 Fix5 bytes for 111 paths (62 production, 47 Finance tests, one test helper, one review file), after review of 31 overlaps (27 production, four tests). No R4 overlay; local originals retained. 48 protected Documents/PDF/XLSX paths unchanged. No new accounting implementation in I1. Full visual Arabic parity was not independently recertified.
+- Isolated Windows verification Fix1: Finance 2494/2494, Documents 211/211, total 2705/2705, zero failures/skipped/cancelled; TypeScript PASS, scoped ESLint zero errors / 20 warnings; dependencies 6/6; reviewed source 431/431; protected 48/48. Workspace `D:\TomorrowFinancePhase1\Integration-I1-20261127-200811-4bcf8ef6\source`. Earlier incomplete Linux runs are not acceptance evidence. Evidence: `Tomorrow-Finance-Integration-I1-Fix1-Evidence-20261127-201136-5118f1a5.zip`.
+- Android integrated smoke, user-attested 3/3 PASS: initial USD 940.00 / OMR 63.235; USD 15 expense saved once -> USD 925.00; app closed/reopened -> same balances and one transaction; USD 25 expense rapid double Save -> USD 900.00, OMR 63.235 unchanged, one new transaction. This is a rapid-tap test, not a forced interrupted-save/restart receipt retry test; durable retry behavior is supported by prior software tests, not newly device-certified. Existing V7 APK used for isolated smoke. No repeat of passed tests without new evidence or changed composition.
+- Local apply completed: `Tomorrow-Finance-I1-LocalApply-Evidence-20261127-204002-59ca4b8d.zip`; 516/516 baseline backed up, 78 replacements + 33 additions, zero deletions, 549/549 final snapshot hashes, 111/111 patch and 48/48 protected hashes PASS; HEAD/index preserved. Checkpoint `C:\Users\Walid\Documents\Tomorrow-Project-Checkpoints\Finance-I1-LocalApply-20261127-204002-59ca4b8d`. The tested 431-file reviewed composition matches the local final snapshot; software/device acceptance was not rerun on main checkout. No source commit, push, merge, pull, build or dependency install.
+- Phase 1 remains CLOSED and now locally integrated. Phase 2/3 remediation locally integrated and accepted within I1 scope; formal final closure and source publication pending publication-scope review and any still-agreed functionality outside the accepted scope. Phase 4/5 prior functional acceptance preserved; do not reopen previously accepted work without a new defect. Preserve cross-currency loan/historical debt FX and installment scheduling/date-picker roadmap items until explicitly resolved or confirmed; no auto-posting. Phase 9 protected and not newly closed.
+
+### Read-only publication preflight — NO-GO for 111-path-only push
+- GitHub branch `codex/finance-8-6-expenses-redesign` compared directly against `aa228f32c9bb5d93e5b7531615e4e7519c71188c`: identical (ahead/behind 0, no files). Local HEAD remains `55a28c36f833aa663b5df0062deb3adf84d9705e`; no pull/rebase/merge/force push. The pinned 374-path remote review snapshot and local 398-path input were compared with exact I1 patch bytes; final local evidence contains 549 paths. All 431 reviewed paths match final local evidence.
+- Outside 111 I1 paths: 213 raw-byte differences vs remote, 139 CRLF/LF-only, 74 content differences after CRLF normalization (50 existing, 24 new). No remote-only path within the reviewed 374-path scope. These counts exclude 118 additional baseline paths outside the review scope (including documentation, assets, scripts, and backups); not a whole-repo tree comparison. All 111 I1 paths also differ after normalization. Do not publish 111 paths alone: the accepted local composition includes additional local dependencies and source. Example remote package.json lacks local expo-camera ~58.0.14 and expo-image-manipulator ~58.0.16. Do not silently publish protected Phase 9 work or local artifacts. Do not stage everything with git add -A.
+- Next: classify the 74 paths and full-tree remainder into required runtime/test dependencies, separately approved protected baseline, and excluded local artifacts; establish explicit source publication scope, construct a separate-index/temporary-worktree candidate from the current remote parent, verify resulting relevant source and dependency hashes against accepted I1 composition (or test a genuinely different composition before publishing). Preserve real local index, HEAD, backups, and untracked files. No code publication until scope is reconciled; no changes to main. Docs-only update is separate. Codex remaining ~7% reserved for targeted final review if useful.
+
+### Phase 10 V3 — research complete enough for conditional isolated-lab GO; not implementation approval
+- Claude README review: only Sherpa explicitly lists FFmpeg/ONNX dependencies; no proven direct collision, but README silence is not absence. Duplicate native libraries, STL and ggml symbol interactions remain runtime/build risks. Direct Android Gradle source inspection subsequently confirmed both use `-DANDROID_STL=c++_shared`; Whisper excludes `**/libc++_shared.so` and several RN shared libraries in its library packaging; Sherpa supports arm64-v8a, default minSdk 24 (host override possible), and extracts ONNX Java classes and JNI libraries from AARs. Whisper supports arm64 via architecture filters and prebuilt native core or source build. These are observed current repository sources, not pinned installed package versions. Source links: https://github.com/mybigday/whisper.rn/blob/main/android/build.gradle ; https://github.com/XDcobra/react-native-sherpa-onnx/blob/main/android/build.gradle . Reviewed file blob SHAs respectively `731085fc0682a9c3aa76e88a25b8c63b8ffa163a` and `58f3a7b14bf5d19dab6c07c8b13d25042223c68a`.
+- Sherpa flags `sherpaOnnxDisableFfmpeg=true` and `sherpaOnnxDisableLibarchive=true` available in inspected source; FFmpeg-disabled non-WAV conversion/decoding and libarchive-disabled extraction fail at runtime. Evaluate only if matching WAV corpus/local model distribution supports it. https://github.com/XDcobra/react-native-sherpa-onnx/blob/main/docs/disable-ffmpeg.md . Do not use blanket pickFirst to mask native mismatches. Pin versions; inspect resolved Gradle dependencies, per-ABI .so files, ELF dependencies/symbols, C++ runtime versions, effective minSdk and manifest, then build and exercise both engines sequentially on ARM64 Hermes. Coexistence, actual API floor, exact RN 0.88.1/Hermes compatibility, and lack of native collision are not yet proven. If necessary split into two equivalent isolated builds. Remove losing dependency, plugin/config/imports, models and copied native assets; regenerate clean lab native build and verify APK inventory and winning engine behavior before integration. No download/install/build/engine selection yet. No cloud, no paid APIs, no external OCR/voice processing, no posting.
+- Preserve V3 same 100 reference recordings, model candidates and metric thresholds; select one engine only after measured accuracy, amount/currency fidelity, English terms, latency, RAM, stability and installed size. No additional external reviewer required for current study; technical runtime gates remain.
+
+### Publication review inventory — 74 additional content differences (not approval to publish)
+
+| Path | Pinned remote comparison |
+|---|---|
+| `modules/tomorrow-pdf-extractor/android/build.gradle` | NEW |
+| `modules/tomorrow-pdf-extractor/android/src/main/AndroidManifest.xml` | NEW |
+| `modules/tomorrow-pdf-extractor/android/src/main/java/com/tomorrowlab/pdfextractor/PositionedTextStripper.kt` | NEW |
+| `modules/tomorrow-pdf-extractor/android/src/main/java/com/tomorrowlab/pdfextractor/RawTableLines.kt` | NEW |
+| `modules/tomorrow-pdf-extractor/android/src/main/java/com/tomorrowlab/pdfextractor/TomorrowPdfExtractorModule.kt` | NEW |
+| `modules/tomorrow-pdf-extractor/expo-module.config.json` | NEW |
+| `modules/tomorrow-pdf-extractor/package.json` | NEW |
+| `modules/tomorrow-pdf-extractor/src/index.ts` | NEW |
+| `package-lock.json` | MODIFIED |
+| `package.json` | MODIFIED |
+| `src/app/finance/add.tsx` | MODIFIED |
+| `src/app/finance/documents.tsx` | MODIFIED |
+| `src/app/finance/notifications.tsx` | MODIFIED |
+| `src/app/finance/report-accounts.tsx` | MODIFIED |
+| `src/app/finance/report-assets.tsx` | MODIFIED |
+| `src/app/finance/report-comparison.tsx` | MODIFIED |
+| `src/app/finance/report-expenses.tsx` | MODIFIED |
+| `src/app/finance/report-income.tsx` | MODIFIED |
+| `src/app/finance/report-installments.tsx` | MODIFIED |
+| `src/app/finance/report-loans.tsx` | MODIFIED |
+| `src/app/finance/reports.tsx` | MODIFIED |
+| `src/app/finance/statement-accounts.tsx` | MODIFIED |
+| `src/app/finance/statement-assets.tsx` | MODIFIED |
+| `src/app/finance/statement-comparison.tsx` | MODIFIED |
+| `src/app/finance/statement-debts.tsx` | MODIFIED |
+| `src/app/finance/statement-expenses.tsx` | MODIFIED |
+| `src/app/finance/statement-income.tsx` | MODIFIED |
+| `src/app/finance/statement-installments.tsx` | MODIFIED |
+| `src/app/finance/statement-loans.tsx` | MODIFIED |
+| `src/features/documents/domain/documentCommands.ts` | NEW |
+| `src/features/documents/domain/documentList.ts` | NEW |
+| `src/features/documents/domain/imageCapture.ts` | NEW |
+| `src/features/documents/extraction/pdfNativeEvidence.ts` | NEW |
+| `src/features/documents/extraction/pdfNativeRuntime.ts` | NEW |
+| `src/features/documents/import/duplicatePolicy.ts` | NEW |
+| `src/features/documents/storage/documentRepository.ts` | MODIFIED |
+| `src/features/finance/components/AmountInput.tsx` | MODIFIED |
+| `src/features/finance/components/DebtReportScreen.tsx` | MODIFIED |
+| `src/features/finance/components/FinanceActionButtons.tsx` | MODIFIED |
+| `src/features/finance/components/FinanceChoiceDropdown.tsx` | MODIFIED |
+| `src/features/finance/components/FinanceDisclosure.tsx` | MODIFIED |
+| `src/features/finance/components/FinanceModals.tsx` | MODIFIED |
+| `src/features/finance/components/FinanceNetworks.tsx` | MODIFIED |
+| `src/features/finance/components/RatesModal.tsx` | MODIFIED |
+| `src/features/finance/components/ScanDocumentButton.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/AssetTrendChart.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/BalanceCurrencyPicker.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/ComparisonExportActions.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/ReportChart.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/ReportDashboardActions.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/ReportDashboardChrome.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/ReportLayout.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/ReportTableActions.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/ReportUnifiedSix.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/SixReportPresentation.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/StatementExportActions.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/StatementSixUI.tsx` | MODIFIED |
+| `src/features/finance/components/reporting/StatementUnifiedChrome.tsx` | MODIFIED |
+| `src/features/finance/utils/brandedReportTablePrintHtml.ts` | MODIFIED |
+| `src/features/finance/utils/operatingStatementPrintHtml.ts` | MODIFIED |
+| `src/features/finance/utils/reportTableExport.ts` | MODIFIED |
+| `src/features/finance/utils/reportTableXlsx.ts` | MODIFIED |
+| `src/features/finance/utils/statementPrintHtml.ts` | MODIFIED |
+| `tests/documents-atomic-duplicate.test.cjs` | NEW |
+| `tests/documents-capture-p3.test.cjs` | NEW |
+| `tests/documents-commands-r10.test.cjs` | NEW |
+| `tests/documents-delete-r8.test.cjs` | NEW |
+| `tests/documents-duplicate-policy.test.cjs` | NEW |
+| `tests/documents-management-p2.test.cjs` | NEW |
+| `tests/documents-pdf-native-evidence-p4.test.cjs` | NEW |
+| `tests/documents-pdf-native-runtime-p4.test.cjs` | NEW |
+| `tests/documents-production-recovery.test.cjs` | NEW |
+| `tests/documents-ui-r10-fix2.test.cjs` | NEW |
+| `tests/finance-report-accounts-ui.test.cjs` | MODIFIED |
+
+postingAllowed=false
