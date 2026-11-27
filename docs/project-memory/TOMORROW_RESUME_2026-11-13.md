@@ -1052,3 +1052,77 @@ This dated closure supersedes historical Phase 1 pending/NO-GO statements in thi
 - `Tomorrow-R5-Source-for-R6-20261127-035529.zip`: `885c460ce7973737c9bc237512cb3b31dd02320e5cdaa42f407490fd3b487a39`.
 
 <!-- END_TOMORROW_FINANCE_PHASE1_CLOSURE_20261127 -->
+
+
+## 2026-11-27 — Consolidated post-closure status and controlled integration preflight
+<!-- TOMORROW_POST_CLOSURE_PREFLIGHT_20261127 -->
+
+### Current authoritative status
+- Finance Phase 1 CLOSED / GO for the accepted isolated V7-UI-R6 Fix5 candidate; no new Phase 1 defect confirmed. Finance 2494/2494 PASS, zero failures/skips, TypeScript PASS, scoped ESLint 0 errors/4 warnings, Android functional and visual acceptance user-attested PASS, independent Codex closure audit GO. No repeated tests.
+- Closure recorded locally and published in docs-only GitHub commit `8022d0be91d744d8711d717a26f19ebf2fe99557` on `codex/finance-8-6-expenses-redesign`. Local and remote closure documents verified 3/3 byte-identical. Local branch HEAD intentionally preserved at `55a28c36f833aa663b5df0062deb3adf84d9705e`; histories remain unsynchronized by design. Local checkpoint `C:\Users\Walid\Documents\Tomorrow-Project-Checkpoints\Phase1-Docs-LocalSync-Fix1-20261127-053348-d0f06972`. This is documentation publication, not source integration.
+- Codex read-only integration preflight (27 Nov, 05:39 user-provided report): GO to prepare isolated integration, NO-GO for bulk application. No new Finance defect or missing R4 fix confirmed. This addendum records the reported findings, not a new independent source audit.
+- Main root `D:\Mobile Apps\TomorrowApp`; accepted source `D:\TomorrowFinancePhase1\V7-UI-R6-Fix5-Verification-20261127-045356-681a8af4\source`; Android staging `D:\U77029` (V7 port 8097, preserve R2 port 8096). Preserve accepted artifacts and device data.
+
+### Exact cumulative Finance integration inventory (Codex-reported)
+62 differing production files; paths below relative to both roots, braces denote individual files:
+- Routes: `src/app/finance/{accounts,debts,installment-contract,installments,loans}.tsx`.
+- Persistence/stores: `src/features/finance/store/{accountingHydration,durableFinanceOperations,financePersistence,financeSubmissionIdentity,paymentAccountingVerification,paymentOperationRuntime,paymentOperations,productionFinancePersistence,useFinanceStore,useLedgerStore}.ts`.
+- Submission: `src/features/finance/components/{acknowledgedFinanceHandler,explicitFinanceForm,financeConfirmationAttempt}.ts`; `src/features/finance/components/{FinanceSaveStatus,FinanceSubmissionReceipt,useFinanceConfirmation}.tsx`.
+- Account/category/transaction: `src/features/finance/components/{AccountCard,AccountDetails,AddAccountModal,AddTransactionModal,CategoryManagementScreen,CurrencyDropdown,DirectHistoricalFxField,HistoricalFxField,TransactionsSection,TransferModal}.tsx`.
+- Asset/loan/shared: `src/features/finance/components/{AddAssetModal,AddDebtModal,AssetCard,AssetEntriesModal,FinanceDateField,FinanceDetailsModal,FinanceModalHeader,FormModal,LoanDetails,TotalCard}.tsx`.
+- Screens/reporting: `src/features/finance/screens/{AssetsScreen,CategoriesScreen,FinanceHomeScreen,IncomeExpensesScreen}.tsx`; `src/features/finance/components/reporting/ReportPrimitives.tsx`; `src/features/finance/hooks/useMonthlyFinanceSummary.ts`.
+- Types/utilities: `src/features/finance/types/ledger.ts`; `src/features/finance/utils/{amountExpression,amountPrecision,debtPaymentFx,exactAmountArithmetic,expensesStatementReconciliation,monthlySummary,paymentTransactionOwnership,reportAccounts,reportAggregation,reportSavedInstallments,reportTransactionClassifier,transactionDescription,transferRateSuggestion,transferSettlement}.ts`.
+- Verification: reconcile 48 differing `tests/finance-*.test.cjs`, plus `tests/helpers/assert-finance-report-navigation.cjs` and `review/transferAccountingPreview.ts`. Root package/configuration files match accepted source per Codex; no dependency change indicated.
+- 31 non-Documents paths differ from both remote and accepted source; use three-way reconciliation, including local route/modal/shared UI/screen/test changes. Highest-risk files: `useLedgerStore.ts`, `AddTransactionModal.tsx`, `FinanceHomeScreen.tsx`, `CategoryManagementScreen.tsx`, `IncomeExpensesScreen.tsx`. Do not blindly overwrite local changes.
+
+### Phase 2 and Phase 3 R4
+- Frozen Phase 2 R4 and Phase 3 R4 payload hashes independently verified by Codex 9/9 and 6/6. No missing R4 fix confirmed. Phase 2 opening dates, supported currency/precision, category archive/restore and historical references covered. Phase 3 refund precision/cumulative limits, actual-bank FX, historical evidence, date validation and history filters covered. Durable identities, explicit clear-field payloads and receipt-aware completion reconciled in V7. Do not overlay either R4 package; preserve as reference. Formal Phase 2/3 closure still pending review of integrated composition.
+
+### Protection and integration gates
+1. Before source work, obtain separate authorization; preserve full local working state including untracked protected files, and create isolated integration workspace. No pull/reset/stash/merge in the active dirty checkout as part of documentation.
+2. Reconcile cumulative Finance paths against the current remote (preflight pinned to 8022d0b; subsequent documentation-only updates allowed after verifying no code changes) and local working changes. Neither full-snapshot overwrite nor 16-file R6-only overlay is adequate. Retain accepted V7 accounting and persistence logic.
+3. Preserve current local `src/app/finance/documents.tsx`, `src/features/documents/`, `modules/tomorrow-pdf-extractor/`, existing PDF/image editor and frozen Excel/XLSX (especially `src/features/finance/utils/reportTableXlsx.ts`). Explicitly reconcile semantic assertions in `tests/finance-report-table-xlsx.test.cjs` and Documents assertions in `tests/finance-ui-consistency.test.cjs`; no silent replacement or test weakening.
+4. Review full isolated diff for protected-file, dependency and unintended changes; resolve 31 overlaps. Confirmed integration blockers: unreconciled overlaps, Documents divergence, integrated composition not verified. These are not reopened Phase 1 defects.
+5. Verify integrated composition once: Finance regression, TypeScript, scoped ESLint, relevant protected-module tests. Then short Android save/restart/receipt-retry smoke check only unless a concrete regression requires more. Preserve prior acceptance; no repeated full Android cycle.
+6. Only after review and separate approval, plan controlled application to main local checkout and Git history reconciliation. No merge to main, force push or automatic posting/replay.
+
+### Ordered remaining roadmap
+- Phase 1 closed; controlled integration next (not started). Phase 2/3 formal closure after integration; Phase 4/5 already functionally accepted, formal closure pending. Phase 6–8 review remaining agreed Finance features and close verified scope; do not claim all complete.
+- Retain pending cross-currency loan receipt/repayment, unsupported automatic historical/API debt FX, regular installment amount/date generation, permanent consistent calendar/date picker for all date entry (canonical validated YYYY-MM-DD for date-only values including opening balance). Keep financial integrity and precision rules unchanged.
+- Phase 9 Documents/PDF Smart Cocktail: protected; offline only; frozen Excel reader not to be modified. Resume independently under its approved scope after Finance integration gates. Phase 10 approved plan only (see V3 below); Phase 11 backup/sync remains pending. No new features implicitly authorized.
+- Codex preflight completed with limited usage; conserve remaining allowance, no further repetitive audit. High thinking for reconciliation/integrity/closure; Medium for routine implementation after authorization.
+- Documentation update only. No source integration, test execution, build, model download or dependency change. `postingAllowed=false`.
+<!-- END_TOMORROW_POST_CLOSURE_PREFLIGHT_20261127 -->
+
+## Phase 10 — Offline Voice Smart Recognition Plan V3 (2026-11-27)
+<!-- TOMORROW_PHASE10_V3_APPROVED_20261127 -->
+
+Status: APPROVED PLAN — IMPLEMENTATION PENDING. User approved the unified comparison lab on 27 November 2026. This addendum supersedes the earlier sequential candidate-selection strategy only; previous study and project records remain preserved.
+
+### Scope and constraints
+- Egyptian Arabic, English and mixed-language speech; financial amounts, currencies, dates and recurring terms. All inference and text processing remain on-device/offline after initial provisioning. No paid APIs, cloud speech processing or external audio uploads.
+- Build one independent Tomorrow Offline Voice Lab containing both candidate runtimes, whisper.cpp (via whisper.rn if compatible) and Sherpa-ONNX (via a compatible wrapper), and all verified, compatible candidate models for a unified comparison cycle. Do not add these to the active TomorrowApp during the study/lab stage.
+- Verify model provenance, multilingual support, licensing, exact artifact sizes and SHA256, Android ABI, Expo SDK 58 and React Native 0.88 compatibility before use. Download each required artifact once, cache it locally and record the hashes. No English-only models. Exact quantization variants and compatibility must be verified; no substitute model without documenting it.
+- Primary candidate matrix: Whisper Tiny Q5 (~31 MiB), Base Q5 (~57 MiB), Small Q5 (~181 MiB) via whisper.cpp; Whisper Tiny INT8 (~99 MB as reported for a third-party pack), Base INT8 (size unverified), Small INT8 (~358 MB reported for a third-party fine-tuned pack) via Sherpa-ONNX. These are estimates from the study/reviews, not measured installed sizes. Include all candidates that pass the technical and resource feasibility gates; record any candidate that cannot run and the reason. No unverified Egyptian-accuracy claims. Medium/Large, other engines and cloud APIs are outside this approved scope.
+
+### Execution sequence (future, after implementation authorization)
+1. Technical verification and isolated lab: prepare one common harness, compatible native runtimes, stable model adapters and offline recording/replay. Test on Huawei MAR-LX1A first; a second phone if available. Do not change the active project, Finance, Documents, PDF or the frozen Excel reader.
+2. Reference corpus: prepare 100 Egyptian/mixed-English financial utterances with human reference transcripts and expected amounts, currency codes and dates written before scoring. Cover integers, decimals, thousands, currency ambiguity, colloquial amounts, English terms, negations, corrections and background noise. Keep all audio and results locally. Fix the corpus, normalization/scoring rules and acceptance thresholds before comparison; reserve unseen examples for validation of later text processing.
+3. Unified benchmark: run each feasible model individually, not concurrently, with the same recordings, device and comparable conditions; record exact runtime/model versions, settings, model hash, cold/warm latency, real-time factor, peak RAM, stability, word error rate (WER), exact amounts and currencies, mixed-English terms, and actual model/native library/installed-size footprint. Record raw outputs and failures. Verify offline operation (including with network disabled). Do not assume model size alone measures final app size.
+4. Selection: compare all feasible candidates in one common report, not by subjective impressions. Proposed targets from the approved planning discussion: WER <=10% (word accuracy >=90%), exact amount/currency match >=99%, mixed-English term accuracy >=95%, processing time targeting recording duration or less (RTF <=1), stable on Huawei and fully offline. Define denominators and handling of missing/ambiguous fields before execution; report raw ASR separately from normalized/parsed results. Targets are not measured results or a guarantee. If none meets the acceptance gates, report NO-GO and review; do not silently lower financial safety criteria.
+5. Freeze the winner: retain one runtime and one multilingual model in the final integration candidate, excluding all losing runtimes/models from the shipped build. Preserve benchmark evidence outside the final application. Prefer the smallest installed footprint among candidates meeting the agreed accuracy, stability and performance gates. Verify removal and measure actual size impact.
+6. Smart local text processing: after ASR selection, implement deterministic normalization of spoken amounts, currency/date extraction and recurring financial vocabulary; preserve raw transcript, expose uncertainty, and never silently guess ambiguous financial data. First deliver editable transcript; structured fields are suggestions only and require explicit human review. Validate on held-out recordings, including amounts and currencies.
+7. Integration and acceptance: only after separate lab acceptance and authorization, integrate the winning engine/model and local parser into TomorrowApp, preserve existing behavior, measure APK/installed size and test offline Android operation. No automatic financial posting, replay or balance changes. postingAllowed=false throughout.
+
+### Workflow and status
+- High thinking effort for technical compatibility, accuracy evaluation and final financial safety/integration review; Medium for routine lab implementation and execution.
+- Phase 10 remains plan-only. No model downloads, package installations, native builds, test executions, source modifications or implementation-related Git operations authorized by this planning approval; documentation publication is separate.
+- Finance Phase 1 has since been independently audited, closed and documented; source integration is pending. This voice plan does not authorize Finance changes.
+- postingAllowed=false.
+<!-- END_TOMORROW_PHASE10_V3_APPROVED_20261127 -->
+
+### Subsequent technical review status (27 Nov 2026)
+- Gemini follow-up supplied no verified new lightweight Egyptian model, direct artifacts, measured accuracy or licensing evidence; no new candidate or change of strategy. Test Whisper initial_prompt on/off with identical settings and recordings, and measure any effect on amounts; keep raw transcripts and parser results separate.
+- Claude Browser native coexistence review pending: whisper.rn and react-native-sherpa-onnx in one isolated Android dev build with Expo SDK 58, RN 0.88.1 and Hermes; check ARM64, native dependency conflicts, minimum Android and safe removal of losing runtime. Do not claim compatibility until verified. Append new material findings after review.
+- Approved V3 strategy remains a unified isolated lab with individual sequential model runs and one winner shipped; no implementation or download started.
+- postingAllowed=false.
