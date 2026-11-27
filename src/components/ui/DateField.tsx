@@ -9,7 +9,6 @@ import { useTheme } from '@/theme';
 import {
     isoToDate,
     isValidISODate,
-    normalizeDigits,
     toLocalISODate,
 } from '@/utils/input';
 import { AppButton } from './AppButton';
@@ -17,13 +16,13 @@ import { AppInput } from './AppInput';
 
 interface DateFieldProps {
   label?: string;
-  /** "YYYY-MM-DD" (may be incomplete while typing). */
+  /** Canonical YYYY-MM-DD, or empty when unset. */
   value: string;
   onChange: (value: string) => void;
   containerStyle?: StyleProp<ViewStyle>;
 }
 
-/** Date input: type it manually, or pick it from the calendar icon. */
+/** Calendar-only date input; manual text entry is not supported. */
 export function DateField({
   label = 'Date',
   value,
@@ -40,7 +39,10 @@ export function DateField({
   const handlePick = (event: DateTimePickerEvent, selected?: Date) => {
     // Android shows a dialog that closes itself after one choice.
     if (Platform.OS === 'android') setOpen(false);
-    if (event.type === 'set' && selected) onChange(toLocalISODate(selected));
+    if (event.type === 'set' && selected) {
+      const next = toLocalISODate(selected);
+      if (isValidISODate(next)) onChange(next);
+    }
   };
 
   return (
@@ -48,10 +50,8 @@ export function DateField({
       <AppInput
         label={label}
         value={value}
-        onChangeText={(text) => onChange(normalizeDigits(text))}
+        editable={false}
         placeholder="YYYY-MM-DD"
-        keyboardType="numbers-and-punctuation"
-        maxLength={10}
         error={error}
         rightElement={
           <Pressable

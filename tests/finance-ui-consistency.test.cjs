@@ -210,7 +210,7 @@ test('Finance buttons wrap large text and retain disabled, loading and danger se
     noNestedPressables(tree);
   }
 });
-test('Finance date field is neutral with gold accessible calendar and unchanged text normalization', () => {
+test('Finance date field is neutral with gold accessible calendar and calendar-only entry', () => {
   let value;
   const tree = FinanceDateField({ value: '2026-11-17', onChange: next => value = next });
   const input = tree.props.children[0];
@@ -218,12 +218,13 @@ test('Finance date field is neutral with gold accessible calendar and unchanged 
   assert.equal(input.props.rightElement.props.accessibilityLabel, 'Open calendar');
   assert.equal(input.props.rightElement.props.children.props.color, '#D6B777');
   assert.equal(input.props.rightElement.props.style.minHeight, 44);
-  input.props.onChangeText('٢٠٢٦-١١-١٧');
-  assert.equal(value, '2026-11-17');
+  assert.equal(input.props.editable, false);
+  assert.equal(input.props.onChangeText, undefined);
+  assert.equal(value, undefined);
   const pickerOnly = FinanceDateField({ value: '2026-11-17', pickerOnly: true, onChange: next => value = next }).props.children[0];
   assert.equal(pickerOnly.props.editable, false);
-  pickerOnly.props.onChangeText('2026-11-18');
-  assert.equal(value, '2026-11-17', 'picker-only fields ignore manual input');
+  assert.equal(pickerOnly.props.onChangeText, undefined);
+  assert.equal(value, undefined, 'no manual entry callback is exposed');
 });
 
 test('Documents uses its accepted compact header and Import PDF retains its handler and busy gates', () => {

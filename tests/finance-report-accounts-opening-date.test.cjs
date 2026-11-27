@@ -217,7 +217,7 @@ test('opening-date field uses theme text and border colors', () => {
     '../src/features/finance/components/AccountDetails.tsx'), 'utf8');
   assert.match(source, /<FinanceDateField[\s\S]*?value=\{openingDateDraft\}[\s\S]*?pickerOnly/);
   const shared = fs.readFileSync(path.join(__dirname, '../src/features/finance/components/FinanceDateField.tsx'), 'utf8');
-  assert.match(shared, /editable=\{!pickerOnly\}/);
+  assert.match(shared, /editable=\{false\}/);
   assert.match(shared, /fieldStyle=\{\{ borderColor: error \? '#DC2626' : '#CBD5E1'/);
   const input = fs.readFileSync(path.join(__dirname, '../src/components/ui/AppInput.tsx'), 'utf8');
   assert.match(input, /color: colors\.text/);
