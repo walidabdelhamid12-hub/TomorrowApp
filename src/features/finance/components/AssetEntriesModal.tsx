@@ -1,10 +1,16 @@
+import { FinanceDateField } from '@/features/finance/components/FinanceDateField';
+import { formPayload, submitFinanceForm } from '@/features/finance/components/explicitFinanceForm';
+import { roundMoney } from '@/features/finance/utils/finance';
+import { acknowledgedFinanceHandler, afterFinanceSave } from '@/features/finance/components/acknowledgedFinanceHandler';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
+import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { AssetTypeIcon } from '@/features/finance/components/AssetTypeIcon';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
     Alert,
     Modal,
@@ -41,7 +47,8 @@ export function AssetEntriesModal({
   onSave,
   onDelete,
 }: AssetEntriesModalProps) {
-  const { colors, spacing } = useTheme();
+  const { colors } = useTheme();
+  const { t } = useAppLanguage();
   const { confirm, confirmation } = useFinanceConfirmation();
   const metals = useCurrencyStore(s => s.metals);
 
@@ -50,16 +57,22 @@ export function AssetEntriesModal({
   const [date, setDate] = useState('');
   const [note, setNote] = useState('');
 
-  useEffect(() => {
+  const entriesContext = visible ? asset?.id ?? null : null;
+  const [loadedEntriesContext, setLoadedEntriesContext] = useState<string | null>(null);
+  if (loadedEntriesContext !== entriesContext) {
+    setLoadedEntriesContext(entriesContext);
     setEditingId(null);
-  }, [asset?.id, visible]);
+    setAmount('');
+    setDate('');
+    setNote('');
+  }
 
   if (!asset) return null;
 
   const isMetal =
     asset.category === 'gold' || asset.category === 'silver';
 
-  const unit = isMetal ? 'grams' : asset.currencyCode;
+  const unit = isMetal ? t('grams', 'جرام') : asset.currencyCode;
 
   const sortedEntries = [...asset.entries].sort((a, b) =>
     b.date.localeCompare(a.date),
@@ -83,21 +96,21 @@ export function AssetEntriesModal({
     const parsedAmount = parseAmount(amount);
 
     if (!amount.trim() || parsedAmount === null) {
-      Alert.alert('Invalid amount', 'Enter a valid amount.');
+      afterFinanceSave(() => Alert.alert(t('Invalid amount', 'مبلغ غير صالح'), t('Enter a valid amount.', 'أدخل مبلغًا صحيحًا.')));
       return;
     }
 
     if (parsedAmount < 0) {
-      Alert.alert('Invalid amount', 'Amount cannot be negative.');
+      afterFinanceSave(() => Alert.alert(t('Invalid amount', 'مبلغ غير صالح'), t('Amount cannot be negative.', 'لا يمكن أن يكون المبلغ سالبًا.')));
       return;
     }
 
     if (!isMetal && !hasValidCurrencyPrecision(amount, asset.currencyCode)) {
-      Alert.alert('Invalid amount precision', `${asset.currencyCode} allows up to ${getCurrencyDecimals(asset.currencyCode)} decimal places. Please correct the amount before saving.`);
+      afterFinanceSave(() => Alert.alert(t('Invalid amount precision', 'دقة المبلغ غير صالحة'), `${asset.currencyCode} ${t('allows up to', 'يسمح بحد أقصى')} ${getCurrencyDecimals(asset.currencyCode)} ${t('decimal places. Please correct the amount before saving.', 'منازل عشرية. صحح المبلغ قبل الحفظ.')}`));
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
-      Alert.alert('Invalid date', 'Use YYYY-MM-DD format.');
+      afterFinanceSave(() => Alert.alert(t('Invalid date', 'تاريخ غير صالح'), t('Use YYYY-MM-DD format.', 'استخدم تنسيق YYYY-MM-DD.')));
       return;
     }
 
@@ -109,28 +122,46 @@ export function AssetEntriesModal({
       checkDate.getMonth() !== month - 1 ||
       checkDate.getDate() !== day
     ) {
-      Alert.alert('Invalid date', 'Enter a real calendar date.');
+      afterFinanceSave(() => Alert.alert(t('Invalid date', 'تاريخ غير صالح'), t('Enter a real calendar date.', 'أدخل تاريخًا صحيحًا.')));
       return;
     }
 
-    onSave(asset.id, entryId, {
-      amount: parsedAmount,
-      date: date.trim(),
-      note: note.trim() || undefined,
-    });
-
-    cancelEditing();
+    const patch = { amount: roundMoney(parsedAmount), date: date.trim(), note: note.trim() };
+    if (!Number.isSafeInteger(Math.round(parsedAmount * 1000))) { Alert.alert(t('Invalid amount', 'مبلغ غير صالح')); return; }
+    const expectedUpdatedAt = asset.updatedAt;
+    return submitFinanceForm("src/features/finance/components/AssetEntriesModal.tsx:84",
+      formPayload('asset.entry.edit', asset.id, patch, { entryId, expectedUpdatedAt }), () => {
+        const current = useFinanceStore.getState().assets.filter(item => item.id === asset.id);
+        if (current.length !== 1 || current[0].updatedAt !== expectedUpdatedAt || current[0].entries.filter(item => item.id === entryId).length !== 1) return false;
+        onSave(asset.id, entryId, patch);
+        const after = useFinanceStore.getState().assets.filter(item => item.id === asset.id);
+        const saved = after.length === 1 ? after[0].entries.filter(item => item.id === entryId) : [];
+        if (saved.length !== 1 || saved[0].amount !== patch.amount || saved[0].date !== patch.date || saved[0].note !== patch.note) throw new Error('Asset movement was not fully saved.');
+        return true;
+      }, cancelEditing, () => Alert.alert(t('Cannot save entry', 'تعذر حفظ الحركة')));
   };
 
   const confirmDelete = (entry: AssetEntry) => {
-    const message = 'This dated movement will be permanently removed.';
+    const message = t('This dated movement will be permanently removed.', 'سيتم حذف هذه الحركة المؤرخة نهائيًا.');
 
-    const remove = () => onDelete(asset.id, entry.id);
-
-    confirm('Delete entry?', message, () => {
-          remove();
-          if (editingId === entry.id) cancelEditing();
-        }, 'Delete');
+    const assetId = asset.id;
+    const entryId = entry.id;
+    const remove = () => acknowledgedFinanceHandler("src/features/finance/components/AssetEntriesModal.tsx:130", () => undefined, {
+      payload: { operation: 'deleteAssetEntry', assetId, entryId },
+      mutate: () => {
+        const before = useFinanceStore.getState().assets.filter(item => item.id === assetId);
+        if (before.length !== 1 || before[0].entries.filter(item => item.id === entryId).length !== 1) return false;
+        onDelete(assetId, entryId); // parent callback is a raw synchronous store action
+        const after = useFinanceStore.getState().assets.filter(item => item.id === assetId);
+        return after.length === 1 && !after[0].entries.some(item => item.id === entryId);
+      },
+      onCommitted: result => {
+        if (result === true) {
+          if (editingId === entryId) cancelEditing();
+        } else Alert.alert(t('Cannot delete entry', 'تعذر حذف الحركة'));
+      },
+    })();
+    confirm(t('Delete entry?', 'حذف الحركة؟'), message, remove, t('Delete', 'حذف'));
   };
 
   return (
@@ -153,7 +184,7 @@ export function AssetEntriesModal({
         >
           <View style={styles.header}>
             <View style={styles.flex}>
-              <AssetTypeIcon category={asset.category} currencyCode={'currencyCode' in asset ? asset.currencyCode : undefined} /><AppText variant="h3">Asset movements</AppText>
+              <AssetTypeIcon category={asset.category} currencyCode={'currencyCode' in asset ? asset.currencyCode : undefined} /><AppText variant="h3">{t("Asset movements", "حركات الأصل")}</AppText>
               <AppText color="textSecondary">
                 {asset.name}
               </AppText>
@@ -165,7 +196,7 @@ export function AssetEntriesModal({
           </View>
 
           {(asset.category === 'gold' || asset.category === 'silver') && <AppText variant="caption" color="textSecondary">
-            {asset.category === 'gold' ? 'Gold reference: 24K · ' + (metals.gold24PerGram ?? 'Not set') : 'Silver reference (purity unspecified): ' + (metals.silverPerGram ?? 'Not set')} EGP per 1 gram. Valuation uses full source precision.
+            {asset.category === 'gold' ? t('Gold reference: 24K', 'مرجع الذهب: عيار 24') + ' · ' + (metals.gold24PerGram ?? t('Not set', 'غير محدد')) : t('Silver reference (purity unspecified)', 'مرجع الفضة (النقاوة غير محددة)') + ': ' + (metals.silverPerGram ?? t('Not set', 'غير محدد'))} {t('EGP per 1 gram. Valuation uses full source precision.', 'جنيه مصري لكل جرام. يُستخدم كامل مستوى الدقة للمصدر في التقييم.')}
           </AppText>}
           <ScrollView
             keyboardShouldPersistTaps="handled"
@@ -173,7 +204,7 @@ export function AssetEntriesModal({
           >
             {sortedEntries.length === 0 ? (
               <AppText color="textSecondary" align="center">
-                No entries for this asset yet.
+                {t("No entries for this asset yet.", "لا توجد حركات لهذا الأصل بعد.")}
               </AppText>
             ) : (
               sortedEntries.map((entry) => {
@@ -190,18 +221,18 @@ export function AssetEntriesModal({
                     {editing ? (
                       <>
                         <AppText variant="bodyStrong">
-                          Edit entry
+                          {t("Edit entry", "تعديل الحركة")}
                         </AppText>
 
                         <AppText color="textSecondary">
-                          Amount ({unit})
+                          {t('Amount', 'المبلغ')} ({unit})
                         </AppText>
 
                         <TextInput
                           value={amount}
                           onChangeText={setAmount}
                           keyboardType="decimal-pad"
-                          placeholder="Amount"
+                          placeholder={t('Amount', 'المبلغ')}
                           placeholderTextColor={colors.textSecondary}
                           style={[
                             styles.input,
@@ -213,32 +244,14 @@ export function AssetEntriesModal({
                           ]}
                         />
 
-                        <AppText color="textSecondary">
-                          Date (YYYY-MM-DD)
-                        </AppText>
+                        <FinanceDateField label={t('Date', 'التاريخ')} value={date} onChange={setDate} pickerOnly />
 
-                        <TextInput
-                          value={date}
-                          onChangeText={setDate}
-                          placeholder="YYYY-MM-DD"
-                          placeholderTextColor={colors.textSecondary}
-                          autoCapitalize="none"
-                          style={[
-                            styles.input,
-                            {
-                              color: colors.text,
-                              borderColor: colors.border,
-                              backgroundColor: colors.background,
-                            },
-                          ]}
-                        />
-
-                        <AppText color="textSecondary">Note</AppText>
+                        <AppText color="textSecondary">{t("Note", "ملاحظة")}</AppText>
 
                         <TextInput
                           value={note}
                           onChangeText={setNote}
-                          placeholder="Optional note"
+                          placeholder={t('Optional note', 'ملاحظة اختيارية')}
                           placeholderTextColor={colors.textSecondary}
                           style={[
                             styles.input,
@@ -253,14 +266,14 @@ export function AssetEntriesModal({
                         <View style={styles.editActions}>
                           <View style={styles.flex}>
                             <AppButton
-                              title="Save"
+                              title={t('Save', 'حفظ')}
                               accentColor={moduleColors.finance}
                               onPress={() => saveEditing(entry.id)}
                             />
                           </View>
                           <View style={styles.flex}>
                             <AppButton
-                              title="Cancel"
+                              title={t('Cancel', 'إلغاء')}
                               variant="secondary"
                               onPress={cancelEditing}
                             />
@@ -286,7 +299,7 @@ export function AssetEntriesModal({
                             ) : null}
                           </View>
 
-                          <FinanceActionButtons label={'entry dated ' + entry.date} onEdit={() => startEditing(entry)} onDelete={() => confirmDelete(entry)} />
+                          <FinanceActionButtons label={t('Entry dated ', 'حركة بتاريخ ') + entry.date} onEdit={() => startEditing(entry)} onDelete={() => confirmDelete(entry)} />
                         </View>
                       </>
                     )}
@@ -296,7 +309,7 @@ export function AssetEntriesModal({
             )}
           </ScrollView>
 
-          <AppButton title="Close" variant="secondary" onPress={onClose} />
+          <AppButton title={t('Close', 'إغلاق')} variant="secondary" onPress={onClose} />
         </View>
       </View>
     </Modal>

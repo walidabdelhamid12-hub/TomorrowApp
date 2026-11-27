@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -10,24 +11,26 @@ import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { currencyLabel } from './ReportPrimitives';
 
 export function ReportDashboardHeader({ kind }: { kind: 'income' | 'expenses' }) {
+  const { t } = useAppLanguage();
   const router = useRouter();
   const { scheme } = useTheme();
   const tokens = getFinanceDesignTokens(scheme);
   return <View style={{ backgroundColor: tokens.header, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, marginBottom: 12, overflow: 'hidden' }}>
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, minHeight: 48 }}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()}
+      <Pressable accessibilityRole="button" accessibilityLabel={t("Back", "رجوع")} onPress={() => router.back()}
         style={{ width: 40, minHeight: 44, justifyContent: 'center' }}><Ionicons name="arrow-back" size={22} color="white" /></Pressable>
-      <AppText variant="bodyStrong" style={{ color: 'white', flex: 1, textAlign: 'center', fontSize: 17 }}>Tomorrow Finance Report</AppText>
+      <AppText variant="bodyStrong" style={{ color: 'white', flex: 1, textAlign: 'center', fontSize: 17 }}>{'Tomorrow Finance Report'}</AppText>
       <View style={{ width: 40 }} />
     </View>
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4, paddingBottom: 12 }}>
       <Ionicons name="document-text-outline" size={20} color={kind === 'income' ? tokens.income : tokens.expense} />
-      <AppText variant="bodyStrong" style={{ color: kind === 'income' ? tokens.income : tokens.expense, fontSize: 16, fontWeight: '700' }}>{kind === 'income' ? 'Income Report' : 'Expenses Report'}</AppText>
+      <AppText variant="bodyStrong" style={{ color: kind === 'income' ? tokens.income : tokens.expense, fontSize: 16, fontWeight: '700' }}>{kind === 'income' ? t('Income Report', 'تقرير الدخل') : t('Expenses Report', 'تقرير المصروفات')}</AppText>
     </View>
   </View>;
 }
 
 export function ReportDashboardDates({ period, onChange }: { period: { from: string; to: string }; onChange: (period: { from: string; to: string }) => void }) {
+  const { t } = useAppLanguage();
   const [editing, setEditing] = useState<'from' | 'to' | null>(null);
   const { scheme } = useTheme();
   const tokens = getFinanceDesignTokens(scheme);
@@ -37,10 +40,10 @@ export function ReportDashboardDates({ period, onChange }: { period: { from: str
       paddingHorizontal: 9, marginBottom: 9, minHeight: 46, backgroundColor: tokens.surface }}>
       <Ionicons name="calendar" size={20} color="#D6B777" />
       {(['from', 'to'] as const).map((key, index) => <Pressable key={key} accessibilityRole="button"
-        accessibilityLabel={`${key} date: ${period[key]}`} onPress={() => setEditing(key)}
+        accessibilityLabel={`${key === 'from' ? t("From", "من") : t("To", "إلى")} ${t("date", "تاريخ")}: ${period[key]}`} onPress={() => setEditing(key)}
         style={{ flex: 1, minHeight: 44, justifyContent: 'center', paddingLeft: 8 }}>
         <AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}
-          style={{ fontSize: 12, fontWeight: '700', color: tokens.text }}>{index ? 'To ' : 'From '}{period[key]}</AppText>
+          style={{ fontSize: 12, fontWeight: '700', color: tokens.text }}>{index ? t('To', 'إلى') : t('From', 'من')} {period[key]}</AppText>
       </Pressable>)}
       <Ionicons name="chevron-down" size={15} color={tokens.text} />
     </View>
@@ -54,7 +57,7 @@ export function ReportDashboardDates({ period, onChange }: { period: { from: str
         onChange(next);
       }} />}
     {editing && Platform.OS === 'ios' && <Pressable accessibilityRole="button" onPress={() => setEditing(null)}
-      style={{ minHeight: 44, justifyContent: 'center' }}><AppText>Done</AppText></Pressable>}
+      style={{ minHeight: 44, justifyContent: 'center' }}><AppText>{t("Done", "تم")}</AppText></Pressable>}
   </>;
 }
 
@@ -63,11 +66,12 @@ export function ReportDashboardMetrics({ kind, total, currency, transactionCount
 }) {
   const { scheme } = useTheme();
   const tokens = getFinanceDesignTokens(scheme);
+  const { t } = useAppLanguage();
   const cards = [
-    { label: incomplete ? 'Known Total' : kind === 'income' ? 'Total Income' : 'Total Expenses',
+    { label: incomplete ? t('Known Total', 'الإجمالي المعروف') : kind === 'income' ? t('Total Income', 'إجمالي الدخل') : t('Total Expenses', 'إجمالي المصروفات'),
       value: total !== null && Number.isFinite(total) ? formatAmount(total, currency) : '—', unit: currencyLabel(currency) },
-    { label: 'Transactions', value: String(transactionCount), unit: 'Verified' },
-    { label: 'Currencies', value: String(currencyCount), unit: 'Separate' },
+    { label: t('Transactions', 'المعاملات'), value: String(transactionCount), unit: t('Verified', 'متحقق منها') },
+    { label: t('Currencies', 'العملات'), value: String(currencyCount), unit: t('Separate', 'منفصلة') },
   ];
   return <View style={{ flexDirection: 'row', gap: 7, marginBottom: 10 }}>
     {cards.map(card => <View key={card.label} style={{ flex: 1, minWidth: 0, backgroundColor: tokens.surface,

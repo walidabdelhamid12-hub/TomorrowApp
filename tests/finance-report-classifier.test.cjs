@@ -64,7 +64,7 @@ test('loan payment is classified without inventing interest/principal split', ()
   const loan = { id: 'loan', currencyCode: 'EGP', payments: [{ id: 'p', amount: 10000,
     latePaymentFee: 200, date: payment.date, accountId: 'bank', ledgerTransactionId: 'pay' }] };
   const item = classify(payment, ctx([payment], [loan]));
-  assert.equal(item.kind, 'loan_payment');
+  assert.equal(item.kind, 'unknown');
   assert.equal(item.expenseAmount, 0);
 });
 test('verified receivable collection is excluded from operating income', () => {
@@ -215,4 +215,49 @@ test('account IDs must be unique even across currencies', () => {
   const data = ctx([t]);
   data.ledger.accounts.push(account('bank', 'USD'));
   assert.equal(classify(t, data).kind, 'unknown');
+});
+
+
+test('R4 device scenario: loan receipt and debt principal excluded, only loan financing cost and genuine fee counted', () => {
+  const {getClassifiedMonthlyFinanceSummary}=require('../src/features/finance/utils/monthlySummary.ts');
+  const {buildExpensesStatement}=require('../src/features/finance/utils/expensesStatementReconciliation.ts');
+  const receipt=tx('received','income',100,{currencyCode:'USD',accountId:'other'});
+  const installment=tx('installment','expense',20,{currencyCode:'USD',accountId:'other',purpose:'loan_payment',linkedEntityType:'loan',linkedEntityId:'l',linkedPaymentId:'p'});
+  const payable=tx('paid','expense',40,{currencyCode:'USD',accountId:'other',purpose:'debt_payment',linkedEntityType:'debt',linkedEntityId:'d',linkedPaymentId:'dp'});
+  const collection=tx('collected','income',40,{currencyCode:'USD',accountId:'other',purpose:'debt_collection',linkedEntityType:'debt',linkedEntityId:'r',linkedPaymentId:'rp'});
+  const food=tx('food','expense',4,{currencyCode:'OMR',accountId:'omr'});
+  const first=tx('refund1','expense',1.234,{currencyCode:'OMR',accountId:'omr',entryType:'refund',relatedTransactionId:'food'});
+  const second=tx('refund2','expense',2.001,{currencyCode:'OMR',accountId:'omr',entryType:'refund',relatedTransactionId:'food'});
+  const loan={id:'l',currencyCode:'USD',principalAmount:100,totalRepaymentAmount:120,receivedAmount:100,receivedAt:receipt.date,receiptTransactionId:receipt.id,payments:[{id:'p',amount:20,date:installment.date,accountId:'other',ledgerTransactionId:installment.id}]};
+  const debt=(id,direction,pid,row)=>({id,direction,currencyCode:'USD',payments:[{id:pid,amount:40,date:row.date,accountId:'other',ledgerTransactionId:row.id}]});
+  const data=ctx([receipt,installment,payable,collection,food,first,second],[loan],[debt('d','payable','dp',payable),debt('r','receivable','rp',collection)]);
+  data.ledger.accounts.push(account('omr','OMR'));
+  const before=structuredClone(data);
+  assert.equal(classify(installment,data).expenseAmount,3.33);
+  assert.equal(classify(receipt,data).incomeAmount,0);
+  assert.equal(classify(payable,data).expenseAmount,0);
+  assert.equal(classify(collection,data).incomeAmount,0);
+  const result=buildExpensesStatement(data,{from:'2026-11-01',to:'2026-11-30'});
+  assert.equal(result.reconciled,true);
+  assert.equal(result.rows.find(r=>r.id==='installment').amount,3.33);
+  assert.deepEqual(getClassifiedMonthlyFinanceSummary(data,'2026-11','USD',{USD:1,OMR:2.5},['USD','OMR']),{income:0,expense:5.243,missing:0});
+  assert.deepEqual(data,before);
+});
+
+test('R4 cumulative minor-unit financing allocation reconciles the whole contract',()=>{
+  const {verifiedLoanFinanceCost}=require('../src/features/finance/utils/reportTransactionClassifier.ts');
+  const loan={currencyCode:'USD',principalAmount:100,totalRepaymentAmount:120,payments:Array.from({length:6},(_,i)=>({id:'p'+i,amount:20,latePaymentFee:i===0?1:0}))};
+  assert.deepEqual(loan.payments.map(p=>verifiedLoanFinanceCost(loan,p)),[4.33,3.34,3.33,3.33,3.34,3.33]);
+});
+
+test('R4 default fee category is staged only for the explicit fee and never resurrects archived or conflicting identities',()=>{
+  const {categoriesForTransferFee,TRANSFER_FEES_CATEGORY:c}=require('../src/features/finance/utils/transferSettlement.ts');
+  const ledger=ctx([]).ledger;
+  assert.equal(categoriesForTransferFee({feeAmount:0,feeCategoryId:c.id},ledger),ledger.categories);
+  assert.deepEqual(categoriesForTransferFee({feeAmount:2,feeCategoryId:c.id},ledger),[c]);
+  assert.deepEqual(ledger.categories,[]);
+  ledger.categories=[{...c,archived:true}];
+  assert.equal(categoriesForTransferFee({feeAmount:2,feeCategoryId:c.id},ledger),ledger.categories);
+  ledger.categories=[];ledger.accounts.push(account(c.id));
+  assert.equal(categoriesForTransferFee({feeAmount:2,feeCategoryId:c.id},ledger),ledger.categories);
 });

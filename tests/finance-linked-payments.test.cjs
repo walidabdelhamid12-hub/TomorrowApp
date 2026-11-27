@@ -243,10 +243,27 @@ test('rejected finance deletion restores ledger transaction removed during rever
   assertRejected(() => reverseLinkedPayment(debtRef));
 });
 
-test('runtime subscriber exception after ledger mutation restores both stores', () => {
+test('runtime subscriber exception fences uncertain persistence without claiming rollback', async () => {
+  // A failed persistence session is intentionally sticky. Isolate the fault
+  // instead of resetting its safety latch to let later tests keep writing.
+  if (!process.env.TOMORROW_FINANCE_FAULT_CHILD) {
+    const { spawnSync } = require('node:child_process');
+    const result = spawnSync(process.execPath, ['--test', '--test-name-pattern=^runtime subscriber exception fences', __filename], {
+      env: {...process.env, TOMORROW_FINANCE_FAULT_CHILD: '1'}, encoding: 'utf8', timeout: 30000,
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return;
+  }
   let fired = false;
   const unsubscribe = ledger.subscribe(() => { if (!fired) { fired = true; throw new Error('Injected subscriber error'); } });
-  try { assertRejected(() => editLinkedPayment(loanRef, edit)); } finally { unsubscribe(); }
+  try {
+    const result = editLinkedPayment(loanRef, edit);
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /rollback failed/i);
+    const {acknowledgeFinancePersistence: ack} = require('../src/features/finance/store/productionFinancePersistence.ts');
+    await assert.rejects(ack('tomorrow:ledger'), /persistence mutation/);
+    assert.throws(() => ledger.setState({transactions: []}), /persistence mutation/);
+  } finally { unsubscribe(); }
 });
 
 test('confirmed loan receipt is protected from generic edits and deletion', () => {
@@ -1103,3 +1120,36 @@ for (const kind of ['debt', 'loan']) {
     assert.strictEqual(ledger.getState().transactions.find(t => t.id === 'orphan-refund'), refund);
   });
 }
+
+test('enhanced transfer fee is owned, protected, updated and removed with the actual bank credit', () => {
+  finance.setState({loans: [], debts: []});
+  ledger.setState({accounts:[{...account('a'),currencyCode:'OMR',initialBalance:100},{...account('b'),initialBalance:0}],transactions:[],transfers:[]});
+  const id=ledger.getState().addTransfer({fromAccountId:'a',toAccountId:'b',fromAmount:10.123,fromCurrencyCode:'OMR',toAmount:26.32,toCurrencyCode:'USD',exchangeRate:2.6,actualReceivedConfirmed:true,feeAmount:.1,feeCategoryId:'out',date,type:'internal'});
+  assert.ok(id); const fee=ledger.getState().transactions[0];
+  assert.equal(balance('a'),89.777); assert.equal(balance('b'),26.32);
+  assert.equal(ledger.getState().updateTransaction(fee.id,{amount:.2}),false);
+  assert.equal(ledger.getState().removeTransaction(fee.id),false);
+  assert.equal(ledger.getState().updateTransfer(id,{toAmount:26.31,actualReceivedConfirmed:true,feeAmount:.05}),true);
+  assert.equal(ledger.getState().transactions.length,1); assert.equal(ledger.getState().transactions[0].id,fee.id);
+  assert.equal(balance('a'),89.827); assert.equal(balance('b'),26.31);
+  ledger.getState().removeTransfer(id);
+  assert.equal(ledger.getState().transactions.length,0); assert.equal(ledger.getState().transfers.length,0);
+  assert.equal(balance('a'),100); assert.equal(balance('b'),0);
+});
+
+for (const direction of ['payable','receivable']) test('R4 cross-currency debt '+direction+' preserves obligation and actual cash through edit and reverse', () => {
+  ledger.setState(s=>({accounts:s.accounts.map(a=>a.id==='b'?{...a,currencyCode:'OMR'}:a)}));
+  if(direction==='receivable') {changeDebt(d=>({...d,direction}));changeTx('dt',t=>({...t,type:'income',purpose:'debt_collection',categoryId:'in'}));}
+  const sign=direction==='payable'?-1:1, categoryId=direction==='payable'?'out':'in';
+  const input={entityType:'debt',entityId:'debt',accountId:'b',amount:60,date,categoryId,debtFx:{actualAmount:24.123,quotedRate:2.5}};
+  assertRejected(()=>postLinkedPayment({...input,debtFx:{actualAmount:24.1234,quotedRate:2.5}}));
+  assertRejected(()=>postLinkedPayment({...input,debtFx:undefined}));
+  assert.equal(postLinkedPayment(input).ok,true);
+  const d=finance.getState().debts[0], payment=d.payments.find(p=>p.id!=='dp'), ref={entityType:'debt',entityId:d.id,paymentId:payment.id};
+  const t=ledger.getState().transactions.find(t=>t.id===payment.ledgerTransactionId);
+  assert.equal(getDebtRemaining(d),390); assert.equal(t.originalAmount,60);assert.equal(t.originalCurrencyCode,'USD');assert.equal(t.amount,24.123);assert.equal(t.directHistoricalFx.rate,2.5);assert.equal(balance('b'),2000+sign*24.123);
+  assertRejected(()=>editLinkedPayment(ref,{amount:70,date}));
+  assert.equal(editLinkedPayment(ref,{amount:70,date,debtFx:{actualAmount:28.456,quotedRate:2.5}}).ok,true);
+  assert.equal(getDebtRemaining(finance.getState().debts[0]),380);assert.equal(balance('b'),2000+sign*28.456);
+  assert.equal(reverseLinkedPayment(ref).ok,true);assert.equal(getDebtRemaining(finance.getState().debts[0]),450);assert.equal(balance('b'),2000);
+});

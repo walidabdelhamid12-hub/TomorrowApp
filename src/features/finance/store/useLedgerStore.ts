@@ -1,12 +1,15 @@
+import { allowsLegacyDebtFx, buildDebtPaymentFx, type DebtPaymentFx } from '../utils/debtPaymentFx';
+import { assertAccountingHydration } from './accountingHydration';
+import { categoriesForTransferFee, attachTransferSettlement, canFundEnhancedSettlement, isEnhancedSettlement, validSettlementOptions, transferSettlementProblem, assertTransferSettlementEvidence } from '../utils/transferSettlement';
 import { isValidHistoricalFx } from '@/features/finance/utils/historicalFx';
 import { isValidCrossCurrencyMetadata } from '@/features/finance/utils/crossCurrencyMetadata';
-import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
+import { getCurrencyDecimals, isSupportedCurrency } from '@/features/finance/constants/currencies';
 import { isPaymentOperationReceipt, type PaymentOperationReceipt } from '@/features/finance/types/paymentOperations';
 import { reservedPaymentMatches } from '@/features/finance/utils/reservedPayments';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assertAccountingStorageVersion, paymentJournalMetadata } from '@/features/finance/types/paymentJournalInstallation';
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage } from 'zustand/middleware';
 import { paymentRuntimePersist as persist } from './paymentOperationRuntime';
@@ -51,7 +54,7 @@ interface LedgerActions {
   /** Caller must acknowledge the prepared journal and hold the accounting gate. */
   addReservedPaymentTransaction: (receipt: PaymentOperationReceipt) => EntityId | null;
   // Accounts
-  addAccount: (input: NewAccountInput) => EntityId;
+  addAccount: (input: NewAccountInput, openingDate?: string) => EntityId;
   updateAccount: (id: EntityId, patch: AccountPatch) => void;
   /** Explicit metadata-only verification; never edits financial balances. */
   verifyAccountOpeningBalanceDate: (id: EntityId, date: string) => boolean;
@@ -62,15 +65,17 @@ interface LedgerActions {
   // Categories
   addCategory: (input: NewCategoryInput) => EntityId;
   updateCategory: (id: EntityId, patch: CategoryPatch) => void;
+  archiveCategory: (id: EntityId, archived?: boolean) => boolean;
   deleteCategory: (
     id: EntityId,
     replacementCategoryId?: EntityId
   ) => boolean;
 
   // Transactions
-  addTransaction: (input: NewTransactionInput) => EntityId | null;
+  addTransaction: (input: NewTransactionInput, submissionId?: EntityId) => EntityId | null;
   /** Dedicated posting derives cash and ownership from an existing, unlinked payment. */
   addPaymentTransaction: (ref: PaymentRef, categoryId: string) => EntityId | null;
+  addCrossCurrencyDebtPaymentTransaction: (ref: PaymentRef, categoryId: string, fx: DebtPaymentFx) => EntityId | null;
   /** Dedicated property posting: generic addTransaction cannot forge this ownership. */
   addPropertyPaymentTransaction: (input: { contractId: string; paymentId: string; accountId: string; categoryId: string; amount: number; date: string }) => EntityId | null;
   addLoanReceiptTransaction: (input: {
@@ -126,6 +131,7 @@ function normalizeRecords<T>(value: unknown): T[] {
 }
 
 function migrateLedgerData(persistedState: unknown): LedgerData {
+  assertAccountingHydration(persistedState, 'ledger');
   const saved = isRecord(persistedState) ? persistedState : {};
 
   const accounts = normalizeRecords<Account>(saved.accounts);
@@ -166,7 +172,7 @@ function getRefundedAmount(
     )
     .reduce((sum, transaction) => sum + transaction.amount, 0);
 
-  return roundMoney(total);
+  return total;
 }
 
 function isValidRefund(
@@ -182,9 +188,9 @@ function isValidRefund(
     return false;
   }
 
-  const original = transactions.find(
-    (transaction) => transaction.id === input.relatedTransactionId
-  );
+  const originals = transactions.filter(transaction => transaction.id === input.relatedTransactionId);
+  if (originals.length !== 1) return false;
+  const [original] = originals;
 
   if (
     !original ||
@@ -202,19 +208,30 @@ function isValidRefund(
     (item) => item.id === input.accountId
   );
 
-  if (!account || original.currencyCode !== account.currencyCode) {
+  if (!account || original.currencyCode !== account.currencyCode
+    || input.date < original.date || !isValidCrossCurrencyMetadata(original)) {
     return false;
   }
 
-  const alreadyRefunded = getRefundedAmount(
-    transactions,
-    original.id
-  );
+  const currency = original.originalCurrencyCode ?? original.currencyCode;
+  const related = transactions.filter(item => item.entryType === 'refund'
+    && item.relatedTransactionId === original.id);
+  if (input.originalCurrencyCode !== original.originalCurrencyCode
+    || !isValidCrossCurrencyMetadata({ ...input, currencyCode: account.currencyCode })) return false;
+  if (related.some(item => item.accountId !== original.accountId
+    || item.categoryId !== original.categoryId || item.currencyCode !== account.currencyCode
+    || item.originalCurrencyCode !== original.originalCurrencyCode
+    || !isValidCrossCurrencyMetadata(item))) return false;
 
-  return (
-    roundMoney(alreadyRefunded + input.amount) <=
-    roundMoney(original.amount)
-  );
+  const decimals = getCurrencyDecimals(currency);
+  const factor = 10 ** decimals;
+  const toUnits = (value: number) => {
+    const units = Math.round(value * factor);
+    return Number.isSafeInteger(units) && units > 0 && units / factor === value ? units : NaN;
+  };
+  let remaining = toUnits(original.originalAmount ?? original.amount);
+  for (const item of related) remaining -= toUnits(item.originalAmount ?? item.amount);
+  return toUnits(input.originalAmount ?? input.amount) <= remaining;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -281,10 +298,15 @@ function isValidTransferAmounts(
     | 'toAmount'
     | 'toCurrencyCode'
     | 'exchangeRate'
+    | 'actualReceivedConfirmed'
+    | 'feeAmount'
+    | 'feeCategoryId'
   >,
   fromAccount: Account,
   toAccount: Account
 ): boolean {
+  if (!validSettlementOptions(input, fromAccount, toAccount)) return false;
+  if (isEnhancedSettlement(input)) return true;
   const fromAmount = roundMoney(input.fromAmount);
   const toAmount = roundMoney(input.toAmount);
   const exchangeRate = input.exchangeRate;
@@ -330,8 +352,8 @@ function buildTransfer(
   id: EntityId,
   timestamp: string
 ): Transfer {
-  const fromAmount = roundMoney(input.fromAmount);
-  const toAmount = roundMoney(input.toAmount);
+  const fromAmount = isEnhancedSettlement(input) ? input.fromAmount : roundMoney(input.fromAmount);
+  const toAmount = isEnhancedSettlement(input) ? input.toAmount : roundMoney(input.toAmount);
 
   return {
     id,
@@ -364,6 +386,7 @@ function buildTransfer(
 export const useLedgerStore = create<LedgerStore>()(
   persist(
     (set, get) => {
+      const pendingSubmissions = new Set<EntityId>();
       const createTransaction = (input: NewTransactionInput, reservedId?: string): EntityId | null => {
         if (input.entryType === 'refund' &&
           (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated())) return null;
@@ -381,8 +404,8 @@ export const useLedgerStore = create<LedgerStore>()(
         // A numeric-looking string can otherwise be rounded into a wrong value.
         if (!isFiniteMoneyInput(input.amount)) return null;
         // Ordinary transactions use the account currency precision even without FX metadata.
-        // Preserve the existing two-decimal behavior for linked posting and refunds.
-        const usesAccountPrecision = !!account && input.entryType !== 'refund' &&
+        // Preserve the existing two-decimal behavior for linked posting.
+        const usesAccountPrecision = !!account &&
           (input.originalAmount !== undefined ||
             (!input.linkedEntityType && (input.purpose === undefined || input.purpose === 'normal')));
         const amount = roundMoney(input.amount,
@@ -393,6 +416,7 @@ export const useLedgerStore = create<LedgerStore>()(
           !account.archived &&
           !!category &&
           category.kind === input.type &&
+          (!category.archived || input.entryType === 'refund' || !!input.linkedEntityType) &&
           Number.isFinite(amount) &&
           amount > 0;
 
@@ -415,6 +439,8 @@ export const useLedgerStore = create<LedgerStore>()(
         ) {
           return null;
         }
+
+        if (input.entryType === 'refund' && amount !== input.amount) return null;
 
         const normalizedInput = {
           ...input,
@@ -458,7 +484,7 @@ export const useLedgerStore = create<LedgerStore>()(
 
         return transaction.id;
       };
-      const addPaymentTransaction = (ref: PaymentRef, categoryId: string, reservedId?: string): EntityId | null => {
+      const addPaymentTransaction = (ref: PaymentRef, categoryId: string, reservedId?: string, fx?: DebtPaymentFx): EntityId | null => {
         if (!useFinanceStore.persist.hasHydrated() || !useLedgerStore.persist.hasHydrated()) return null;
         const finance = useFinanceStore.getState();
         const parents = ref.entityType === 'debt' ? finance.debts : finance.loans;
@@ -470,9 +496,12 @@ export const useLedgerStore = create<LedgerStore>()(
         const debt = isLoan ? undefined : finance.debts.find(d => d.id === parent.id);
         const fee = isLoan ? (payment as LoanPayment).latePaymentFee ?? 0 : 0;
         const account = get().accounts.filter(a => a.id === payment.accountId);
+        const crossDebt = !isLoan && account.length === 1 && account[0].currencyCode !== parent.currencyCode;
+        const fxFields = crossDebt && fx && !reservedId && allowsLegacyDebtFx(finance, get()) ? buildDebtPaymentFx(payment.amount, parent.currencyCode, account[0].currencyCode, payment.date, fx) : null;
+        if ((crossDebt && !fxFields) || (!crossDebt && fx !== undefined)) return null;
         if (payment.ledgerTransactionId || !isValidISODate(payment.date)
           || !Number.isFinite(payment.amount) || payment.amount <= 0 || !Number.isFinite(fee) || fee < 0
-          || account.length !== 1 || account[0].archived || account[0].currencyCode !== parent.currencyCode
+          || account.length !== 1 || account[0].archived || (!crossDebt && account[0].currencyCode !== parent.currencyCode)
           || (isLoan && (account[0].type === 'credit_card' || (payment as LoanPayment).paymentMode !== 'simple'))
           || (debt && debt.direction !== 'receivable' && debt.direction !== 'payable')
           || get().transactions.some(t => !(isLoan && isVerifiedLoanReceipt(t, parent as Loan, finance, get()))
@@ -482,27 +511,32 @@ export const useLedgerStore = create<LedgerStore>()(
         return createTransaction({ accountId: account[0].id, categoryId, amount: roundMoney(payment.amount + fee),
           type, date: payment.date, note: payment.note,
           purpose: isLoan ? 'loan_payment' : type === 'income' ? 'debt_collection' : 'debt_payment',
-          linkedEntityType: ref.entityType, linkedEntityId: parent.id, linkedPaymentId: payment.id }, reservedId);
+          linkedEntityType: ref.entityType, linkedEntityId: parent.id, linkedPaymentId: payment.id, ...(fxFields ?? {}) }, reservedId);
       };
       return ({
       ...initialData,
 
       /* ------------------------------ Accounts ----------------------------- */
 
-      addAccount: (input) => {
+      addAccount: (input, openingDate) => {
         // Reject runtime attempts to bypass the dedicated historical-date verification.
         // TypeScript's Omit is not a runtime guard against persisted metadata injection.
         if (Object.prototype.hasOwnProperty.call(input, 'openingBalanceDate')) return '';
         if (!isFiniteMoneyInput(input.initialBalance)
           || (input.creditLimit !== undefined && (!isFiniteMoneyInput(input.creditLimit)))) return '';
-        const initialBalance = roundMoney(input.initialBalance);
+        const currencyCode = input.currencyCode ?? useCurrencyStore.getState().baseCurrency;
+        if (typeof currencyCode !== 'string' || !isSupportedCurrency(currencyCode)) return '';
+        const normalizedCurrency = currencyCode.trim().toUpperCase();
+        const decimals = getCurrencyDecimals(normalizedCurrency);
+        const initialBalance = roundMoney(input.initialBalance, decimals);
         const creditLimit =
           input.creditLimit === undefined
             ? undefined
-            : roundMoney(input.creditLimit);
+            : roundMoney(input.creditLimit, decimals);
 
         if (
-          !Number.isFinite(initialBalance) ||
+          !Number.isFinite(initialBalance) || initialBalance !== input.initialBalance ||
+          creditLimit !== input.creditLimit ||
           (creditLimit !== undefined &&
             (!Number.isFinite(creditLimit) || creditLimit < 0))
         ) {
@@ -514,9 +548,7 @@ export const useLedgerStore = create<LedgerStore>()(
         const account: Account = {
           ...input,
           ...(creditLimit === undefined ? {} : { creditLimit }),
-          currencyCode:
-            input.currencyCode ||
-            useCurrencyStore.getState().baseCurrency,
+          currencyCode: normalizedCurrency,
           initialBalance,
           archived: input.archived ?? false,
           id: generateId('acc'),
@@ -524,9 +556,13 @@ export const useLedgerStore = create<LedgerStore>()(
           updatedAt: timestamp,
         };
 
-        set((state) => ({
-          accounts: [...state.accounts, account],
-        }));
+        const state = get();
+        if (openingDate !== undefined) {
+          if (!useLedgerStore.persist.hasHydrated()
+            || !validateAccountOpeningDate({ ...state, accounts: [...state.accounts, account] }, account.id, openingDate).valid) return '';
+          account.openingBalanceDate = openingDate;
+        }
+        set({ accounts: [...state.accounts, account] });
 
         return account.id;
       },
@@ -555,21 +591,6 @@ export const useLedgerStore = create<LedgerStore>()(
 
           if (clean.initialBalance !== undefined && (!isFiniteMoneyInput(clean.initialBalance))) return state;
           if (typeof clean.creditLimit !== 'undefined' && (!isFiniteMoneyInput(clean.creditLimit))) return state;
-          if (typeof clean.initialBalance === 'number') {
-            clean.initialBalance = roundMoney(clean.initialBalance);
-            if (!Number.isFinite(clean.initialBalance)) return state;
-          }
-
-          if (typeof clean.creditLimit === 'number') {
-            clean.creditLimit = roundMoney(clean.creditLimit);
-            if (
-              !Number.isFinite(clean.creditLimit) ||
-              clean.creditLimit < 0
-            ) {
-              return state;
-            }
-          }
-
           const currentAccount = state.accounts.find(
             (account) => account.id === id
           );
@@ -588,6 +609,11 @@ export const useLedgerStore = create<LedgerStore>()(
               transfer.toAccountId === id
           );
 
+          if (clean.currencyCode !== undefined) {
+            if (typeof clean.currencyCode !== 'string' || !isSupportedCurrency(clean.currencyCode)) return state;
+            clean.currencyCode = clean.currencyCode.trim().toUpperCase();
+          }
+
           const currencyChanged =
             typeof clean.currencyCode === 'string' &&
             clean.currencyCode !== currentAccount.currencyCode;
@@ -599,6 +625,15 @@ export const useLedgerStore = create<LedgerStore>()(
                   currencyCode: currentAccount.currencyCode,
                 }
               : clean;
+
+          const decimals = getCurrencyDecimals(safePatch.currencyCode ?? currentAccount.currencyCode);
+          const nextBalance = safePatch.initialBalance ?? currentAccount.initialBalance;
+          const nextLimit = safePatch.creditLimit ?? currentAccount.creditLimit;
+          if ((safePatch.initialBalance !== undefined || safePatch.currencyCode !== undefined)
+            && roundMoney(nextBalance, decimals) !== nextBalance) return state;
+          if ((safePatch.creditLimit !== undefined || safePatch.currencyCode !== undefined)
+            && nextLimit !== undefined
+            && (nextLimit < 0 || roundMoney(nextLimit, decimals) !== nextLimit)) return state;
 
           const financialBasisChanged =
             (safePatch.initialBalance !== undefined
@@ -685,12 +720,22 @@ export const useLedgerStore = create<LedgerStore>()(
           ),
         })),
 
+      archiveCategory: (id, archived = true) => {
+        if (!useLedgerStore.persist.hasHydrated()) return false;
+        const { categories } = get();
+        if (typeof archived !== 'boolean'
+          || categories.filter(category => category.id === id).length !== 1) return false;
+        set({ categories: categories.map(category => category.id === id
+          ? { ...category, archived } : category) });
+        return true;
+      },
+
       deleteCategory: (id, replacementCategoryId) => {
         const { categories, transactions } = get();
 
         const category = categories.find((item) => item.id === id);
 
-        if (!category) {
+        if (!category || category.archived) {
           return false;
         }
 
@@ -712,7 +757,7 @@ export const useLedgerStore = create<LedgerStore>()(
 
           // Replacement must exist, be different, and have the same kind.
           if (
-            !replacementCategory ||
+            !replacementCategory || replacementCategory.archived ||
             replacementCategory.id === category.id ||
             replacementCategory.kind !== category.kind
           ) {
@@ -746,7 +791,8 @@ export const useLedgerStore = create<LedgerStore>()(
 
       /* ---------------------------- Transactions --------------------------- */
 
-      addTransaction: (input) => {
+      addTransaction: (input, submissionId) => {
+        if (!isValidISODate(input.date)) return null;
         if (['linkedEntityType', 'linkedEntityId', 'linkedPaymentId'].some(key => key in input)
           || ('purpose' in input && input.purpose !== undefined && input.purpose !== 'normal')) return null;
         const account = get().accounts.find(item => item.id === input.accountId);
@@ -757,7 +803,18 @@ export const useLedgerStore = create<LedgerStore>()(
           const account = get().accounts.find(item => item.id === input.accountId);
           if (!account || !isValidHistoricalFx(input.historicalFx, account.currencyCode, input.date)) return null;
         }
-        return createTransaction(input);
+        if (submissionId === undefined) return createTransaction(input);
+        if (!useLedgerStore.persist.hasHydrated() || typeof submissionId !== 'string'
+          || !/^(?:trx_submit_[a-z0-9]+|submission-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+)$/.test(submissionId)
+          || pendingSubmissions.has(submissionId)
+          || get().transactions.some(transaction => transaction.id === submissionId)) return null;
+
+        pendingSubmissions.add(submissionId);
+        try {
+          return createTransaction(input, submissionId);
+        } finally {
+          pendingSubmissions.delete(submissionId);
+        }
       },
 
       addPropertyPaymentTransaction: input => {
@@ -778,6 +835,7 @@ export const useLedgerStore = create<LedgerStore>()(
       },
 
       addPaymentTransaction: (ref, categoryId) => addPaymentTransaction(ref, categoryId),
+      addCrossCurrencyDebtPaymentTransaction: (ref, categoryId, fx) => ref.entityType === 'debt' && fx ? addPaymentTransaction(ref, categoryId, undefined, fx) : null,
       addReservedPaymentTransaction: receipt => {
         if (!isPaymentOperationReceipt(receipt) || receipt.status !== 'prepared'
           || receipt.request.funding.kind !== 'account'
@@ -840,13 +898,13 @@ export const useLedgerStore = create<LedgerStore>()(
         const clearCrossCurrency =
           explicitlyClearedKeys.length === crossCurrencyKeys.length;
 
-        const switchingToManual =
+        const explicitManualRepresentation =
           patch.directHistoricalFx?.source === 'manual' &&
           Object.prototype.hasOwnProperty.call(patch, 'accountFxSnapshot') &&
           patch.accountFxSnapshot === undefined &&
           Object.prototype.hasOwnProperty.call(patch, 'historicalFx') &&
           patch.historicalFx === undefined &&
-          current.accountFxSnapshot !== undefined;
+          explicitlyClearedKeys.length === 1;
 
         const switchingToAnchors =
           current.directHistoricalFx?.source === 'manual' &&
@@ -858,7 +916,7 @@ export const useLedgerStore = create<LedgerStore>()(
         if (
           explicitlyClearedKeys.length > 0 &&
           !clearCrossCurrency &&
-          !switchingToManual
+          !explicitManualRepresentation
         ) {
           return false;
         }
@@ -868,7 +926,7 @@ export const useLedgerStore = create<LedgerStore>()(
             delete next[key];
           }
           delete next.directHistoricalFx;
-        } else if (switchingToManual) {
+        } else if (explicitManualRepresentation) {
           delete next.accountFxSnapshot;
           delete next.historicalFx;
         } else if (switchingToAnchors) {
@@ -881,7 +939,8 @@ export const useLedgerStore = create<LedgerStore>()(
           return false;
         }
 
-const account = accounts.find(
+        if (!isValidISODate(next.date)) return false;
+        const account = accounts.find(
           (item) => item.id === next.accountId
         );
 
@@ -929,6 +988,7 @@ const account = accounts.find(
           !account.archived &&
           !!category &&
           category.kind === next.type &&
+          (!category.archived || next.categoryId === current.categoryId) &&
           Number.isFinite(amount) &&
           amount > 0 &&
           next.entryType !== 'refund' &&
@@ -938,7 +998,12 @@ const account = accounts.find(
           return false;
         }
 
-        if (linkedRefunds > amount) {
+        if (hasLinkedRefunds && (current.originalAmount !== undefined || next.originalAmount !== undefined)
+          && (current.originalAmount !== next.originalAmount || current.originalCurrencyCode !== next.originalCurrencyCode
+            || current.amount !== amount || current.date !== next.date)) return false;
+
+        if (current.originalAmount === undefined
+          && roundMoney(linkedRefunds, getCurrencyDecimals(account.currencyCode)) > amount) {
           return false;
         }
 
@@ -994,7 +1059,7 @@ const account = accounts.find(
 
       addTransfer: (input) => {
         if (!useLedgerStore.persist.hasHydrated() || !useFinanceStore.persist.hasHydrated()) return null;
-        const { accounts, transactions, transfers } = get();
+        const { accounts, categories, transactions, transfers } = get();
 
         const fromAccount = accounts.find(
           (account) => account.id === input.fromAccountId
@@ -1028,10 +1093,8 @@ const account = accounts.find(
           transfers
         );
 
-        if (
-          roundMoney(availableBalance) <
-          roundMoney(input.fromAmount)
-        ) {
+        if (isEnhancedSettlement(input) ? !isValidISODate(input.date) || !canFundEnhancedSettlement(input, fromAccount, transactions, transfers)
+          : roundMoney(availableBalance) < roundMoney(input.fromAmount)) {
           return null;
         }
 
@@ -1043,24 +1106,39 @@ const account = accounts.find(
           timestamp
         );
 
-        set((state) => ({
-          transfers: [transfer, ...state.transfers],
-        }));
-
+        if ([...accounts, ...categories, ...transactions, ...transfers].some(row => row.id === transfer.id)) return null;
+        const nextCategories = categoriesForTransferFee(input, get());
+        const paired = attachTransferSettlement(transfer, input, { ...get(), categories: nextCategories }, timestamp);
+        if (!paired) return null;
+        const nextTransfers = [paired.transfer, ...transfers];
+        const nextTransactions = paired.fee ? [paired.fee, ...transactions] : transactions;
+        try { assertTransferSettlementEvidence({ accounts, categories: nextCategories, transfers: nextTransfers, transactions: nextTransactions }); }
+        catch { return null; }
+        set({ categories: nextCategories, transfers: nextTransfers, transactions: nextTransactions });
         return transfer.id;
       },
 
       updateTransfer: (id, patch) => {
         if (!useLedgerStore.persist.hasHydrated() || !useFinanceStore.persist.hasHydrated()) return false;
-        const { accounts, transactions, transfers } = get();
+        const { accounts, categories, transactions, transfers } = get();
 
-        const current = transfers.find((item) => item.id === id);
-
-        if (!current) {
-          return false;
-        }
-
+        const matching = transfers.filter(item => item.id === id);
+        const current = matching[0];
+        if (matching.length !== 1 || !current || transferSettlementProblem(get(), current)) return false;
+        const previousFee = current.feeTransactionId ? transactions.find(tx => tx.id === current.feeTransactionId) : undefined;
         const patchValues = definedOnly(patch);
+        if (patchValues.actualReceivedConfirmed !== undefined && patchValues.actualReceivedConfirmed !== true) return false;
+        if (patchValues.feeAmount !== undefined && (typeof patchValues.feeAmount !== 'number' || !Number.isFinite(patchValues.feeAmount) || patchValues.feeAmount < 0)) return false;
+        if (patchValues.feeCategoryId !== undefined && (typeof patchValues.feeCategoryId !== 'string' || !patchValues.feeCategoryId || patchValues.feeAmount === 0)) return false;
+        // Changing an already-confirmed bank leg requires fresh explicit confirmation.
+        const changesLeg = ['fromAccountId', 'toAccountId', 'fromAmount', 'toAmount', 'fromCurrencyCode', 'toCurrencyCode', 'date', 'exchangeRate'].some(key => {
+          const v = patchValues[key as keyof TransferPatch];
+          const original = key === 'exchangeRate' ? current.quotedExchangeRate ?? current.exchangeRate : current[key as keyof Transfer];
+          return v !== undefined && v !== original;
+        });
+        if (current.actualReceivedConfirmed && changesLeg && (patchValues.actualReceivedConfirmed !== true || patchValues.toAmount === undefined)) return false;
+        if (patchValues.actualReceivedConfirmed === true && !current.actualReceivedConfirmed && patchValues.toAmount === undefined) return false;
+        if (previousFee && patchValues.fromAccountId !== undefined && patchValues.fromAccountId !== current.fromAccountId && patchValues.feeAmount === undefined) return false;
 
         const nextFromAccountId =
           patchValues.fromAccountId ?? current.fromAccountId;
@@ -1108,7 +1186,7 @@ const account = accounts.find(
             current.currencyCode,
           exchangeRate:
             patchValues.exchangeRate ??
-            current.exchangeRate ??
+            current.quotedExchangeRate ?? current.exchangeRate ??
             (
               legacyFromAmount > 0
                 ? legacyToAmount / legacyFromAmount
@@ -1117,6 +1195,9 @@ const account = accounts.find(
           date: patchValues.date ?? current.date,
           type: patchValues.type ?? current.type,
           note: patchValues.note ?? current.note,
+          actualReceivedConfirmed: patchValues.actualReceivedConfirmed ?? current.actualReceivedConfirmed,
+          feeAmount: patchValues.feeAmount ?? current.feeAmount,
+          feeCategoryId: patchValues.feeAmount === 0 ? undefined : patchValues.feeCategoryId ?? previousFee?.categoryId,
         };
 
         if (
@@ -1136,14 +1217,12 @@ const account = accounts.find(
 
         const availableBalance = getAccountBalance(
           nextFromAccount,
-          transactions,
+          transactions.filter(tx => tx !== previousFee),
           transfersWithoutCurrent
         );
 
-        if (
-          roundMoney(availableBalance) <
-          roundMoney(nextInput.fromAmount)
-        ) {
+        if (isEnhancedSettlement(nextInput) ? !isValidISODate(nextInput.date) || !canFundEnhancedSettlement(nextInput, nextFromAccount, transactions.filter(tx => tx !== previousFee), transfersWithoutCurrent)
+          : roundMoney(availableBalance) < roundMoney(nextInput.fromAmount)) {
           return false;
         }
 
@@ -1153,27 +1232,29 @@ const account = accounts.find(
           current.createdAt
         );
 
-        set((state) => ({
-          transfers: state.transfers.map((transfer) =>
-            transfer.id === id
-              ? {
-                  ...updated,
-                  updatedAt: now(),
-                }
-              : transfer
-          ),
-        }));
-
+        const timestamp = now();
+        const nextCategories = categoriesForTransferFee(nextInput, get());
+        const paired = attachTransferSettlement({ ...updated, updatedAt: timestamp }, nextInput, { ...get(), categories: nextCategories }, timestamp, previousFee);
+        if (!paired) return false;
+        const nextTransfers = transfers.map(item => item.id === id ? paired.transfer : item);
+        const nextTransactions = previousFee ? (paired.fee ? transactions.map(tx => tx === previousFee ? paired.fee! : tx) : transactions.filter(tx => tx !== previousFee))
+          : paired.fee ? [paired.fee, ...transactions] : transactions;
+        try { assertTransferSettlementEvidence({ accounts, categories: nextCategories, transfers: nextTransfers, transactions: nextTransactions }); }
+        catch { return false; }
+        set({ categories: nextCategories, transfers: nextTransfers, transactions: nextTransactions });
         return true;
       },
 
       removeTransfer: (id) => {
         if (!useLedgerStore.persist.hasHydrated() || !useFinanceStore.persist.hasHydrated()) return;
-        set((state) => ({
-          transfers: state.transfers.filter(
-            (transfer) => transfer.id !== id
-          ),
-        }));
+        const state = get(), matches = state.transfers.filter(transfer => transfer.id === id);
+        if (matches.length !== 1 || transferSettlementProblem(state, matches[0])) return;
+        const feeId = matches[0].feeTransactionId;
+        const transfers = state.transfers.filter(transfer => transfer.id !== id);
+        const transactions = feeId ? state.transactions.filter(tx => tx.id !== feeId) : state.transactions;
+        try { assertTransferSettlementEvidence({ ...state, transfers, transactions }); }
+        catch { return; }
+        set({ transfers, transactions });
       },
 
       /* -------------------------------- Reset ------------------------------ */
@@ -1204,10 +1285,12 @@ const account = accounts.find(
         return migrateLedgerData(persistedState);
       },
 
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...migrateLedgerData(persistedState),
-      }),
+      merge: (persistedState, currentState) => {
+        const restored = migrateLedgerData(persistedState);
+        const merged = { ...currentState, ...restored };
+        if (!Object.hasOwn(restored, 'paymentAccounting')) delete merged.paymentAccounting;
+        return merged;
+      },
 
       onRehydrateStorage: () => (_state, error) => {
         if (error) {
@@ -1228,20 +1311,12 @@ registerLedgerProtectionReader(() => ({ ...useLedgerStore.getState(), hydrated: 
 /* -------------------------------------------------------------------------- */
 
 /** True once AsyncStorage data has been loaded into the store. */
+const subscribeLedgerHydration = (notify: () => void) => {
+  const begin = useLedgerStore.persist.onHydrate(notify);
+  const finish = useLedgerStore.persist.onFinishHydration(notify);
+  return () => { begin(); finish(); };
+};
+
 export function useLedgerHydrated(): boolean {
-  const [hydrated, setHydrated] = useState(() =>
-    useLedgerStore.persist.hasHydrated()
-  );
-
-  useEffect(() => {
-    const unsubscribe = useLedgerStore.persist.onFinishHydration(() =>
-      setHydrated(true)
-    );
-
-    setHydrated(useLedgerStore.persist.hasHydrated());
-
-    return unsubscribe;
-  }, []);
-
-  return hydrated;
+  return useSyncExternalStore(subscribeLedgerHydration, useLedgerStore.persist.hasHydrated, () => false);
 }

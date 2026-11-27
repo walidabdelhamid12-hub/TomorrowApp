@@ -1,3 +1,4 @@
+import { allowsLegacyDebtFx, buildDebtPaymentFx, type DebtPaymentFx } from '../utils/debtPaymentFx';
 import { canEditLoanPayment, canReverseLoanPayment } from '@/features/finance/utils/loanPaymentPolicy';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
@@ -33,9 +34,9 @@ function coordinate(change: () => boolean): PaymentResult {
   } finally { running = false; }
 }
 
-function activeAccount(id: string | undefined, currency: string, loan: boolean) {
+function activeAccount(id: string | undefined, currency: string, loan: boolean, crossDebt = false) {
   const matches = useLedgerStore.getState().accounts.filter(a => a.id === id);
-  return matches.length === 1 && !matches[0].archived && matches[0].currencyCode === currency
+  return matches.length === 1 && !matches[0].archived && (crossDebt || matches[0].currencyCode === currency)
     && (!loan || matches[0].type !== 'credit_card');
 }
 
@@ -89,6 +90,7 @@ export interface PaymentEdit {
   accountId?: string;
   latePaymentFee?: number;
   paymentMethodLabel?: string;
+  debtFx?: DebtPaymentFx;
 }
 
 export function editLinkedPayment(ref: PaymentRef, edit: PaymentEdit): PaymentResult {
@@ -117,7 +119,11 @@ export function editLinkedPayment(ref: PaymentRef, edit: PaymentEdit): PaymentRe
       if (!Number.isFinite(remaining) || roundMoney(edit.amount) > remaining) return false;
     }
     const accountId = edit.accountId ?? payment.accountId;
-    if (linked && (!activeAccount(accountId, parent.currencyCode, ref.entityType === 'loan')
+    const crossDebt = ref.entityType === 'debt' && !!linked && linked.transaction.currencyCode !== parent.currencyCode;
+    const fxFields = crossDebt && edit.debtFx ? buildDebtPaymentFx(edit.amount, parent.currencyCode, linked!.transaction.currencyCode, edit.date, edit.debtFx) : null;
+    if (crossDebt && (!allowsLegacyDebtFx(finance, ledger) || (edit.debtFx !== undefined ? !fxFields : edit.amount !== payment.amount || edit.date !== payment.date))) return false;
+    if (!crossDebt && edit.debtFx !== undefined) return false;
+    if (linked && (!activeAccount(accountId, parent.currencyCode, ref.entityType === 'loan', crossDebt)
       || !noRefunds(linked.transaction.id)
       || !ledger.categories.some(c => c.id === linked.transaction.categoryId && c.kind === linked.transaction.type))) return false;
     if (custom && (edit.accountId || !edit.paymentMethodLabel?.trim())) return false;
@@ -150,7 +156,7 @@ export function editLinkedPayment(ref: PaymentRef, edit: PaymentEdit): PaymentRe
         || (custom && (saved as LoanPayment).paymentMethodLabel !== edit.paymentMethodLabel)))) return false;
     // Preserve the existing note convention: an omitted note leaves the previous one.
     if (linked) {
-      const next = { ...linked.transaction, amount: roundMoney(amount + fee), accountId: accountId!,
+      const next = { ...linked.transaction, amount: crossDebt ? linked.transaction.amount : roundMoney(amount + fee), ...(fxFields ?? {}), accountId: accountId!,
         date: edit.date, note: edit.note ?? linked.transaction.note, updatedAt: new Date().toISOString() };
       useLedgerStore.setState(s => ({ transactions: s.transactions.map(t => t.id === next.id ? next : t) }));
       if (!resolvePayment(ref, useFinanceStore.getState(), useLedgerStore.getState())) return false;
@@ -166,6 +172,7 @@ export function reverseLinkedPayment(ref: PaymentRef): PaymentResult {
     const linked = resolvePayment(ref, finance, useLedgerStore.getState());
     const custom = linked ? null : findCustomLoanPayment(ref);
     if (!linked && !custom) return false;
+    if (ref.entityType === 'debt' && linked && linked.transaction.currencyCode !== linked.parent.currencyCode && !allowsLegacyDebtFx(finance, useLedgerStore.getState())) return false;
     if (ref.entityType === 'loan' && !canReverseLoanPayment((linked?.parent ?? custom!.loan) as Loan, ref.paymentId)) return false;
     if (linked) {
       if (!noRefunds(linked.transaction.id)) return false;
@@ -213,7 +220,12 @@ export function postLinkedPayment(input: PaymentPost): PaymentResult {
     const account = input.accountId;
     const fee = isLoan ? roundMoney(input.latePaymentFee ?? 0) : 0;
     if (!Number.isFinite(fee) || fee < 0 || !Number.isFinite(roundMoney(input.amount + fee))) return false;
-    if (account ? !activeAccount(account, parent.currencyCode, isLoan)
+    const ledger = useLedgerStore.getState();
+    const chosen = ledger.accounts.filter(a => a.id === account);
+    const crossDebt = !isLoan && chosen.length === 1 && chosen[0].currencyCode !== parent.currencyCode;
+    if (crossDebt && (!input.debtFx || !allowsLegacyDebtFx(finance, ledger) || !buildDebtPaymentFx(input.amount, parent.currencyCode, chosen[0].currencyCode, input.date, input.debtFx))) return false;
+    if (!crossDebt && input.debtFx !== undefined) return false;
+    if (account ? !activeAccount(account, parent.currencyCode, isLoan, crossDebt)
       : !isLoan || !input.paymentMethodLabel?.trim()) return false;
     const type = !isLoan && finance.debts.find(d => d.id === input.entityId)!.direction === 'receivable' ? 'income' : 'expense';
     if (account && !useLedgerStore.getState().categories.some(c => c.id === input.categoryId && c.kind === type)) return false;
@@ -227,8 +239,11 @@ export function postLinkedPayment(input: PaymentPost): PaymentResult {
     const savedPayment = savedParents.find(p => p.id === parent.id)?.payments.find(p => p.id === paymentId);
     if (!savedPayment || savedPayment.amount !== roundMoney(input.amount) || savedPayment.date !== input.date) return false;
     if (account) {
-      const txId = useLedgerStore.getState().addPaymentTransaction({
-        entityType: input.entityType, entityId: parent.id, paymentId }, input.categoryId!);
+      const ledgerWriter = useLedgerStore.getState();
+      const ref = { entityType: input.entityType, entityId: parent.id, paymentId };
+      const txId = crossDebt && input.debtFx
+        ? ledgerWriter.addCrossCurrencyDebtPaymentTransaction(ref, input.categoryId!, input.debtFx)
+        : ledgerWriter.addPaymentTransaction(ref, input.categoryId!);
       if (!txId) return false;
       if (isLoan) {
         if (!finance.updateLoanPayment(parent.id, paymentId, { ledgerTransactionId: txId })) return false;

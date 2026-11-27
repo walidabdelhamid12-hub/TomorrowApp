@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { AssetTypeIcon } from '@/features/finance/components/AssetTypeIcon';
 
@@ -116,6 +117,7 @@ export function RatesModal({
   lastResult = null,
 }: RatesModalProps) {
   const { colors, spacing, radius, sizes } = useTheme();
+  const { t } = useAppLanguage();
   const { width, fontScale } = useWindowDimensions();
   const stackMetals = width / fontScale < 360;
 
@@ -337,15 +339,15 @@ export function RatesModal({
     }
 
     Alert.alert(
-      'Unsaved changes',
-      'You have unsaved rate changes. Do you want to discard them?',
+      t('Unsaved changes', 'تغييرات غير محفوظة'),
+      t('You have unsaved rate changes. Do you want to discard them?', 'لديك تغييرات غير محفوظة في الأسعار. هل تريد تجاهلها؟'),
       [
         {
-          text: 'Keep editing',
+          text: t('Keep editing', 'متابعة التعديل'),
           style: 'cancel',
         },
         {
-          text: 'Discard',
+          text: t('Discard', 'تجاهل'),
           style: 'destructive',
           onPress: () => {
             console.log('[RatesModal] Discard confirmed; calling onClose');
@@ -378,7 +380,7 @@ export function RatesModal({
 
     if (!isValidRate(baseRate)) {
       console.log('[RatesModal] SAVE STOPPED: invalid base rate');
-      setError(`No valid exchange rate found for ${baseCurrency}.`);
+      setError(t(`No valid exchange rate found for ${baseCurrency}.`, `لم يُعثر على سعر صرف صالح للعملة ${baseCurrency}.`));
       return;
     }
 
@@ -393,7 +395,7 @@ export function RatesModal({
 
       if (displayValue === null || displayValue <= 0) {
         console.log('[RatesModal] SAVE STOPPED: invalid currency', currency.code);
-        setError(`Enter a valid rate for ${currency.code}.`);
+        setError(t(`Enter a valid rate for ${currency.code}.`, `أدخل سعر صرف صالحًا للعملة ${currency.code}.`));
         return;
       }
 
@@ -401,7 +403,7 @@ export function RatesModal({
 
       if (!Number.isFinite(storedValue) || storedValue <= 0) {
         console.log('[RatesModal] SAVE STOPPED: invalid converted rate', currency.code);
-        setError(`Invalid converted rate for ${currency.code}.`);
+        setError(t(`Invalid converted rate for ${currency.code}.`, `سعر التحويل غير صالح للعملة ${currency.code}.`));
         return;
       }
 
@@ -434,7 +436,7 @@ export function RatesModal({
     ) {
       console.log('[RatesModal] SAVE STOPPED: invalid gold price');
       setError(
-        'Enter a valid gold price or leave it empty to clear it.',
+        t('Enter a valid gold price or leave it empty to clear it.', 'أدخل سعر ذهب صالحًا أو اتركه فارغًا لمسح السعر.'),
       );
       return;
     }
@@ -445,7 +447,7 @@ export function RatesModal({
     ) {
       console.log('[RatesModal] SAVE STOPPED: invalid silver price');
       setError(
-        'Enter a valid silver price or leave it empty to clear it.',
+        t('Enter a valid silver price or leave it empty to clear it.', 'أدخل سعر فضة صالحًا أو اتركه فارغًا لمسح السعر.'),
       );
       return;
     }
@@ -463,7 +465,7 @@ export function RatesModal({
         (!Number.isFinite(silverStored) || silverStored <= 0))
     ) {
       console.log('[RatesModal] SAVE STOPPED: invalid metal prices');
-      setError('One or more metal prices are invalid.');
+      setError(t('One or more metal prices are invalid.', 'سعر معدن واحد أو أكثر غير صالح.'));
       return;
     }
 
@@ -481,7 +483,7 @@ export function RatesModal({
 
       if (!saved) {
         console.log('[RatesModal] SAVE FAILED: currency rates');
-        setError('Currency rates could not be saved.');
+        setError(t('Currency rates could not be saved.', 'تعذّر حفظ أسعار العملات.'));
         return;
       }
     }
@@ -493,7 +495,7 @@ export function RatesModal({
 
       if (!saved) {
         console.log('[RatesModal] SAVE FAILED: gold price');
-        setError('Gold price could not be saved.');
+        setError(t('Gold price could not be saved.', 'تعذّر حفظ سعر الذهب.'));
         return;
       }
     }
@@ -505,7 +507,7 @@ export function RatesModal({
 
       if (!saved) {
         console.log('[RatesModal] SAVE FAILED: silver price');
-        setError('Silver price could not be saved.');
+        setError(t('Silver price could not be saved.', 'تعذّر حفظ سعر الفضة.'));
         return;
       }
     }
@@ -600,7 +602,7 @@ export function RatesModal({
               }}
             />
             <AppText variant="caption" color="textSecondary">
-              {SOURCE_LABELS[status]}
+              {t(SOURCE_LABELS[status], status === 'live' ? 'مباشر' : status === 'manual' ? 'يدوي' : 'غير متاح')}
             </AppText>
           </View>
         ),
@@ -611,7 +613,7 @@ export function RatesModal({
   return (
     <FormModal
       visible={visible}
-      title="Exchange rates"
+      title={t('Exchange rates', 'أسعار الصرف')}
       onClose={handleClose}
     >
       {statusLegend}
@@ -626,14 +628,14 @@ export function RatesModal({
           }}
         >
           <View style={{ flex: 1 }}>
-            <AppText variant="caption" color="textSecondary" style={{ fontWeight: '700' }}>
-              Last Update: {formatLocalDate(lastLiveUpdatedAt)}
+            <AppText variant="caption" style={{ color: '#1E293B', fontWeight: '700' }}>
+              {t('Last Update:', 'آخر تحديث:')} {formatLocalDate(lastLiveUpdatedAt)}
             </AppText>
           </View>
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Refresh exchange rates"
+            accessibilityLabel={t('Refresh exchange rates', 'تحديث أسعار الصرف')}
             accessibilityState={{ disabled: isRefreshing }}
             disabled={isRefreshing}
             onPress={() => void handleRefresh()}
@@ -641,10 +643,10 @@ export function RatesModal({
             style={{
               width: 36,
               height: 36,
-              borderRadius: 18,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.surface,
+              borderRadius: 12,
+              borderWidth: 1.5,
+              borderColor: '#D6B777',
+              backgroundColor: '#334155',
               alignItems: 'center',
               justifyContent: 'center',
               opacity: isRefreshing ? 0.7 : 1,
@@ -652,9 +654,9 @@ export function RatesModal({
           >
             <Animated.View style={{ transform: [{ rotate }] }}>
               <Ionicons
-                name="refresh-circle"
+                name="refresh-outline"
                 size={19}
-                color="#2E9D50"
+                color="#D6B777"
               />
             </Animated.View>
           </Pressable>
@@ -662,7 +664,7 @@ export function RatesModal({
 
         {isRefreshing ? (
           <AppText variant="caption" color="textSecondary">
-            Updating exchange rates...
+            {t('Updating exchange rates...', 'جارٍ تحديث أسعار الصرف...')}
           </AppText>
         ) : null}
 
@@ -679,7 +681,7 @@ export function RatesModal({
 
       <View style={{ gap: spacing.xs, marginTop: -spacing.lg * 0.5 }}>
         <AppText variant="label" color="textSecondary" style={{ fontWeight: '800' }}>
-          CURRENCIES — VALUE IN {baseCurrency}
+          {t('CURRENCIES — VALUE IN', 'العملات — القيمة بعملة')} {baseCurrency}
         </AppText>
 
         {currencyRows.map((row, rowIndex) => (
@@ -751,15 +753,14 @@ export function RatesModal({
 
         {baseCurrency !== RATE_ANCHOR ? (
           <AppText variant="caption" color="textSecondary">
-            {RATE_ANCHOR} is shown as a calculated reference rate and
-            cannot be edited directly.
+            {RATE_ANCHOR} {t('is shown as a calculated reference rate and cannot be edited directly.', 'يُعرض كسعر مرجعي محسوب ولا يمكن تعديله مباشرة.')}
           </AppText>
         ) : null}
       </View>
 
       <View style={{ gap: spacing.xs }}>
         <AppText variant="label" color="textSecondary" style={{ fontWeight: '800' }}>
-          METALS — PRICE PER GRAM IN {baseCurrency}
+          {t('METALS — PRICE PER GRAM IN', 'المعادن — سعر الجرام بعملة')} {baseCurrency}
         </AppText>
 
         <View testID="rates-metals" style={{ flexDirection: stackMetals ? 'column' : 'row', alignItems: 'stretch', gap: spacing.sm }}>
@@ -782,16 +783,16 @@ export function RatesModal({
                 color="text"
                 style={{ fontWeight: '800', flexShrink: 1, color: '#A97808' }}
               >
-                Gold (gram)
+                {t('Gold (gram)', 'ذهب (جرام)')}
               </AppText>
             </View>
 
             <AppInput
-              accessibilityLabel="Gold price"
+              accessibilityLabel={t('Gold price', 'سعر الذهب')}
               value={gold}
               onChangeText={value => { setGold(value); setGoldEdited(true); }}
               keyboardType="decimal-pad"
-              placeholder="not set"
+              placeholder={t('not set', 'غير محدد')}
               style={{
                 textAlign: 'center',
                 fontSize: 12,
@@ -823,16 +824,16 @@ export function RatesModal({
                 color="text"
                 style={{ fontWeight: '800', flexShrink: 1, color: '#697586' }}
               >
-                Silver (gram)
+                {t('Silver (gram)', 'فضة (جرام)')}
               </AppText>
             </View>
 
             <AppInput
-              accessibilityLabel="Silver price"
+              accessibilityLabel={t('Silver price', 'سعر الفضة')}
               value={silver}
               onChangeText={value => { setSilver(value); setSilverEdited(true); }}
               keyboardType="decimal-pad"
-              placeholder="not set"
+              placeholder={t('not set', 'غير محدد')}
               style={{
                 textAlign: 'center',
                 fontSize: 12,
@@ -850,13 +851,13 @@ export function RatesModal({
 
       <View style={{ gap: 2 }}>
         <AppText variant="caption" color="textSecondary" style={{ textAlign: 'left', fontSize: 11 }}>
-          Gold is 24K, other gold karats are calculated from 24K price.
+          {t('Gold is 24K, other gold karats are calculated from 24K price.', 'سعر الذهب لعيار 24، وتُحسب بقية العيارات بناءً عليه.')}
         </AppText>
         <AppText variant="caption" color="textSecondary" style={{ textAlign: 'left', fontSize: 11 }}>
-          Silver reference purity is unspecified by the source.
+          {t('Silver reference purity is unspecified by the source.', 'المصدر لا يحدد درجة نقاء الفضة المرجعية.')}
         </AppText>
         <AppText variant="caption" color="textSecondary" style={{ textAlign: 'left', fontSize: 11 }}>
-          Leave a metal price empty to clear the saved price.
+          {t('Leave a metal price empty to clear the saved price.', 'اترك سعر المعدن فارغًا لمسح السعر المحفوظ.')}
         </AppText>
       </View>
       {error ? (
@@ -866,7 +867,7 @@ export function RatesModal({
       ) : null}
 
       <AppButton
-        title="Save rates"
+        title={t('Save rates', 'حفظ الأسعار')}
         variant={hasUnsavedChanges ? 'primary' : 'secondary'}
         accentColor={hasUnsavedChanges ? '#202B3E' : undefined}
         disabled={!hasUnsavedChanges}
@@ -875,10 +876,10 @@ export function RatesModal({
 
       <View style={{ gap: 2 }}>
         <AppText variant="caption" color="textSecondary" style={{ textAlign: 'left', fontSize: 11 }}>
-          Currency rates by Exchange Rate API <AppText variant="caption" style={{ color: '#202B3E', fontWeight: '700', fontSize: 11 }}>(exchangerate-api.com)</AppText>
+          {t('Currency rates by Exchange Rate API', 'أسعار العملات من خدمة Exchange Rate API')} <AppText variant="caption" style={{ color: '#202B3E', fontWeight: '700', fontSize: 11 }}>(exchangerate-api.com)</AppText>
         </AppText>
         <AppText variant="caption" color="textSecondary" style={{ textAlign: 'left', fontSize: 11 }}>
-          Gold and silver spot prices by <AppText variant="caption" style={{ color: '#202B3E', fontWeight: '700', fontSize: 11 }}>(gold-api.com)</AppText>
+          {t('Gold and silver spot prices by', 'الأسعار الفورية للذهب والفضة من')} <AppText variant="caption" style={{ color: '#202B3E', fontWeight: '700', fontSize: 11 }}>(gold-api.com)</AppText>
         </AppText>
       </View>
     </FormModal>

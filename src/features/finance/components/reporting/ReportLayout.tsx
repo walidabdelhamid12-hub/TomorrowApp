@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { useState, type ReactNode } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -21,13 +22,14 @@ export function useReportPeriod() {
 export function ReportDates({ period, onChange }: { period: { from: string; to: string }; onChange: (period: { from: string; to: string }) => void }) {
   const [editing, setEditing] = useState<'from' | 'to' | null>(null);
   const { colors } = useTheme();
+  const { t } = useAppLanguage();
   const date = (value: string) => { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d); };
   return <>
     <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-      {(['from', 'to'] as const).map(key => <Pressable key={key} accessibilityRole="button" accessibilityLabel={`${key === 'from' ? 'From' : 'To'} date: ${period[key]}`} onPress={() => setEditing(key)}
+      {(['from', 'to'] as const).map(key => <Pressable key={key} accessibilityRole="button" accessibilityLabel={`${key === 'from' ? t('From', 'من') : t('To', 'إلى')} ${t('date', 'تاريخ')}: ${period[key]}`} onPress={() => setEditing(key)}
         style={{ flex: 1, minWidth: 0, minHeight: 40, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 8, justifyContent: 'center' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-          <AppText variant="caption" style={{ fontWeight: '700' }}>{key === 'from' ? 'From' : 'To'}</AppText>
+          <AppText variant="caption" style={{ fontWeight: '700' }}>{key === 'from' ? t('From', 'من') : t('To', 'إلى')}</AppText>
           <AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={{ flex: 1, textAlign: 'right' }}>{period[key]}</AppText>
           <Ionicons name="chevron-down" size={12} color={colors.textSecondary} />
         </View>
@@ -41,28 +43,31 @@ export function ReportDates({ period, onChange }: { period: { from: string; to: 
       if (next.from > next.to) { if (editing === 'from') next.to = value; else next.from = value; }
       onChange(next);
     }} />}
-    {editing && Platform.OS === 'ios' && <Pressable accessibilityRole="button" accessibilityLabel="Done selecting date" onPress={() => setEditing(null)} style={{ minHeight: 44, justifyContent: 'center' }}><AppText color="primary">Done</AppText></Pressable>}
+    {editing && Platform.OS === 'ios' && <Pressable accessibilityRole="button" accessibilityLabel={t('Done selecting date', 'تم اختيار التاريخ')} onPress={() => setEditing(null)} style={{ minHeight: 44, justifyContent: 'center' }}><AppText color="primary">{t('Done', 'تم')}</AppText></Pressable>}
   </>;
 }
 
 export function ReportDetails({ title, children }: { title: string; children: ReactNode; actionLabel?: string }) {
   const [expanded, setExpanded] = useState(false);
-  return <><Pressable accessibilityRole="button" accessibilityLabel={`Toggle ${title} details`} accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
+  const { t } = useAppLanguage();
+  return <><Pressable accessibilityRole="button" accessibilityLabel={`${t('Toggle', 'تبديل عرض')} ${title} ${t('details', 'التفاصيل')}`} accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
     <AppText variant="bodyStrong" style={{ flex: 1, paddingRight: 8 }}>{title}</AppText><Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={20} color={moduleColors.finance} />
   </Pressable>{expanded && children}</>;
 }
 
 export function ReportCurrencyAnalysis({ currencies, value, onSelect }: { currencies: string[]; value: string; onSelect: (value: string) => void }) {
+  const { t } = useAppLanguage();
   return <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 6 }}>
-    <AppText variant="bodyStrong">Currency analysis</AppText>
-    {currencies.length > 1 ? <View style={{ width: 180, maxWidth: '60%' }}><ReportPicker inline label="Currency" value={value} onSelect={onSelect} options={currencies.map(code => ({ id: code, label: currencyLabel(code) }))} /></View> : <AppText variant="caption" color="textSecondary">{currencyLabel(value)}</AppText>}
+    <AppText variant="bodyStrong">{t('Currency analysis', 'تحليل العملات')}</AppText>
+    {currencies.length > 1 ? <View style={{ width: 180, maxWidth: '60%' }}><ReportPicker inline label={t('Currency', 'العملة')} value={value} onSelect={onSelect} options={currencies.map(code => ({ id: code, label: currencyLabel(code) }))} /></View> : <AppText variant="caption" color="textSecondary">{currencyLabel(value)}</AppText>}
   </View>;
 }
 
 export function ReportNotice({ summary, children, warning = false }: { summary: string; children: ReactNode; warning?: boolean }) {
   const [showInfo, setShowInfo] = useState(false);
+  const { t } = useAppLanguage();
   return <View style={{ marginVertical: 4 }}>
-    <Pressable accessibilityRole="button" accessibilityLabel="Report information" accessibilityState={{ expanded: showInfo }} onPress={() => setShowInfo(value => !value)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 }}>
+    <Pressable accessibilityRole="button" accessibilityLabel={t('Report information', 'معلومات التقرير')} accessibilityState={{ expanded: showInfo }} onPress={() => setShowInfo(value => !value)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 }}>
       <AppText variant="caption" accessibilityRole={warning ? 'alert' : undefined} color="textSecondary" style={{ flex: 1 }}>{summary}</AppText>
       <Ionicons name="information-circle-outline" size={18} color={moduleColors.finance} />
     </Pressable>
@@ -79,8 +84,11 @@ export function ReportKeyValues({ items }: { items: { label: string; value: stri
 }
 
 export function ReportStatementLink({ period, onPress, label = 'View Statement', accessibilityLabel = label }: { period: { from: string; to: string }; onPress: () => void; label?: string; accessibilityLabel?: string }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} style={{ minHeight: 44, justifyContent: 'center', marginTop: 4 }}>
-    <AppText variant="caption" color="primary">{label} · {period.from} – {period.to}</AppText>
+  const { t } = useAppLanguage();
+  const displayLabel = label === 'View Statement' ? t('View Statement', 'عرض كشف الحساب') : label;
+  const displayAccessibilityLabel = accessibilityLabel === 'View Statement' ? displayLabel : accessibilityLabel;
+  return <Pressable accessibilityRole="button" accessibilityLabel={displayAccessibilityLabel} onPress={onPress} style={{ minHeight: 44, justifyContent: 'center', marginTop: 4 }}>
+    <AppText variant="caption" color="primary">{displayLabel} · {period.from} – {period.to}</AppText>
   </Pressable>;
 }
 

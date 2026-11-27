@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/ui';
 import { useTheme } from '@/theme';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 
 interface FinanceActionButtonsProps {
   label: string;
@@ -13,10 +14,11 @@ interface FinanceActionButtonsProps {
 /** Labeled Accounts actions from ad7d5c6, with larger targets and dark surfaces. */
 export function FinanceActionButtons({ label, onEdit, onDelete, deleteTitle = 'Delete' }: FinanceActionButtonsProps) {
   const { colors } = useTheme();
+  const { t } = useAppLanguage();
   const actions = [
-    ...(onEdit ? [{ title: 'Edit', icon: 'create-outline' as const, onPress: onEdit,
+    ...(onEdit ? [{ title: t('Edit', 'تعديل'), icon: 'create-outline' as const, onPress: onEdit,
       tint: colors.finance.edit.text, background: colors.finance.edit.surface }] : []),
-    ...(onDelete ? [{ title: deleteTitle, icon: 'trash-outline' as const, onPress: onDelete,
+    ...(onDelete ? [{ title: deleteTitle === 'Delete' ? t('Delete', 'حذف') : deleteTitle, icon: 'trash-outline' as const, onPress: onDelete,
       tint: colors.finance.delete.text, background: colors.finance.delete.surface }] : []),
   ];
   return (

@@ -1,3 +1,4 @@
+import { classifyReportTransaction, type ReportClassificationContext } from './reportTransactionClassifier';
 import type { Transaction } from '@/features/finance/types/ledger';
 import { roundMoney } from '@/features/finance/utils/finance';
 import { filterByMonth } from '@/features/finance/utils/ledger';
@@ -43,4 +44,23 @@ export function getMonthlyFinanceSummary(
       expense: roundMoney(Math.max(expense, 0)),
       missing,
     };
+}
+
+/** Production totals use the same verified classification as the reports. */
+export function getClassifiedMonthlyFinanceSummary(
+  context: ReportClassificationContext, monthKey: string, baseCurrency: string,
+  rates: RateMap, verifiedCurrencies: readonly string[],
+) {
+  let income = 0, expense = 0, missing = 0;
+  for (const tx of filterByMonth(context.ledger.transactions, monthKey)) {
+    const item = classifyReportTransaction(tx, context);
+    if (item.kind === 'unknown') { missing++; continue; }
+    if (item.incomeAmount === 0 && item.expenseAmount === 0) continue;
+    const amount = item.incomeAmount || item.expenseAmount;
+    const converted = convertAmountUnrounded(Math.abs(amount), item.currencyCode, baseCurrency, rates, verifiedCurrencies);
+    if (converted === null) { missing++; continue; }
+    if (item.incomeAmount !== 0) income += converted;
+    else expense += amount < 0 ? -converted : converted;
+  }
+  return { income: roundMoney(income), expense: roundMoney(expense), missing };
 }

@@ -1,5 +1,7 @@
 import type { FinanceData, LoanPayment } from '../types/finance';
-import type { LedgerData } from '../types/ledger';
+import type { LedgerData, Transaction } from '../types/ledger';
+import { assertTransferSettlementEvidence, isTransferFeeClaim } from '../utils/transferSettlement';
+import { transactionReferences } from '../utils/paymentTransactionOwnership';
 import {
   entityKey, freezeEvidence, object, readPaymentAccountingMetadata, readRecoveryJournalV3, requireEvidence as check,
   sameEvidence as equal, text, validateHeader, validatePayment, validateTransaction,
@@ -107,9 +109,12 @@ function parseAccounting(raw: string | null, kind: 'finance' | 'ledger'): Record
     readFinanceCreationProvenance(state);
     for (const key of ['debts', 'loans']) for (const row of state[key] as Record<string, unknown>[]) projectParent(row, key === 'debts' ? 'debt' : 'loan');
   } else {
+    const ledger = state as unknown as LedgerData;
+    assertTransferSettlementEvidence(ledger);
     for (const tx of state.transactions as Record<string, unknown>[]) {
       check(Object.keys(tx).every(k => [...transactionFields, 'createdAt', 'updatedAt'].includes(k)), 'Unsupported transaction fields.');
-      validateTransaction(pick(tx, transactionFields));
+      // Fee pairs were validated above; payment receipts retain their original schema.
+      if (!isTransferFeeClaim(tx as unknown as Transaction, ledger)) validateTransaction(pick(tx, transactionFields));
     }
     for (const a of state.accounts as Record<string, unknown>[]) check(text(a.currencyCode)
       && ['cash', 'bank', 'wallet', 'savings', 'credit_card'].includes(a.type as string)
@@ -252,6 +257,10 @@ export function verifyPersistedPaymentAccounting(raw: Readonly<Record<PaymentPer
   const result = (installation: AccountingRecoveryResult['installation']): AccountingRecoveryResult => freezeEvidence({ postingAllowed: false, readiness: 'blocked', installation, globalIssues, findings });
   try {
     const f = parseAccounting(raw['tomorrow:finance'], 'finance'), l = parseAccounting(raw['tomorrow:ledger'], 'ledger');
+    if (f && l) {
+      const ledger = l as unknown as LedgerData, finance = f as unknown as FinanceData;
+      for (const tx of ledger.transactions) if (isTransferFeeClaim(tx, ledger)) check(transactionReferences(finance, tx.id) === 0, 'Transfer fee has conflicting loan/debt ownership.');
+    }
     const journal = readRecoveryJournalDocument(raw['tomorrow:payment-operations']);
     const generation = journal.installation?.generationId;
     if (!generation) {

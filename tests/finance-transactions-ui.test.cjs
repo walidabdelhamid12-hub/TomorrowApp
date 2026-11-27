@@ -20,6 +20,7 @@ function Icon(props) { return React.createElement('Icon', props); }
 Icon.glyphMap = { 'cash-outline': 1 };
 Module._load = function(id, parent, main) {
   if (id === 'react') return hooks;
+  if (id === '@/localization/LanguageProvider') return { useAppLanguage: () => ({ language: 'en', isRTL: false, setLanguage: () => {}, t: (english) => english }) };
   if (id === 'react-native') return { useWindowDimensions: () => ({ width: 390, height: 844, fontScale: 1 }), AppState: { addEventListener: () => ({ remove() {} }) }, Modal: 'Modal', Pressable: 'Pressable', View: 'View', StyleSheet: { create: x => x, hairlineWidth: 1 } };
   if (id === '@expo/vector-icons') return { Ionicons: Icon };
   if (id === '@/components/ui') return { AppText: 'AppText', Card: 'Card' };
@@ -235,8 +236,8 @@ test('ordinary and transfer details are read-only and Back never mutates records
   press('Back to list');
   assert.equal(nodes('Modal').some(n => n.props.visible), false);
   press('Transfer details');
-  assert.ok(texts().includes('Sent: 123,456,789.12 USD'));
-  assert.ok(texts().includes('Received: 99,999,999.123 OMR'));
+  assert.ok(nodes('AppText').some(n=>n.props.children==='Sent:' && n.props.style?.fontWeight==='800')); assert.ok(nodes('AppText').some(n=>Array.isArray(n.props.children)&&n.props.children.includes(' 123,456,789.12 USD')));
+  assert.ok(nodes('AppText').some(n=>n.props.children==='Received:' && n.props.style?.fontWeight==='800')); assert.ok(nodes('AppText').some(n=>Array.isArray(n.props.children)&&n.props.children.includes(' 99,999,999.123 OMR')));
   nodes('Modal').find(n => n.props.visible).props.onRequestClose(); render();
   assert.equal(nodes('Modal').some(n => n.props.visible), false); assert.deepEqual(calls, []);
 });
@@ -363,4 +364,16 @@ test('protected rows retain expense semantics and hide money in details and row 
   assert.equal(nodes('Pressable').some(n => n.props.accessibilityLabel === 'Edit transaction'), false);
   press('Open linked record details');
   assert.deepEqual(calls, [['manage', 'linked']]);
+});
+
+
+test('R5: transfer action controls appear only after opening the record', () => {
+  press('View all (4)');
+  const actions = () => nodes('Pressable').filter(n => ['Edit transfer','Delete transfer'].includes(n.props.accessibilityLabel));
+  assert.equal(actions().length, 0);
+  press('Transfer details');
+  assert.equal(actions().length, 2);
+  press('Back to list');
+  assert.equal(actions().length, 0);
+  assert.deepEqual(calls, []);
 });

@@ -68,9 +68,31 @@ export function createDocumentRepository(backend: DocumentStorageBackend) {
     await verifiedWrite(indexKey, JSON.stringify([...ids, input.id]));
     await verifiedWrite(pendingKey, 'null');
   }
+  // Logical deletion retains immutable vault evidence and reserves the original ID.
+  async function deleted(id: string): Promise<boolean> {
+    const raw = await backend.getItem(`${DOCUMENTS_NAMESPACE}deleted:${id}`);
+    if (raw === null) return false;
+    if (raw !== 'true') throw new Error('Invalid deletion marker');
+    return true;
+  }
+  async function remove(id: string, expectedUpdatedAt: string): Promise<DocumentStorageResult<null>> {
+    if (!validId(id)) return { ok: false, error: 'invalid_data' };
+    return exclusive(async () => {
+      try {
+        if (parsePending(await backend.getItem(pendingKey))) return { ok: false, error: 'storage_error' } as const;
+        const ids = parseIndex(await backend.getItem(indexKey));
+        if (!ids.includes(id)) return { ok: false, error: 'not_found' } as const;
+        const record = parseRecord(await backend.getItem(key(id)));
+        if (!record || record.id !== id) return { ok: false, error: 'storage_error' } as const;
+        if (record.updatedAt !== expectedUpdatedAt) return { ok: false, error: 'conflict' } as const;
+        if (!(await deleted(id))) await verifiedWrite(`${DOCUMENTS_NAMESPACE}deleted:${id}`, 'true');
+        return { ok: true, value: null } as const;
+      } catch { return { ok: false, error: 'storage_error' } as const; }
+    });
+  }
   async function read(id: string): Promise<DocumentStorageResult<DocumentRecord | null>> {
     if (!validId(id)) return { ok: false, error: 'invalid_data' };
-    try { return { ok: true, value: parseRecord(await backend.getItem(key(id))) }; }
+    try { return { ok: true, value: await deleted(id) ? null : parseRecord(await backend.getItem(key(id))) }; }
     catch { return { ok: false, error: 'storage_error' }; }
   }
   async function list(): Promise<DocumentStorageResult<readonly DocumentRecord[]>> {
@@ -78,6 +100,7 @@ export function createDocumentRepository(backend: DocumentStorageBackend) {
       const ids = parseIndex(await backend.getItem(indexKey));
       const records: DocumentRecord[] = [];
       for (const id of ids) {
+        if (await deleted(id)) continue;
         const record = parseRecord(await backend.getItem(key(id)));
         if (!record || record.id !== id) throw new Error('Inconsistent document index');
         records.push(record);
@@ -103,7 +126,7 @@ export function createDocumentRepository(backend: DocumentStorageBackend) {
       try {
         if (parsePending(await backend.getItem(pendingKey))) return { ok: false, error: 'storage_error' } as const;
         const ids = parseIndex(await backend.getItem(indexKey));
-        if (!ids.includes(input.id)) return { ok: false, error: 'not_found' } as const;
+        if (!ids.includes(input.id) || await deleted(input.id)) return { ok: false, error: 'not_found' } as const;
         const previous = parseRecord(await backend.getItem(key(input.id)));
         if (!previous) return { ok: false, error: 'not_found' } as const;
         if (previous.updatedAt !== expectedUpdatedAt || input.updatedAt <= previous.updatedAt) return { ok: false, error: 'conflict' } as const;
@@ -132,6 +155,7 @@ export function createDocumentRepository(backend: DocumentStorageBackend) {
         const ids = parseIndex(await backend.getItem(indexKey));
         const records: DocumentRecord[] = [];
         for (const id of ids) {
+        if (await deleted(id)) continue;
           const record = parseRecord(await backend.getItem(key(id)));
           if (!record || record.id !== id || !record.sha256 || !/^[a-f0-9]{64}$/.test(record.sha256))
             return { ok: false, error: 'storage_error' } as const;
@@ -150,12 +174,27 @@ export function createDocumentRepository(backend: DocumentStorageBackend) {
   /** Explicit, ID-scoped recovery only. Never scans or deletes unrelated metadata. */
   async function recoverUnindexed(id: string): Promise<DocumentStorageResult<DocumentRecord>> {
     if (!validId(id)) return { ok: false, error: 'invalid_data' };
+    return exclusive(() => recover(id));
+  }
+  /** Production recovery requires verified vault evidence, inside the mutation queue. */
+  async function recoverPendingImport(verify: (record: DocumentRecord) => Promise<boolean>): Promise<DocumentStorageResult<DocumentRecord | null>> {
     return exclusive(async () => {
+      try {
+        const pending = parsePending(await backend.getItem(pendingKey));
+        if (!pending) return { ok: true, value: null } as const;
+        if (pending.mode !== 'hash' || !(await verify(pending.record))) return { ok: false, error: 'storage_error' } as const;
+        return recover(pending.record.id, true);
+      } catch { return { ok: false, error: 'storage_error' } as const; }
+    });
+  }
+  async function recover(id: string, verifiedVault = false): Promise<DocumentStorageResult<DocumentRecord>> {
       try {
         const pending = parsePending(await backend.getItem(pendingKey));
         if (pending && pending.record.id !== id) return { ok: false, error: 'conflict' } as const;
         const ids = parseIndex(await backend.getItem(indexKey));
-        const record = parseRecord(await backend.getItem(key(id)));
+        if (await deleted(id)) return { ok: false, error: 'not_found' } as const;
+        const existing = parseRecord(await backend.getItem(key(id)));
+        const record = existing ?? (verifiedVault && pending && !ids.includes(id) ? pending.record : null);
         if (!record) return { ok: false, error: pending ? 'storage_error' : 'not_found' } as const;
         if (record.id !== id || (pending && !sameRecord(record, pending.record)))
           return { ok: false, error: 'storage_error' } as const;
@@ -163,18 +202,19 @@ export function createDocumentRepository(backend: DocumentStorageBackend) {
         const hashChecked = pending ? pending.mode === 'hash' : !ids.includes(id);
         if (hashChecked && !record.sha256) return { ok: false, error: 'storage_error' } as const;
         for (const indexedId of ids) {
+          if (await deleted(indexedId)) continue;
           const indexed = parseRecord(await backend.getItem(key(indexedId)));
           if (!indexed || indexed.id !== indexedId || (hashChecked && !indexed.sha256))
             return { ok: false, error: 'storage_error' } as const;
           if (indexedId !== id && hashChecked && indexed.sha256 === record.sha256 && !pending?.saveIndependentCopy)
             return { ok: false, error: 'duplicate' } as const;
         }
+        if (!existing) await verifiedWrite(key(id), JSON.stringify(record));
         if (!ids.includes(id)) await verifiedWrite(indexKey, JSON.stringify([...ids, id]));
         // Already indexed is a verified, idempotent completion (including clear-then-throw).
         if (pending) await verifiedWrite(pendingKey, 'null');
         return { ok: true, value: record } as const;
       } catch { return { ok: false, error: 'storage_error' } as const; }
-    });
   }
-  return { read, list, create, update, createIfHashAbsent, recoverUnindexed };
+  return { read, list, create, update, remove, createIfHashAbsent, recoverUnindexed, recoverPendingImport };
 }

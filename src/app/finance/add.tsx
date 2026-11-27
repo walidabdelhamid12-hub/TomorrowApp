@@ -1,11 +1,14 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCallback, useState, type ComponentProps } from 'react';
 import { useRouter } from 'expo-router';
-import { Modal, Pressable, View } from 'react-native';
-import FinanceHomeScreen from '@/features/finance/screens/FinanceHomeScreen';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import DocumentsScreen from './documents';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { financeLayoutTokens, getFinanceDesignTokens } from '@/features/finance/constants/financeDesignTokens';
+import FinanceHomeScreen from '@/features/finance/screens/FinanceHomeScreen';
 import { AppText, Screen } from '@/components/ui';
 import { useTheme } from '@/theme';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 
 type AddAction = 'transaction' | 'transfer' | 'account' | 'asset' | 'documents';
 const ITEMS: { action: AddAction; label: string; icon: ComponentProps<typeof Ionicons>['name'] }[] = [
@@ -18,37 +21,36 @@ const ITEMS: { action: AddAction; label: string; icon: ComponentProps<typeof Ion
 
 export default function FinanceAddScreen() {
   const router = useRouter();
-  const { spacing } = useTheme();
+  const { t } = useAppLanguage();
+  const { spacing, colors, scheme } = useTheme();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const finance = getFinanceDesignTokens(scheme);
   const [activeAction, setActiveAction] = useState<AddAction | null>(null);
   const closeAction = useCallback(() => setActiveAction(null), []);
   const open = (action: AddAction) => {
     setActiveAction(action);
   };
   return <View style={{ flex: 1 }}><Screen scroll style={{ backgroundColor: '#F8FAFC' }}>
-    <View style={{ backgroundColor: '#1E293B', marginHorizontal: -spacing.md, marginTop: -spacing.sm,
-      borderBottomLeftRadius: 20, borderBottomRightRadius: 20, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 17 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 44 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.replace('/')}
-          style={{ width: 44, height: 44, justifyContent: 'center' }}>
-          <Ionicons name="arrow-back" size={23} color="#FFFFFF" />
+    <View testID="finance-add-header" style={{ backgroundColor: '#1E293B', marginHorizontal: -spacing.md, marginTop: -spacing.sm,
+      borderBottomLeftRadius: 20, borderBottomRightRadius: 20, paddingHorizontal: 13, paddingTop: 15, paddingBottom: 15, alignItems: 'center' }}>
+      <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', minHeight: 45, flexWrap: 'nowrap' }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('Back', 'رجوع')} onPress={() => router.replace('/')}
+          style={{ width: 45, height: 45, alignItems: 'center', justifyContent: 'center' }}>
+          <MaterialCommunityIcons name="arrow-left" size={27} color="#FFFFFF" />
         </Pressable>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-          <AppText accessibilityRole="header" variant="h1" style={{ color: '#FFFFFF', textAlign: 'center', fontSize: 22 }}>Tomorrow Finance</AppText>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-            <Ionicons name="add-circle-outline" size={17} color="#D6B777" />
-            <AppText variant="bodyStrong" style={{ color: '#D6B777', fontSize: 14 }}>Add</AppText>
-          </View>
-        </View>
-        <View style={{ width: 44 }} />
+        <AppText accessibilityRole="header" variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68}
+          style={{ color: '#FFFFFF', textAlign: 'center', fontSize: width < 360 ? 15 : 18, flex: 1, minWidth: 0, fontWeight: '700' }}>Tomorrow Finance Add</AppText>
+        <View style={{ width: 45, alignItems: 'center' }} />
       </View>
-      <AppText style={{ color: '#CBD5E1', textAlign: 'center', fontSize: 12 }}>Choose what you want to add.</AppText>
+      <AppText style={{ color: '#CBD5E1', textAlign: 'center', fontSize: 12, marginTop: 5 }}>{t('Choose what you want to add.', 'اختر ما تريد إضافته.')}</AppText>
     </View>
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, marginTop: 16 }}>
-      {ITEMS.map(item => <Pressable key={item.action} accessibilityRole="button" accessibilityLabel={`Add ${item.label}`}
+      {ITEMS.map(item => <Pressable key={item.action} accessibilityRole="button" accessibilityLabel={t(`Add ${item.label}`, `إضافة ${{ transaction: 'معاملة', transfer: 'تحويل', account: 'حساب', asset: 'أصل', documents: 'مستندات' }[item.action]}`)}
         onPress={() => open(item.action)} style={{ width: '48%', minHeight: 112, backgroundColor: '#FFFFFF',
-          borderWidth: 1, borderColor: '#D6B777', borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 9, padding: 10 }}>
-        <Ionicons name={item.icon} size={31} color="#365575" />
-        <AppText variant="bodyStrong" style={{ color: '#1E293B', textAlign: 'center' }}>{item.label}</AppText>
+          borderWidth: 1.3, borderColor: '#B68C42', borderRadius: 14, alignItems: 'center', justifyContent: 'center', gap: 9, padding: 10 }}>
+        <Ionicons name={item.icon} size={42} color="#365575" />
+        <AppText variant="bodyStrong" style={{ color: '#1E293B', textAlign: 'center' }}>{t(item.label, { transaction: 'معاملة', transfer: 'تحويل', account: 'حساب', asset: 'أصل', documents: 'مستندات' }[item.action])}</AppText>
       </Pressable>)}
     </View>
   </Screen>
@@ -57,14 +59,18 @@ export default function FinanceAddScreen() {
         <FinanceHomeScreen key={activeAction} modalOnlyAction={activeAction} onModalOnlyClose={closeAction} />
       </View>
     ) : null}
-    <Modal visible={activeAction === 'documents'} animationType="slide" transparent
-      onRequestClose={closeAction}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end' }}>
-          <View style={{ height: '92%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 24,
-            borderTopRightRadius: 24, overflow: 'hidden' }}>
+    <Modal visible={activeAction === 'documents'} transparent animationType="slide" onRequestClose={closeAction}
+      statusBarTranslucent navigationBarTranslucent>
+      <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end', paddingTop: insets.top + 8 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} onPress={closeAction}
+          accessibilityLabel={t('Close', 'إغلاق')} />
+        <View testID="documents-bottom-sheet" accessibilityViewIsModal style={{ height: '92%', maxHeight: '92%', minHeight: 0,
+          width: '100%', backgroundColor: finance.background, borderTopLeftRadius: financeLayoutTokens.modalRadius,
+          borderTopRightRadius: financeLayoutTokens.modalRadius, overflow: 'hidden' }}>
           {activeAction === 'documents' ? <DocumentsScreen onClose={closeAction} /> : null}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   </View>;
 }

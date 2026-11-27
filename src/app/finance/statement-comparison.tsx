@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
@@ -30,6 +31,7 @@ function validDate(value: string | undefined): value is string {
 /** Read-only selected-currency statement. Recompute every value from hydrated stores; never trust route totals. */
 export default function ComparisonStatementScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const params = useLocalSearchParams<{ from?: string; to?: string; currencyCode?: string; accountId?: string; categoryId?: string; allAccounts?: string }>();
   const { ready, context, accounts, categories } = useExpenseLedger();
   const currencyReady = useCurrencyHydrated();
@@ -74,19 +76,19 @@ export default function ComparisonStatementScreen() {
     }
   }, [ready, currencyReady, valid, from, to, currencyCode, accountId, categoryId, context, accounts, categories, allAccounts, rates, verifiedCurrencies]);
   return <Screen scroll contentContainerStyle={{ paddingBottom: 24 }}>
-    <Pressable accessibilityRole="button" accessibilityLabel="Back to Comparison Report" onPress={() => router.back()}
+    <Pressable accessibilityRole="button" accessibilityLabel={t("Back to Comparison Report", "العودة إلى تقرير المقارنة")} onPress={() => router.back()}
       style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
       <Ionicons name="arrow-back" size={23} color={NAVY} />
-      <AppText>Comparison Report</AppText>
+      <AppText>{t("Comparison Report", "تقرير المقارنة")}</AppText>
     </Pressable>
-    {!valid ? <AppText accessibilityRole="alert" style={{ color: RED }}>Invalid or missing statement filters.</AppText>
+    {!valid ? <AppText accessibilityRole="alert" style={{ color: RED }}>{t("Invalid or missing statement filters.", "فلاتر كشف الحساب غير صالحة أو ناقصة.")}</AppText>
       : !ready || !currencyReady || !snapshot ? <ActivityIndicator color={NAVY} />
       : snapshot.error ? <AppText accessibilityRole="alert" style={{ color: RED }}>Statement unavailable: {snapshot.error}</AppText>
       : <>
         <View style={{ gap: 10, marginBottom: 14 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
             <Ionicons name="git-compare-outline" size={26} color={NAVY} />
-            <AppText variant="h2" style={{ color: NAVY, flexShrink: 1 }}>Comparison Statement</AppText>
+            <AppText variant="h2" style={{ color: NAVY, flexShrink: 1 }}>{t("Comparison Statement", "كشف المقارنة")}</AppText>
           </View>
           <View style={{ borderWidth: 1, borderColor: '#DEE7F0', borderRadius: 12, padding: 12, backgroundColor: 'white', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Ionicons name="calendar" size={20} color="#D6B777" />
@@ -94,16 +96,16 @@ export default function ComparisonStatementScreen() {
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <View style={{ flex: 1, borderWidth: 1, borderColor: '#DEE7F0', borderRadius: 12, padding: 10, backgroundColor: 'white' }}>
-              <AppText variant="bodyStrong">Account</AppText>
-              <AppText numberOfLines={2}>{accountId ? accounts.find(a => a.id === accountId)?.name ?? 'Unknown account' : 'All accounts'}</AppText>
+              <AppText variant="bodyStrong">{t("Account", "الحساب")}</AppText>
+              <AppText numberOfLines={2}>{accountId ? accounts.find(a => a.id === accountId)?.name ?? t('Unknown account', 'حساب غير معروف') : t('All accounts', 'كل الحسابات')}</AppText>
             </View>
             <View style={{ flex: 1, borderWidth: 1, borderColor: '#DEE7F0', borderRadius: 12, padding: 10, backgroundColor: 'white' }}>
-              <AppText variant="bodyStrong">Category</AppText>
-              <AppText numberOfLines={2}>{categoryId ? categories.find(c => c.id === categoryId)?.name ?? 'Unknown category' : 'All categories'}</AppText>
+              <AppText variant="bodyStrong">{t("Category", "التصنيف")}</AppText>
+              <AppText numberOfLines={2}>{categoryId ? categories.find(c => c.id === categoryId)?.name ?? t('Unknown category', 'تصنيف غير معروف') : t('All categories', 'كل التصنيفات')}</AppText>
             </View>
           </View>
           <View style={{ borderWidth: 1, borderColor: '#DEE7F0', borderRadius: 12, padding: 10, backgroundColor: 'white', flexDirection: 'row', justifyContent: 'space-between' }}>
-            <AppText variant="bodyStrong">Display currency</AppText>
+            <AppText variant="bodyStrong">{t("Display currency", "عملة العرض")}</AppText>
             <AppText variant="bodyStrong">{currencyCode}</AppText>
           </View>
         </View>
@@ -113,7 +115,7 @@ export default function ComparisonStatementScreen() {
           <AppText variant="bodyStrong" style={{ color: NAVY }}>Net difference: {formatAmount(snapshot.selected.netDifference, currencyCode!)}</AppText>
         </View>}
         <AppText variant="bodyStrong" style={{ color: NAVY, marginTop: 8 }}>Transactions ({snapshot.rows.length})</AppText>
-        {snapshot.rows.length === 0 && <AppText color="textSecondary">No transactions in this selection. Export is unavailable.</AppText>}
+        {snapshot.rows.length === 0 && <AppText color="textSecondary">{t("No transactions in this selection. Export is unavailable.", "لا توجد معاملات في هذا الاختيار. التصدير غير متاح.")}</AppText>}
         <StatementMobileRows rows={snapshot.rows.map(row => {
           const category = categories.find(c => c.id === row.categoryId);
           const account = accounts.find(a => a.id === row.accountId);

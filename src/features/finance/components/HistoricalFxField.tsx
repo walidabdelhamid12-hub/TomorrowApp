@@ -1,9 +1,10 @@
-import { View } from 'react-native';
+import { useAppLanguage } from '@/localization/LanguageProvider';
+import { TextInput, View } from 'react-native';
 import { evaluateExpression } from '@/features/finance/utils/calculator';
-import { AppButton, AppInput, AppText } from '@/components/ui';
+import { AppButton, AppText } from '@/components/ui';
 import type { HistoricalFxSnapshot } from '@/features/finance/types/ledger';
 import { getCurrencyFlag } from '@/features/finance/constants/currencies';
-import { moduleColors, useTheme } from '@/theme';
+import { useTheme } from '@/theme';
 
 function resolveHistoricalRateExpression(input: string): number | null {
   const text = input.trim();
@@ -45,6 +46,7 @@ export function HistoricalFxField({
   onManualRateChange,
 }: HistoricalFxFieldProps) {
   const { spacing, colors } = useTheme();
+  const { t } = useAppLanguage();
   const trimmedRate = manualRate.trim();
   const calculatedRate = manualMode
     ? resolveHistoricalRateExpression(manualRate)
@@ -80,7 +82,7 @@ export function HistoricalFxField({
             color={colors.finance.neutral.accent}
             style={{ minHeight: 28 }}
           >
-            FROM
+            {t("FROM", "من")}
           </AppText>
           <View
             style={{
@@ -105,7 +107,7 @@ export function HistoricalFxField({
             color={colors.finance.neutral.accent}
             style={{ minHeight: 28 }}
           >
-            RATE
+            {t("RATE", "السعر")}
           </AppText>
           <View
             style={{
@@ -118,14 +120,19 @@ export function HistoricalFxField({
               borderColor: colors.finance.neutral.border,
             }}
           >
-            <AppText
+            {manualMode ? <TextInput
+              accessibilityLabel={t("Manual rate (EGP per 1 unit)", "السعر اليدوي (جنيه لكل وحدة)")}
+              value={manualRate} onChangeText={onManualRateChange} onBlur={finalizeRate}
+              onSubmitEditing={finalizeRate} returnKeyType="done" keyboardType="decimal-pad"
+              style={{ color: colors.text, fontSize: 14, padding: 0, minHeight: 44 }}
+            /> : <AppText
               color={snapshot ? sourceColor : 'text'}
               style={{ fontSize: 14, fontVariant: ['tabular-nums'] }}
               numberOfLines={1}
               adjustsFontSizeToFit
             >
               {displayedRate === null ? '—' : String(displayedRate)}
-            </AppText>
+            </AppText>}
           </View>
         </View>
 
@@ -167,19 +174,6 @@ export function HistoricalFxField({
         </AppText>
       )}
 
-      {manualMode ? (
-        <AppInput
-          label="Manual rate (EGP per 1 unit)"
-          value={manualRate}
-          onChangeText={onManualRateChange}
-          onBlur={finalizeRate}
-          onSubmitEditing={finalizeRate}
-          returnKeyType="done"
-          keyboardType="decimal-pad"
-          placeholder="Enter historical rate"
-        />
-      ) : null}
-
       {manualMode && calculatedRate !== null && trimmedRate !== String(calculatedRate) ? (
         <AppText variant="caption" color="info">
           Calculated rate: {calculatedRate}
@@ -203,7 +197,7 @@ export function HistoricalFxField({
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <View style={{ flex: 1 }}>
           <AppButton
-            title="Get Rate"
+            title={t("Get Rate", "جلب السعر")}
             accentColor={'#1E293B'}
             loading={loading}
             disabled={loading}
@@ -213,7 +207,7 @@ export function HistoricalFxField({
 
         <View style={{ flex: 1 }}>
           <AppButton
-            title={manualMode ? 'Use API Rate' : 'Enter Manual Rate'}
+            title={manualMode ? t('Use API Rate', 'استخدام سعر الصرف الآلي') : t('Enter Manual Rate', 'إدخال سعر الصرف يدويًا')}
             accentColor={'#1E293B'}
             disabled={loading}
             onPress={onManualMode}

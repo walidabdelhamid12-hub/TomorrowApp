@@ -7,6 +7,7 @@ import { AppButton, AppInput, AppText, ChipSelect } from '@/components/ui';
 import { CalculatorPad } from '@/features/finance/components/CalculatorPad';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 import { moduleColors, useTheme } from '@/theme';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 
 type Sign = 'plus' | 'minus';
 
@@ -38,6 +39,7 @@ export function AmountInput({
   sheetTitle = 'Enter amount',
 }: AmountInputProps) {
   const { colors, spacing } = useTheme();
+  const { t } = useAppLanguage();
   const insets = useSafeAreaInsets();
   const accent = moduleColors.finance;
 
@@ -74,7 +76,7 @@ export function AmountInput({
       <Pressable
         onPress={openSheet}
         accessibilityRole="button"
-        accessibilityLabel={label ? `${label}, open calculator` : 'Open calculator'}
+        accessibilityLabel={label ? `${label}, ${t('open calculator', 'فتح الآلة الحاسبة')}` : t('Open calculator', 'فتح الآلة الحاسبة')}
       >
         {/* The field only displays the value; the calculator handles input. */}
         <View pointerEvents="none">
@@ -111,7 +113,7 @@ export function AmountInput({
               },
             ]}
           >
-            <AppText variant="bodyStrong">{sheetTitle}</AppText>
+            <AppText variant="bodyStrong">{sheetTitle === 'Enter amount' ? t('Enter amount', 'إدخال المبلغ') : sheetTitle}</AppText>
 
             {allowNegative ? (
               <View style={{ marginTop: spacing.md }}>
@@ -135,7 +137,7 @@ export function AmountInput({
             </View>
 
             <View style={{ marginTop: spacing.lg }}>
-              <AppButton title="Done" accentColor={accent} onPress={commit} />
+              <AppButton title={t('Done', 'تم')} accentColor={accent} onPress={commit} />
             </View>
           </View>
         </View>

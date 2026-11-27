@@ -11,6 +11,7 @@ export function getTransactionDescription(
     loan_interest_payment: 'Loan interest payment',
     debt_payment: 'Debt payment',
     debt_collection: 'Debt collection',
+    transfer_fee: 'Transfer fee',
   };
   let label = purposeLabels[tx.purpose ?? ''];
   if (!label && destination?.href.pathname === '/finance/loans') {

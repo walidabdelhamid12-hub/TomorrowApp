@@ -3,16 +3,20 @@ import { financeChrome } from '@/features/finance/components/financeChrome';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 
 import { AppText, Card, Screen } from '@/components/ui';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { installmentsStorage } from '@/features/finance/store/installmentsStorage';
 import { useTheme } from '@/theme';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 
 export default function InstallmentsScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const { colors, spacing } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
   const tone = colors.finance.account;
   const saved = useSyncExternalStore(installmentsStorage.subscribe, installmentsStorage.getState, installmentsStorage.getState);
   const busy = useRef(false);
@@ -27,54 +31,53 @@ export default function InstallmentsScreen() {
   };
   const confirmDelete = (id: string, name: string, revision: string) => {
     if (!ready || busy.current) return;
-    Alert.alert('Delete contract?', 'Delete "' + name + '" and its installment schedule? This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => { void (async () => {
-        if (busy.current || installmentsStorage.getState().hydration !== 'ready' || installmentsStorage.getState().writeStatus !== 'idle') return;
+    confirm(t('Delete contract?', 'حذف العقد؟'), t('Delete "', 'حذف "') + name + t('" and its installment schedule? This cannot be undone.', '" وجدول أقساطه؟ لا يمكن التراجع عن ذلك.'), async () => {
+        if (busy.current || installmentsStorage.getState().hydration !== 'ready' || installmentsStorage.getState().writeStatus !== 'idle') return false;
         busy.current = true;
-        setMessage('Deleting contract...');
+        setMessage(t('Deleting contract...', 'جارٍ حذف العقد...'));
         try {
           const result = await installmentsStorage.deleteContract(id, revision);
-          setMessage(result.ok ? 'Contract deleted and verified. No balances changed.' :
-            'Delete not confirmed (' + result.error.code + '). Check saved contracts before retrying.');
+          setMessage(result.ok ? t('Contract deleted and verified. No balances changed.', 'تم حذف العقد والتحقق منه. لم تتغير الأرصدة.') :
+            t('Delete not confirmed (', 'لم يتم تأكيد الحذف (') + result.error.code + t('). Check saved contracts before retrying.', '). تحقق من العقود المحفوظة قبل إعادة المحاولة.'));
+          return result.ok;
         } catch {
-          setMessage('Delete could not be confirmed. Check saved contracts before retrying.');
+          setMessage(t('Delete could not be confirmed. Check saved contracts before retrying.', 'تعذر تأكيد الحذف. تحقق من العقود المحفوظة قبل إعادة المحاولة.'));
+          return false;
         } finally { busy.current = false; }
-      })(); } },
-    ]);
+    }, t('Delete', 'حذف'));
   };
   return (
     <Screen scroll style={{ backgroundColor: '#F1F5F9' }}>
       <View style={financeChrome.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back to Finance" onPress={() => router.back()}
+        <Pressable accessibilityRole="button" accessibilityLabel={t('Back to Finance', 'العودة إلى المالية')} onPress={() => router.back()}
           style={financeChrome.back}>
           <Ionicons name="arrow-back" size={20} color="#D6B777" />
         </Pressable>
         <View style={styles.flex}>
-          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>Installments</AppText>
-          <AppText variant="caption" style={{ color: '#CBD5E1' }}>Standalone contract schedules</AppText>
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>{t('Installments', 'الأقساط')}</AppText>
+          <AppText variant="caption" style={{ color: '#CBD5E1' }}>{t('Standalone contract schedules', 'جداول العقود المستقلة')}</AppText>
         </View>
       </View>
       <AppText variant="caption" color="textSecondary" style={{ marginBottom: spacing.sm }}>
-        Schedules only. Payments and balance posting are not available.
+        {t('Schedules only. Payments and balance posting are not available.', 'الجداول فقط. الدفع وترحيل الأرصدة غير متاحين.')}
       </AppText>
-      <AppButton title="+ New Contract" accentColor="#1E293B"
+      <AppButton title={t('+ New Contract', '+ عقد جديد')} accentColor="#1E293B"
         disabled={!ready} onPress={() => router.push({ pathname: '/finance/installment-contract', params: { id: 'new' } })} />
       {message ? <AppText color="textSecondary">{message}</AppText> : null}
       {saved.hydration === 'blocked' ? (
-        <Card variant="filled"><AppText color="danger">Saved contracts could not be loaded.</AppText>
-          <AppButton title="Retry loading" onPress={() => { void installmentsStorage.hydrate(); }} /></Card>
+        <Card variant="filled"><AppText color="danger">{t('Saved contracts could not be loaded.', 'تعذر تحميل العقود المحفوظة.')}</AppText>
+          <AppButton title={t('Retry loading', 'إعادة المحاولة')} onPress={() => { void installmentsStorage.hydrate(); }} /></Card>
       ) : saved.hydration !== 'ready' ? (
-        <Card variant="filled"><AppText>Loading saved contracts...</AppText></Card>
+        <Card variant="filled"><AppText>{t('Loading saved contracts...', 'جارٍ تحميل العقود المحفوظة...')}</AppText></Card>
       ) : saved.contracts.length === 0 ? (
-        <Card variant="filled"><AppText>No installment contracts yet.</AppText></Card>
+        <Card variant="filled"><AppText>{t('No installment contracts yet.', 'لا توجد عقود أقساط بعد.')}</AppText></Card>
       ) : (
         <View style={styles.list}>
-          <AppText variant="bodyStrong">Saved contracts ({saved.contracts.length})</AppText>
+          <AppText variant="bodyStrong">{t('Saved contracts', 'العقود المحفوظة')} ({saved.contracts.length})</AppText>
           {saved.contracts.map(record => (
             <Card key={record.contract.id} variant="outlined" padded={false}
               style={[styles.card, { backgroundColor: tone.surface, borderColor: tone.border }]}>
-              <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + record.name}
+              <Pressable accessibilityRole="button" accessibilityLabel={t('Details for ', 'تفاصيل ') + record.name}
                 onPress={() => openContract(record.contract.id, 'details')}
                 style={({ pressed }) => [styles.heading, { opacity: pressed ? 0.7 : 1 }]}>
                 <View style={[styles.icon, { backgroundColor: colors.surface }]}>
@@ -82,18 +85,18 @@ export default function InstallmentsScreen() {
                 </View>
                 <View style={styles.flex}>
                   <AppText variant="bodyStrong">{record.name}</AppText>
-                  <AppText variant="caption" color="textSecondary">Standalone · {record.contract.currencyCode}</AppText>
+                  <AppText variant="caption" color="textSecondary">{t('Standalone', 'مستقل')} · {record.contract.currencyCode}</AppText>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel={'Details for ' + record.name + ' schedule'}
+              <Pressable accessibilityRole="button" accessibilityLabel={t('Details for ', 'تفاصيل ') + record.name + t(' schedule', ' - جدول الأقساط')}
                 onPress={() => openContract(record.contract.id, 'details')} style={styles.metrics}>
                 <View style={styles.flex}>
-                  <AppText variant="caption" color="textSecondary">Contract total</AppText>
+                  <AppText variant="caption" color="textSecondary">{t('Contract total', 'إجمالي العقد')}</AppText>
                   <AppText variant="bodyStrong" color={tone.accent}>{record.contract.totalAmount} {record.contract.currencyCode}</AppText>
                 </View>
                 <View style={styles.flex}>
-                  <AppText variant="caption" color="textSecondary">Installments</AppText>
+                  <AppText variant="caption" color="textSecondary">{t('Installments', 'الأقساط')}</AppText>
                   <AppText variant="bodyStrong">{record.contract.schedule.length}</AppText>
                 </View>
               </Pressable>
@@ -104,6 +107,7 @@ export default function InstallmentsScreen() {
           ))}
         </View>
       )}
+      {confirmation}
     </Screen>
   );
 }

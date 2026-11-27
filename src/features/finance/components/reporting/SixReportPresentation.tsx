@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppText } from '@/components/ui';
 import { useTheme } from '@/theme';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 
 /** Compact disclosure for the six approved reports only. */
 export function SixReportDetails({
@@ -14,6 +15,7 @@ export function SixReportDetails({
 }) {
   const [expanded, setExpanded] = useState(false);
   const { colors } = useTheme();
+  const { t } = useAppLanguage();
 
   return <View style={{
     borderWidth: 1,
@@ -25,7 +27,7 @@ export function SixReportDetails({
   }}>
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Toggle ${title} details`}
+      accessibilityLabel={`${t("Toggle", "تبديل عرض")} ${title} ${t("details", "التفاصيل")}`}
       accessibilityState={{ expanded }}
       onPress={() => setExpanded(value => !value)}
       style={{
@@ -65,11 +67,12 @@ export function SixReportInfo({
   warning?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useAppLanguage();
 
   return <View style={{ marginVertical: 3 }}>
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Report information"
+      accessibilityLabel={t("Report information", "معلومات التقرير")}
       accessibilityState={{ expanded }}
       onPress={() => setExpanded(value => !value)}
       style={{
@@ -85,7 +88,7 @@ export function SixReportInfo({
         color={warning ? '#B45309' : '#64748B'}
       />
       <AppText variant="caption" color="textSecondary">
-        {warning ? 'History incomplete · Details' : 'Report information'}
+        {warning ? t('History incomplete · Details', 'السجل غير مكتمل · التفاصيل') : t('Report information', 'معلومات التقرير')}
       </AppText>
       <Ionicons
         name={expanded ? 'chevron-up' : 'chevron-down'}

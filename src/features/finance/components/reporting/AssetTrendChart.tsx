@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { View } from 'react-native';
 import { AppText } from '@/components/ui';
 import type { Asset } from '@/features/finance/types/finance';
@@ -11,6 +12,7 @@ export function AssetTrendChart({
   compact?: boolean;
 }) {
   const { colors } = useTheme();
+  const { t } = useAppLanguage();
 
   const entries = assets.flatMap(asset =>
     asset.entries.map(entry => ({
@@ -52,16 +54,16 @@ export function AssetTrendChart({
       borderRadius: 12,
       backgroundColor: colors.surface,
     }}>
-      {!compact && <AppText variant="bodyStrong">Recorded Movements Trend · {unit}</AppText>}
+      {!compact && <AppText variant="bodyStrong">{t('Recorded Movements Trend', 'اتجاه الحركات المسجلة')} · {unit}</AppText>}
       {!compact && <AppText variant="caption" color="textSecondary">
         Cumulative recorded movements by date. Not verified historical balances or market prices.
       </AppText>}
 
       {!valid || points.length === 0 ? (
-        <AppText variant="caption">No valid dated movements to chart.</AppText>
+        <AppText variant="caption">{t("No valid dated movements to chart.", "لا توجد حركات مؤرخة صالحة للرسم البياني.")}</AppText>
       ) : (
         <>
-          {points.length === 1 && <AppText variant="caption" color="textSecondary">Only one recorded date is available; the marker shows a single observation, not a trend.</AppText>}
+          {points.length === 1 && <AppText variant="caption" color="textSecondary">{t('Only one recorded date is available; the marker shows a single observation, not a trend.', 'يوجد تاريخ مسجل واحد فقط؛ العلامة تمثل قراءة واحدة وليست اتجاهًا.')}</AppText>}
           <View style={{
             width,
             height,

@@ -1,3 +1,4 @@
+import { getCurrencyFlag } from '@/features/finance/constants/currencies';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText, Card } from '@/components/ui';
@@ -24,7 +25,7 @@ export function AccountCard({ account, balance, amountsVisible = true, onPress, 
       </View>
       <View style={styles.name}>
         <AppText variant="bodyStrong">{account.name}</AppText>
-        <AppText variant="caption" color={colors.finance.neutral.accent}>{t(ACCOUNT_TYPE_LABELS[account.type], ({ cash: 'نقدي', bank: 'بنك', wallet: 'محفظة', savings: 'ادخار', credit_card: 'بطاقة ائتمان' } as Record<AccountType, string>)[account.type]) + ' · ' + account.currencyCode}</AppText>
+        <AppText variant="caption" style={{ fontWeight: '700' }} color={colors.finance.neutral.accent}>{t(ACCOUNT_TYPE_LABELS[account.type], ({ cash: 'نقدي', bank: 'بنك', wallet: 'محفظة', savings: 'ادخار', credit_card: 'بطاقة ائتمان' } as Record<AccountType, string>)[account.type]) + ' · ' + getCurrencyFlag(account.currencyCode) + ' ' + account.currencyCode}</AppText>
       </View>
       <AppText variant="bodyStrong" color={balance < 0 ? 'danger' : tone.accent} style={styles.balance}>
         {amountsVisible ? formatAmount(balance, account.currencyCode) + ' ' + account.currencyCode : '••••••'}

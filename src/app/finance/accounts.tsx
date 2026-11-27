@@ -1,3 +1,7 @@
+import { applyAccountForm, formPayload, submitFinanceForm } from '@/features/finance/components/explicitFinanceForm';
+import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
+import { parseAmount } from '@/features/finance/utils/money';
+import { acknowledgedFinanceHandler } from '@/features/finance/components/acknowledgedFinanceHandler';
 import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
 import { financeChrome } from '@/features/finance/components/financeChrome';
 import { AccountCard } from '@/features/finance/components/AccountCard';
@@ -42,9 +46,6 @@ export default function AccountsScreen() {
   const transactions = useLedgerStore((state) => state.transactions);
   const transfers = useLedgerStore((state) => state.transfers);
 
-  const addAccount = useLedgerStore((state) => state.addAccount);
-  const verifyOpeningDate = useLedgerStore((state) => state.verifyAccountOpeningBalanceDate);
-  const updateAccount = useLedgerStore((state) => state.updateAccount);
   const deleteAccount = useLedgerStore((state) => state.deleteAccount);
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -66,84 +67,45 @@ export default function AccountsScreen() {
   };
 
   const handleSave = (data: AddAccountFormData) => {
-    const amount = Number(data.amount);
-
-    if (
-      !data.accountName.trim() ||
-      !data.amount.trim() ||
-      !Number.isFinite(amount)
-    ) {
-      Alert.alert(
-        t('Invalid account', 'حساب غير صالح'),
-        t('Enter an account name and a valid starting balance.', 'أدخل اسم الحساب ورصيدًا افتتاحيًا صالحًا.'),
-      );
+    const amount = parseAmount(data.amount);
+    if (!data.accountName.trim() || amount === null || !hasValidCurrencyPrecision(data.amount, data.selectedCurrency)) {
+      Alert.alert(t('Invalid account', 'حساب غير صالح'), t('Enter a valid name and starting balance.', 'أدخل اسمًا ورصيدًا افتتاحيًا صالحين.'));
       return;
     }
-
-    const accountTypes: Record<
-      AddAccountFormData['selectedType'],
-      AccountType
-    > = {
-      Cash: 'cash',
-      Bank: 'bank',
-      Wallet: 'wallet',
-      Savings: 'savings',
-      'Credit card': 'credit_card',
+    const accountTypes: Record<AddAccountFormData['selectedType'], AccountType> = {
+      Cash: 'cash', Bank: 'bank', Wallet: 'wallet', Savings: 'savings', 'Credit card': 'credit_card',
     };
-
-    const accountInput = {
-      name: data.accountName.trim(),
-      type: accountTypes[data.selectedType],
-      currencyCode: data.selectedCurrency,
-      initialBalance: amount,
-    };
-
-    if (editingAccount) {
-      const hasHistory = transactions.some(tx => tx.accountId === editingAccount.id)
-        || transfers.some(transfer => transfer.fromAccountId === editingAccount.id
-          || transfer.toAccountId === editingAccount.id);
-      const basisChanged = accountInput.initialBalance !== editingAccount.initialBalance
-        || (!hasHistory && accountInput.currencyCode !== editingAccount.currencyCode);
-      if (basisChanged && editingAccount.openingBalanceDate) {
-        Alert.alert(
-          t('Opening date verification will be cleared', 'سيتم إلغاء التحقق من تاريخ الرصيد الافتتاحي'),
-          t('Changing the starting balance or currency invalidates the verified opening date. The account history and existing movements will not be changed.', 'تغيير الرصيد الافتتاحي أو العملة يلغي التحقق من التاريخ الافتتاحي. لن تتغير الحركات والسجلات السابقة.'),
-          [
-            { text: t('Cancel', 'إلغاء'), style: 'cancel' },
-            { text: t('Continue', 'متابعة'), onPress: () => {
-              updateAccount(editingAccount.id, accountInput);
-              closeModal();
-            } },
-          ],
-        );
-        return;
-      }
-      updateAccount(editingAccount.id, accountInput);
-    } else {
-      if (data.openingBalanceDate && !isValidISODate(data.openingBalanceDate)) {
-        Alert.alert(t('Invalid opening date', 'تاريخ افتتاح غير صالح'), t('Enter a real calendar date in YYYY-MM-DD format.', 'أدخل تاريخًا صحيحًا بصيغة YYYY-MM-DD.'));
-        return;
-      }
-      const newAccountId = addAccount(accountInput);
-      if (!newAccountId) {
-        Alert.alert(t('Account not saved', 'لم يتم حفظ الحساب'), t('Check the starting balance and currency.', 'راجع الرصيد الافتتاحي والعملة.'));
-        return;
-      }
-      if (data.openingBalanceDate && !verifyOpeningDate(newAccountId, data.openingBalanceDate)) {
-        Alert.alert(t('Opening date not verified', 'لم يتم التحقق من تاريخ الافتتاح'),
-          t('The account was created, but its opening date could not be verified. Open account details to review and verify it.', 'تم إنشاء الحساب، لكن تعذر التحقق من تاريخ افتتاحه. افتح تفاصيل الحساب لمراجعته والتحقق منه.'));
-      }
+    const accountInput = { name: data.accountName.trim(), type: accountTypes[data.selectedType],
+      currencyCode: data.selectedCurrency, initialBalance: amount };
+    const targetId = editingAccount?.id ?? null;
+    const openingDate = targetId ? undefined : data.openingBalanceDate;
+    if (openingDate !== undefined && !isValidISODate(openingDate)) {
+      Alert.alert(t('Invalid opening date', 'تاريخ افتتاح غير صالح'), t('Enter a real calendar date.', 'أدخل تاريخًا صحيحًا.'));
+      return;
     }
-
-    closeModal();
+    const expectedUpdatedAt = editingAccount?.updatedAt;
+    const reject = () => Alert.alert(t('Account not saved', 'لم يتم حفظ الحساب'), t('Review the account details and try again.', 'راجع بيانات الحساب وحاول مرة أخرى.'));
+    const commit = () => submitFinanceForm("src/app/finance/accounts.tsx:68",
+      formPayload(targetId ? 'account.edit' : 'account.create', targetId, accountInput, { openingDate, expectedUpdatedAt }),
+      () => applyAccountForm(useLedgerStore.getState, targetId, accountInput, openingDate, expectedUpdatedAt),
+      () => { closeModal(); }, reject);
+    if (editingAccount?.openingBalanceDate && (accountInput.initialBalance !== editingAccount.initialBalance || accountInput.currencyCode !== editingAccount.currencyCode)) {
+      Alert.alert(t('Opening date verification will be cleared', 'سيتم إلغاء التحقق من تاريخ الرصيد الافتتاحي'),
+        t('Changing the starting balance or currency invalidates the verified opening date.', 'تغيير الرصيد الافتتاحي أو العملة يلغي التحقق من التاريخ الافتتاحي.'),
+        [{ text: t('Cancel', 'إلغاء'), style: 'cancel' }, { text: t('Continue', 'متابعة'), onPress: commit }]);
+      return;
+    }
+    return commit();
   };
 
   const confirmDelete = (account: Account) => {
     const message =
       t('Ordinary transactions will be deleted. Accounts with transfers or loan/debt history cannot be deleted.', 'سيتم حذف المعاملات العادية. لا يمكن حذف حساب مرتبط بتحويلات أو بسجل قروض أو ديون.');
-    const performDelete = () => {
-      if (!deleteAccount(account.id)) Alert.alert(t('Cannot delete account', 'لا يمكن حذف الحساب'), t('This account has transfers or loan/debt dependencies. Keep it to preserve its accounting history.', 'هذا الحساب مرتبط بتحويلات أو قروض أو ديون. احتفظ به للحفاظ على سجله المحاسبي.'));
-    };
+    const performDelete = () => acknowledgedFinanceHandler("src/app/finance/accounts.tsx:144", () => undefined, {
+      payload: { operation: 'deleteAccount', targetId: account.id },
+      mutate: () => deleteAccount(account.id),
+      onCommitted: result => { if (result !== true) Alert.alert(t('Cannot delete account', 'لا يمكن حذف الحساب'), t('This account has transfers or loan/debt dependencies. Keep it to preserve its accounting history.', 'هذا الحساب مرتبط بتحويلات أو قروض أو ديون. احتفظ به للحفاظ على سجله المحاسبي.')); },
+    })();
 
     confirm(t(`Delete "${account.name}"?`, `حذف "${account.name}"؟`), message, performDelete, t('Delete', 'حذف'));
   };

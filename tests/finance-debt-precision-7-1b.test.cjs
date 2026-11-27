@@ -12,7 +12,7 @@ function loadTS(file, mocks) {
   return module.exports;
 }
 const currencies = loadTS(path.join(root, "src/features/finance/constants/currencies.ts"), {});
-const precision = loadTS(path.join(root, "src/features/finance/utils/amountPrecision.ts"), { "@/features/finance/constants/currencies": currencies });
+const precision = loadTS(path.join(root, "src/features/finance/utils/amountPrecision.ts"), { "@/features/finance/constants/currencies": currencies, "@/utils/input": loadTS(path.join(root, "src/utils/input.ts"), {}), "./exactAmountArithmetic": loadTS(path.join(root, "src/features/finance/utils/exactAmountArithmetic.ts"), {}) });
 test("7.1B actual helper rejects excess debt precision", () => {
   assert.equal(precision.hasValidCurrencyPrecision("10.12", "EGP"), true);
   assert.equal(precision.hasValidCurrencyPrecision("10.123", "EGP"), false);

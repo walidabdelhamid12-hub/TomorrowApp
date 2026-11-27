@@ -5,6 +5,7 @@ import DateTimePicker, {
 import { useState } from 'react';
 import { Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
 
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { useTheme } from '@/theme';
 import {
     isoToDate,
@@ -21,6 +22,8 @@ interface DateFieldProps {
   value: string;
   onChange: (value: string) => void;
   containerStyle?: StyleProp<ViewStyle>;
+  pickerOnly?: boolean;
+  onClear?: () => void;
 }
 
 /** Date input: type it manually, or pick it from the calendar icon. */
@@ -29,13 +32,16 @@ export function FinanceDateField({
   value,
   onChange,
   containerStyle,
+  pickerOnly = false,
+  onClear,
 }: DateFieldProps) {
   const { spacing } = useTheme();
+  const { t } = useAppLanguage();
   const [open, setOpen] = useState(false);
 
   const valid = isValidISODate(value);
   const error =
-    value.length >= 10 && !valid ? 'Use the format YYYY-MM-DD' : undefined;
+    value.length >= 10 && !valid ? t('Use the format YYYY-MM-DD', 'استخدم الصيغة YYYY-MM-DD') : undefined;
 
   const handlePick = (event: DateTimePickerEvent, selected?: Date) => {
     // Android shows a dialog that closes itself after one choice.
@@ -46,9 +52,10 @@ export function FinanceDateField({
   return (
     <View style={containerStyle}>
       <AppInput
-        label={label}
+        label={label === 'Date' ? t('Date', 'التاريخ') : label}
         value={value}
-        onChangeText={(text) => onChange(normalizeDigits(text))}
+        editable={!pickerOnly}
+        onChangeText={(text) => { if (!pickerOnly) onChange(normalizeDigits(text)); }}
         placeholder="YYYY-MM-DD"
         keyboardType="numbers-and-punctuation"
         maxLength={10}
@@ -59,12 +66,14 @@ export function FinanceDateField({
             onPress={() => setOpen((v) => !v)}
             style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
             accessibilityRole="button"
-            accessibilityLabel="Open calendar"
+            accessibilityLabel={t('Open calendar', 'فتح التقويم')}
           >
             <Ionicons name="calendar-outline" size={22} color="#D6B777" />
           </Pressable>
         }
       />
+
+      {onClear && value ? <AppButton title={t('Clear date', 'مسح التاريخ')} variant="ghost" onPress={onClear} /> : null}
 
       {open ? (
         <View style={{ marginTop: spacing.sm }}>
@@ -76,7 +85,7 @@ export function FinanceDateField({
           />
           {Platform.OS === 'ios' ? (
             <AppButton
-              title="Done"
+              title={t('Done', 'تم')}
               variant="ghost"
               onPress={() => setOpen(false)}
             />

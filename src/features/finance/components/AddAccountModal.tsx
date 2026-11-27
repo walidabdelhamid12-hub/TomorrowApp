@@ -3,7 +3,7 @@ import { useAppLanguage } from '@/localization/LanguageProvider';
 import { FinanceChoiceDropdown, FINANCE_CURRENCY_CHOICES } from './FinanceChoiceDropdown';
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -20,6 +20,7 @@ import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import type { Account, AccountType } from '@/features/finance/types/ledger';
 import { FinanceButton } from './FinanceButton';
 import { FinanceInput } from './FinanceInput';
+import { FinanceDateField } from '@/features/finance/components/FinanceDateField';
 
 export type AccountTypeLabel =
   | 'Cash'
@@ -137,30 +138,25 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   const [accountName, setAccountName] = useState('');
   const [openingDate, setOpeningDate] = useState('');
   const [openingDateConfirmed, setOpeningDateConfirmed] = useState(false);
-  const [amount, setAmount] = useState('0');
+  const [amount, setAmount] = useState('');
   const [selectedType, setSelectedType] =
     useState<AccountTypeLabel>('Cash');
   const [selectedCurrency, setSelectedCurrency] =
     useState(baseCurrency);
 
-  useEffect(() => {
-    if (!visible) return;
-
-    setOpeningDate('');
-    setOpeningDateConfirmed(false);
-    if (account) {
-      setAccountName(account.name);
-      setAmount(String(account.initialBalance));
-      setSelectedType(TYPE_LABEL_BY_VALUE[account.type]);
-      setSelectedCurrency(account.currencyCode);
-      return;
+  const formContext = { visible, account, baseCurrency, initialType };
+  const [loadedFormContext, setLoadedFormContext] = useState<typeof formContext | null>(null);
+  if (!loadedFormContext || loadedFormContext.visible !== visible || loadedFormContext.account !== account || loadedFormContext.baseCurrency !== baseCurrency || loadedFormContext.initialType !== initialType) {
+    setLoadedFormContext(formContext);
+    if (visible) {
+      setOpeningDate('');
+      setOpeningDateConfirmed(false);
+      setAccountName(account?.name ?? '');
+      setAmount(account ? String(account.initialBalance) : '');
+      setSelectedType(account ? TYPE_LABEL_BY_VALUE[account.type] : initialType);
+      setSelectedCurrency(account?.currencyCode ?? baseCurrency);
     }
-
-    setAccountName('');
-    setAmount('0');
-    setSelectedType(initialType);
-    setSelectedCurrency(baseCurrency);
-  }, [visible, account, baseCurrency, initialType]);
+  }
 
   const selectedCurrencyOption = CURRENCY_OPTIONS.find(
     (currency) => currency.code === selectedCurrency,
@@ -209,23 +205,21 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
                   keyboardType="decimal-pad"
                   value={amount}
                   onChangeText={setAmount}
-                  placeholder="0"
+                  placeholder=""
                   placeholderTextColor="#999"
                 />
               </View>
             </View>
 
             <Text style={styles.helperText}>
-              Money already in the account before you start tracking.
+              {t("Money already in the account before you start tracking.", "الرصيد الموجود بالحساب قبل بدء التتبع.")}
             </Text>
 
             {!account && <View style={{ marginTop: 12, gap: 8 }}>
               <Text style={styles.label}>{t('VERIFIED OPENING DATE (OPTIONAL)', 'تاريخ الرصيد الافتتاحي المؤكد (اختياري)')}</Text>
-              <TextInput accessibilityLabel="New account opening date (YYYY-MM-DD)"
-                style={styles.input} value={openingDate} onChangeText={value => {
-                  setOpeningDate(value); setOpeningDateConfirmed(false);
-                }} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"
-                autoCorrect={false} maxLength={10} />
+              <FinanceDateField label={t('Opening date', 'تاريخ الافتتاح')} value={openingDate} pickerOnly
+                onChange={value => { setOpeningDate(value); setOpeningDateConfirmed(false); }}
+                onClear={() => { setOpeningDate(''); setOpeningDateConfirmed(false); }} />
               <TouchableOpacity accessibilityRole="checkbox"
                 accessibilityState={{ checked: openingDateConfirmed }}
                 onPress={() => setOpeningDateConfirmed(value => !value)}
@@ -265,6 +259,7 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
                   selectedType,
                   selectedCurrency,
                 });
+              
               }}
             />
       </View>

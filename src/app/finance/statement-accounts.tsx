@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
 import { StatementSixChrome, StatementSixRows } from '@/features/finance/components/reporting/StatementSixUI';
 import { reportRoutePeriod, reportRouteCurrency } from '@/features/finance/utils/reportRoutePeriod';
@@ -13,6 +14,7 @@ import { useTheme } from '@/theme';
 /** Account-currency movement register. Reuses the report's strict reconciliation gate. */
 export default function AccountsStatementScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const { spacing } = useTheme();
   const params = useLocalSearchParams<{ currencyCode?: string; from?: string; to?: string; month?: string; accountId?: string }>();
   const ready = useLedgerHydrated();
@@ -65,17 +67,17 @@ export default function AccountsStatementScreen() {
   const selectionValid = filterValid && (!accountId || accounts.filter(account => account.id === accountId).length === 1);
   const names = new Map(accounts.map(account => [account.id, { name: account.name, currency: account.currencyCode }]));
   return <Screen scroll>
-    <Pressable accessibilityRole="button" accessibilityLabel="Back to Accounts Report"
+    <Pressable accessibilityRole="button" accessibilityLabel={t("Back to Accounts Report", "العودة إلى تقرير الحسابات")}
       onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
       <AppText>‹ Accounts Report</AppText>
     </Pressable>
-    <StatementSixChrome kind={'Accounts'} from={period?.from ?? "—"} to={period?.to ?? "—"} category={accountId ? 'Selected account' : 'All accounts'} currency={currencyCode || undefined} />
-    {!period || !selectionValid ? <Card><AppText>Invalid statement filters.</AppText></Card> :
-      !ready ? <Card><AppText>Loading accounts...</AppText></Card> :
-      rows === null ? <Card><AppText>Statement unavailable.</AppText></Card> :
+    <StatementSixChrome kind={'Accounts'} from={period?.from ?? "—"} to={period?.to ?? "—"} category={accountId ? t('Selected account', 'الحساب المحدد') : t('All accounts', 'كل الحسابات')} currency={currencyCode || undefined} />
+    {!period || !selectionValid ? <Card><AppText>{t("Invalid statement filters.", "فلاتر كشف الحساب غير صالحة.")}</AppText></Card> :
+      !ready ? <Card><AppText>{t("Loading accounts...", "جارٍ تحميل الحسابات...")}</AppText></Card> :
+      rows === null ? <Card><AppText>{t("Statement unavailable.", "كشف الحساب غير متاح.")}</AppText></Card> :
       selected.some(row => row.status !== 'available' || !row.reconciled || row.minorUnits === null)
-        ? <Card><AppText color="textSecondary">Incomplete account history. Movement details are unavailable until reconciled.</AppText></Card> :
-      entries.length === 0 ? <Card><AppText>No reconciled account movements in this period.</AppText></Card> :
+        ? <Card><AppText color="textSecondary">{t('Incomplete account history. Movement details are unavailable until reconciled.', 'سجل الحساب غير مكتمل. تفاصيل الحركات غير متاحة حتى تتم المطابقة.')}</AppText></Card> :
+      entries.length === 0 ? <Card><AppText>{t("No reconciled account movements in this period.", "لا توجد حركات حسابات متطابقة في هذه الفترة.")}</AppText></Card> :
       <StatementSixRows secondColumnLabel="Account" rows={entries.map(item => ({ id: item.id + ':' + item.accountId, date: item.date, category: names.get(item.accountId)?.name ?? 'Unknown account', description: item.kind + (item.note ? ' · ' + item.note : ''), amount: names.get(item.accountId) ? formatAmount(item.amount, names.get(item.accountId)!.currency) : 'Unavailable', currencyCode: names.get(item.accountId)?.currency }))} />
   }<StatementExportActions />
   </Screen>;

@@ -1,3 +1,5 @@
+import { verifiedFeeOwner, isTransferFeeClaim } from '@/features/finance/utils/transferSettlement';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { FinanceDetailsModal } from '@/features/finance/components/FinanceDetailsModal';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +32,7 @@ export function TransactionsSection({
   onEdit, onEditTransfer, onDelete, onDeleteTransfer, onManage, amountsVisible,
 }: TransactionsSectionProps) {
   const { colors, spacing } = useTheme();
+  const { t } = useAppLanguage();
   const { width, fontScale } = useWindowDimensions();
   const stacked = width / fontScale < 340;
   const transactions = useLedgerStore(s => s.transactions);
@@ -53,7 +56,9 @@ export function TransactionsSection({
   const visible = expanded ? sorted : sorted.slice(0, PREVIEW_COUNT);
   const toggleAll = () => setShowAll(value => !value);
 
-  const detailMatches = detailItem?.kind === 'transfer' ? transfers.filter(t => t.id === detailItem.id)
+  const selectedCash = detailItem?.kind === 'transaction' ? transactions.find(t => t.id === detailItem.id) : undefined;
+  const feeOwner = selectedCash && isTransferFeeClaim(selectedCash, { transfers }) ? verifiedFeeOwner(selectedCash, { accounts, categories, transactions, transfers }) : null;
+  const detailMatches = feeOwner ? transfers.filter(t => t.id === feeOwner.id) : detailItem?.kind === 'transfer' ? transfers.filter(t => t.id === detailItem.id)
     : transactions.filter(t => t.id === detailItem?.id);
   const detailRecord = detailMatches.length === 1 ? detailMatches[0] : undefined;
   const money = (amount: number, currency: string) => amountsVisible ? formatAmount(amount, currency) + ' ' + currency : '••••••';
@@ -62,6 +67,9 @@ export function TransactionsSection({
     'To: ' + (accountById.get(detailRecord.toAccountId)?.name ?? 'Unavailable account'),
     'Sent: ' + money(detailRecord.fromAmount ?? detailRecord.amount, detailRecord.fromCurrencyCode ?? detailRecord.currencyCode),
     'Received: ' + money(detailRecord.toAmount ?? detailRecord.amount, detailRecord.toCurrencyCode ?? detailRecord.currencyCode),
+    ...(detailRecord.feeAmount !== undefined ? ['Additional transfer fee: ' + money(detailRecord.feeAmount, detailRecord.fromCurrencyCode ?? detailRecord.currencyCode)] : []),
+    ...(detailRecord.quotedExchangeRate !== undefined || detailRecord.exchangeRate !== undefined ? ['Exchange rate: ' + (amountsVisible ? String(detailRecord.quotedExchangeRate ?? detailRecord.exchangeRate) : '••••••')] : []),
+    ...(detailRecord.feeTransactionId ? ['Fee category: ' + (categoryById.get(transactions.find(tx => tx.id === detailRecord.feeTransactionId)?.categoryId ?? '')?.name ?? 'Unavailable category')] : []),
     'Date: ' + detailRecord.date, ...(detailRecord.note ? ['Note: ' + detailRecord.note] : []),
   ] : [
     'Category: ' + (categoryById.get(detailRecord.categoryId)?.name ?? 'Unavailable category'),
@@ -93,13 +101,17 @@ export function TransactionsSection({
       (operation === 'edit' ? onEdit : onDelete)(matches[0]);
     }
   };
-  const selectedProtected = detailItem?.kind === 'transaction' && detailRecord && !('fromAccountId' in detailRecord)
+  const selectedProtected = !feeOwner && detailItem?.kind === 'transaction' && detailRecord && !('fromAccountId' in detailRecord)
     ? isProtectedTransaction(detailRecord, { loans, debts }) : false;
   const openDetailAction = (operation: 'edit' | 'delete') => {
     if (!detailItem || !detailRecord) return;
-    const { kind, id } = detailItem;
+    const latest = useLedgerStore.getState();
+    const cash = detailItem.kind === 'transaction' ? latest.transactions.filter(row => row.id === detailItem.id) : [];
+    const currentOwner = cash.length === 1 && isTransferFeeClaim(cash[0], latest) ? verifiedFeeOwner(cash[0], latest) : null;
+    if (feeOwner && currentOwner?.id !== feeOwner.id) return;
+    const target = currentOwner ? { kind: 'transfer' as const, id: currentOwner.id } : detailItem;
     setDetailItem(null);
-    performAction(kind, id, operation);
+    performAction(target.kind, target.id, operation);
   };
   const openLinkedRecord = () => {
     if (!detailRecord || 'fromAccountId' in detailRecord) return;
@@ -111,48 +123,48 @@ export function TransactionsSection({
 
   return (
     <View style={{ marginTop: spacing.xl }}>
-      <FinanceDetailsModal title={detailItem ? detailItem.kind === 'transfer' ? 'Transfer details' : 'Transaction details' : undefined}
-        lines={detailLines} plainLines={detailItem?.kind === 'transfer'}
+      <FinanceDetailsModal title={detailItem ? (feeOwner || detailItem.kind === 'transfer') ? t('Transfer details', 'تفاصيل التحويل') : t('Transaction details', 'تفاصيل المعاملة') : undefined}
+        lines={detailLines}
         detailIcon={detailItem?.kind === 'transaction' && detailRecord && !('fromAccountId' in detailRecord)
           ? (() => { const category = categoryById.get(detailRecord.categoryId); return category?.icon && category.icon in Ionicons.glyphMap
             ? { name: category.icon as IconName, color: category.color ?? colors.textSecondary } : undefined; })() : undefined}
         onClose={() => setDetailItem(null)}>
         {detailRecord && detailItem ? selectedProtected ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Open linked record details" onPress={openLinkedRecord}
+          <Pressable accessibilityRole="button" accessibilityLabel={t("Open linked record details", "فتح تفاصيل السجل المرتبط")} onPress={openLinkedRecord}
             style={[styles.linkedAction, { backgroundColor: colors.finance.neutral.surface, borderColor: '#D6B777' }]}>
             <Ionicons name="open-outline" size={19} color={colors.finance.neutral.accent} />
-            <AppText variant="bodyStrong">Open linked record</AppText>
+            <AppText variant="bodyStrong">{t("Open linked record", "فتح السجل المرتبط")}</AppText>
           </Pressable>
         ) : (
-          <FinanceActionButtons label={detailItem.kind} onEdit={() => openDetailAction('edit')} onDelete={() => openDetailAction('delete')} />
+          <FinanceActionButtons label={feeOwner ? 'transfer' : detailItem.kind} onEdit={() => openDetailAction('edit')} onDelete={() => openDetailAction('delete')} />
         ) : null}
       </FinanceDetailsModal>
       <View style={styles.toolbar}>
         <View style={styles.sectionHeader}>
           <Ionicons name="receipt" size={21} color={colors.finance.balance.accent} accessible={false} />
           <AppText variant="bodyStrong" numberOfLines={1} ellipsizeMode="tail"
-            accessibilityRole="header" accessibilityLabel="Recent Transactions" style={[styles.headingText, { color: colors.text, fontWeight: '800' }]}>
-            Recent Transactions
+            accessibilityRole="header" accessibilityLabel={t("Recent Transactions", "المعاملات الأخيرة")} style={[styles.headingText, { color: colors.text, fontWeight: '800' }]}>
+            {t("Recent Transactions", "أحدث المعاملات")}
           </AppText>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={expanded ? 'Show less' : 'View all (' + sorted.length + ')'}
+        <Pressable accessibilityRole="button" accessibilityLabel={expanded ? t('Show less', 'عرض أقل') : t('View all (', 'عرض الكل (') + sorted.length + ')'}
           accessibilityState={{ expanded, disabled: sorted.length <= PREVIEW_COUNT }} disabled={sorted.length <= PREVIEW_COUNT}
           accessibilityHint={sorted.length <= PREVIEW_COUNT ? 'All transactions are already visible'
             : expanded ? 'Return to the most recent transaction' : 'Show every transaction'}
           onPress={toggleAll} style={({ pressed }) => [styles.listToggle, { opacity: pressed ? 0.65 : 1 }]}>
           <AppText variant="caption" color={sorted.length <= PREVIEW_COUNT ? 'textSecondary' : colors.finance.balance.accent} style={styles.actionLabel}>
-            {expanded ? 'Show less' : 'View all (' + sorted.length + ')'}
+            {expanded ? t('Show less', 'عرض أقل') : t('View all (', 'عرض الكل (') + sorted.length + ')'}
           </AppText>
           <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16}
             color={sorted.length <= PREVIEW_COUNT ? colors.textSecondary : colors.finance.balance.accent} accessible={false} />
         </Pressable>
       </View>
       <AppText variant="label" color="textSecondary" style={{ marginBottom: spacing.sm }}>
-        {'Showing ' + visible.length + ' of ' + sorted.length}
+        {t('Showing ', 'عرض ') + visible.length + t(' of ', ' من ') + sorted.length}
       </AppText>
 
       {sorted.length === 0 ? (
-        <Card variant="filled"><AppText color="textSecondary">No transactions yet. Tap "Add transaction" to start.</AppText></Card>
+        <Card variant="filled"><AppText color="textSecondary">{t('No transactions yet. Tap "Add transaction" to start.', 'لا توجد معاملات بعد. اضغط «إضافة معاملة» للبدء.')}</AppText></Card>
       ) : (
         <Card padded={false} variant="outlined" style={{ backgroundColor: colors.finance.neutral.surface, borderColor: '#B68C42', borderWidth: 1.3, borderRadius: 14 }}>
           {visible.map((item, index) => {
@@ -164,8 +176,9 @@ export function TransactionsSection({
               const toCurrency = transfer.toCurrencyCode ?? transfer.currencyCode;
               const cardPayment = transfer.type === 'credit_card_payment';
               return (
-                <View key={'transfer-' + item.id} style={rowStyle}>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Transfer details" onPress={() => setDetailItem({ kind: 'transfer', id: transfer.id })} style={styles.rowBody}>
+                <View key={'transfer-' + item.id} style={[{ gap: 2 }, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#D6B777' }]}>
+                <View style={[styles.row, stacked && styles.stacked]}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={t("Transfer details", "تفاصيل التحويل")} onPress={() => setDetailItem({ kind: 'transfer', id: transfer.id })} style={styles.rowBody}>
                   <View style={[styles.iconCircle, { backgroundColor: colors.finance.transfer.surface }]}>
                     <Ionicons name={cardPayment ? 'card-outline' : 'swap-horizontal-outline'} size={20}
                       color={colors.finance.transfer.accent} accessible={false} />
@@ -190,6 +203,7 @@ export function TransactionsSection({
 
                   </View>
                 </View>
+                </View>
               );
             }
             const tx = item.transaction;
@@ -207,10 +221,10 @@ export function TransactionsSection({
             const metadata = tx.date + ' · ' + (account?.name ?? 'Unavailable account');
             const content = (
               <>
-                <View style={[styles.iconCircle, { backgroundColor: (expense ? colors.finance.expense : colors.finance.income).surface }]}>
+                <View style={{ alignItems: 'center', flexShrink: 0 }}><View style={[styles.iconCircle, { backgroundColor: (expense ? colors.finance.expense : colors.finance.income).surface }]}>
                   <Ionicons name={protectedRecord ? destination?.href.pathname === '/finance/loans' ? 'cash-outline' : 'people-outline' : tx.entryType === 'refund' ? icon : categoryIcon}
                     size={20} color={movementColor} accessible={false} />
-                </View>
+                </View>{tx.entryType === 'refund' && <AppText variant="label" color={movementColor} style={{ fontSize: 10 }}>{t('Refund', 'استرداد')}</AppText>}</View>
                 <View style={styles.details}>
                   <View style={styles.primary}>
                     <AppText variant="caption" style={styles.name}>{description}</AppText>
@@ -222,10 +236,11 @@ export function TransactionsSection({
             );
             return (
               <View key={'transaction-' + item.id} style={rowStyle}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Transaction details"
+                <Pressable accessibilityRole="button" accessibilityLabel={t("Transaction details", "تفاصيل المعاملة")}
                   onPress={() => setDetailItem({ kind: 'transaction', id: tx.id })} style={styles.rowBody}>{content}</Pressable>
                 <View style={[styles.right, stacked && { maxWidth: '100%' }]}>
                   <AppText variant="caption" style={styles.amount} color={movementColor} textBreakStrategy="simple">{amount}</AppText>
+                  {tx.originalAmount !== undefined && tx.originalCurrencyCode && <AppText variant="label" color={colors.finance.neutral.accent} style={{ textAlign: 'right' }}>{t('Original', 'الأصلي')}: {money(tx.originalAmount, tx.originalCurrencyCode)}</AppText>}
                 </View>
               </View>
             );

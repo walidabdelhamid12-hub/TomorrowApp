@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -19,6 +20,7 @@ interface ScanDocumentButtonProps {
 /** Camera / gallery / PDF buttons that fill the transaction form from a document. */
 export function ScanDocumentButton({ onResult, initialSource, onFinished }: ScanDocumentButtonProps) {
   const { spacing } = useTheme();
+  const { t } = useAppLanguage();
   const [busy, setBusy] = useState<ScanSource | null>(null);
   const [message, setMessage] = useState<string | undefined>();
 
@@ -82,12 +84,12 @@ export function ScanDocumentButton({ onResult, initialSource, onFinished }: Scan
         color="textSecondary"
         style={{ marginBottom: spacing.xs }}
       >
-        SCAN CHEQUE / RECEIPT / PDF
+        {t("SCAN CHEQUE / RECEIPT / PDF", "مسح شيك / إيصال / PDF")}
       </AppText>
       {!initialSource ? <View style={styles.row}>
         <View style={[styles.flex, { marginEnd: spacing.sm }]}>
           <AppButton
-            title="Camera"
+            title={t("Camera", "الكاميرا")}
             variant="outline"
             accentColor={accent}
             loading={busy === 'camera'}
@@ -97,7 +99,7 @@ export function ScanDocumentButton({ onResult, initialSource, onFinished }: Scan
         </View>
         <View style={[styles.flex, { marginHorizontal: spacing.xs }]}>
           <AppButton
-            title="Gallery"
+            title={t("Gallery", "المعرض")}
             variant="outline"
             accentColor={accent}
             loading={busy === 'gallery'}
@@ -107,7 +109,7 @@ export function ScanDocumentButton({ onResult, initialSource, onFinished }: Scan
         </View>
         <View style={[styles.flex, { marginStart: spacing.sm }]}>
           <AppButton
-            title="PDF"
+            title={t("PDF", "PDF")}
             variant="outline"
             accentColor={accent}
             loading={busy === 'file'}

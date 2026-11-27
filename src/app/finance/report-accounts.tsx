@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,7 @@ function verified(row: AccountReportRow) {
 /** Read-only presentation; explicit stored opening dates remain the only history bases. */
 export default function AccountsReportScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const { colors } = useTheme();
   const ready = useLedgerHydrated();
   const currencyReady = useCurrencyHydrated();
@@ -81,7 +83,7 @@ export default function AccountsReportScreen() {
   <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 48 }}>
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Back"
+      accessibilityLabel={t("Back", "رجوع")}
       onPress={() => router.back()}
       style={{ width: 44, minHeight: 44, justifyContent: 'center' }}
     >
@@ -90,41 +92,41 @@ export default function AccountsReportScreen() {
     <AppText variant="bodyStrong" style={{
       color: '#FFFFFF', flex: 1, textAlign: 'center', fontSize: 17,
     }}>
-      Tomorrow Finance Report
+      {'Tomorrow Finance Report'}
     </AppText>
     <View style={{ width: 44 }} />
   </View>
   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 }}>
     <Ionicons name="document-text-outline" size={20} color="#CBD5E1" />
     <AppText variant="bodyStrong" style={{ color: '#CBD5E1', fontSize: 16, fontWeight: '700' }}>
-      Accounts Report
+      {t("Accounts Report", "تقرير الحسابات")}
     </AppText>
   </View>
 </View>
     <ReportDates period={period} onChange={setPeriod} />
     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'stretch' }}>
-      <View style={{ flex: 1 }}><ReportPicker label="Account" value={accountId ?? ''} onSelect={value => setAccountId(value || null)} options={[{ id: '', label: 'All accounts' }, ...accounts.map(account => ({ id: account.id, label: account.name + ' ' + currencyLabel(account.currencyCode) + (account.archived ? ' · Archived' : '') }))]} /></View>
-      <View style={{ flex: 1 }}><ReportPicker label="Currency" value={activeCurrency} onSelect={setCurrency} options={[{ id: '', label: 'All currencies' }, ...currencies.map(code => ({ id: code, label: currencyLabel(code) }))]} /></View>
+      <View style={{ flex: 1 }}><ReportPicker label={t("Account", "الحساب")} value={accountId ?? ''} onSelect={value => setAccountId(value || null)} options={[{ id: '', label: t("All accounts", "كل الحسابات") }, ...accounts.map(account => ({ id: account.id, label: account.name + ' ' + currencyLabel(account.currencyCode) + (account.archived ? ' · Archived' : '') }))]} /></View>
+      <View style={{ flex: 1 }}><ReportPicker label={t("Currency", "العملة")} value={activeCurrency} onSelect={setCurrency} options={[{ id: '', label: t("All currencies", "كل العملات") }, ...currencies.map(code => ({ id: code, label: currencyLabel(code) }))]} /></View>
     </View>
-    {!ready || !rows ? <ActivityIndicator accessibilityLabel="Loading accounts report" color={moduleColors.finance} /> : !validSelection ? <ReportStatus warning>Selected account is missing or ambiguous. Select another account.</ReportStatus> : selectedRows.length === 0 ? <ReportStatus>No accounts for this selection.</ReportStatus> : <>
-      {historical ? <ReportSummaryCards currency={activeCurrency} cards={[{ label: 'Opening Balance', value: sum('openingBalance') }, { label: 'Closing Balance', value: sum('closingBalance') }, { label: 'Net Change', value: sum('change') }]} /> : null}
+    {!ready || !rows ? <ActivityIndicator accessibilityLabel={t("Loading accounts report", "جارٍ تحميل تقرير الحسابات")} color={moduleColors.finance} /> : !validSelection ? <ReportStatus warning>{t("Selected account is missing or ambiguous. Select another account.", "الحساب المحدد غير موجود أو غير واضح. اختر حسابًا آخر.")}</ReportStatus> : selectedRows.length === 0 ? <ReportStatus>No accounts for this selection.</ReportStatus> : <>
+      {historical ? <ReportSummaryCards currency={activeCurrency} cards={[{ label: t("Opening Balance", "الرصيد الافتتاحي"), value: sum('openingBalance') }, { label: t("Closing Balance", "الرصيد الختامي"), value: sum('closingBalance') }, { label: t("Net Change", "صافي التغير"), value: sum('change') }]} /> : null}
       <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, marginVertical: 8, backgroundColor: colors.surface }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ flex: 1 }}><AppText variant="bodyStrong" style={{ fontSize: 16, fontWeight: '800' }}>Total Accounts Balance</AppText></View>
+          <View style={{ flex: 1 }}><AppText variant="bodyStrong" style={{ fontSize: 16, fontWeight: '800' }}>{t("Total Accounts Balance", "إجمالي أرصدة الحسابات")}</AppText></View>
           <View style={{ flexShrink: 0 }}><BalanceCurrencyPicker value={balanceCurrency} onSelect={setDisplayCurrency} /></View>
         </View>
-        <AppText variant="bodyStrong" style={{ fontSize: 25, fontWeight: '800', marginTop: 8, fontVariant: ['tabular-nums'] }}>{totalClosing !== null && Number.isFinite(totalClosing) ? formatAmount(totalClosing, balanceCurrency) : 'Balance unavailable'}</AppText>
+        <AppText variant="bodyStrong" style={{ fontSize: 25, fontWeight: '800', marginTop: 8, fontVariant: ['tabular-nums'] }}>{totalClosing !== null && Number.isFinite(totalClosing) ? formatAmount(totalClosing, balanceCurrency) : t("Balance unavailable", "الرصيد غير متاح")}</AppText>
       </View>
-      {<ReportChart currencies={currencies} onCurrencySelect={setCurrency} currency={chartCurrency} title="Account analysis" description="Positive verified closing balances; negative balances remain in details." empty="No positive verified balances to chart." data={chartRows.map(row => ({ id: row.accountId, label: row.accountName, amount: row.closingBalance! }))} />}
-      <AppText variant="bodyStrong" style={{ marginTop: 6 }}>Accounts ({visible.length})</AppText>
+      {<ReportChart currencies={currencies} onCurrencySelect={setCurrency} currency={chartCurrency} title={t("Account analysis", "تحليل الحسابات")} description={t("Positive verified closing balances; negative balances remain in details.", "الأرصدة الختامية الموجبة المتحقق منها؛ وتظهر الأرصدة السالبة في التفاصيل.")} empty={t("No positive verified balances to chart.", "لا توجد أرصدة موجبة متحقق منها للرسم البياني.")} data={chartRows.map(row => ({ id: row.accountId, label: row.accountName, amount: row.closingBalance! }))} />}
+      <AppText variant="bodyStrong" style={{ marginTop: 6 }}>{t("Accounts", "الحسابات")} ({visible.length})</AppText>
       {visible.map((row, index) => <View key={row.accountId + ':' + index} testID={'account-report-' + row.accountId} style={{ borderBottomWidth: 1, borderColor: colors.border, paddingVertical: 3 }}>
-        <SixReportDetails title={row.accountName} leadingIcon={currencyLabel(row.currencyCode).split(" ")[0]} subtitle={verified(row) ? money(row.closingBalance, row.currencyCode) : 'History unavailable'}>
+        <SixReportDetails title={row.accountName} leadingIcon={currencyLabel(row.currencyCode).split(" ")[0]} subtitle={verified(row) ? money(row.closingBalance, row.currencyCode) : t("History unavailable", "السجل غير متاح")}>
           {verified(row) ? <>
-            <ReportKeyValues items={[{ label: 'Opening Balance', value: money(row.openingBalance, row.currencyCode) }, { label: 'Closing Balance', value: money(row.closingBalance, row.currencyCode) }, { label: 'Net Change', value: money(row.change, row.currencyCode) }]} />
-            <SixReportDetails title={'Movements for ' + row.accountName}><ReportKeyValues items={([
-              ['Income', row.movements!.income], ['Expenses', row.movements!.expenses], ['Refunds', row.movements!.refunds], ['Transfers in', row.movements!.transfersIn], ['Transfers out', row.movements!.transfersOut], ['Credit-card repayments in (included above)', row.movements!.creditCardRepaymentsIn], ['Credit-card repayments out (included above)', row.movements!.creditCardRepaymentsOut],
+            <ReportKeyValues items={[{ label: t("Opening Balance", "الرصيد الافتتاحي"), value: money(row.openingBalance, row.currencyCode) }, { label: t("Closing Balance", "الرصيد الختامي"), value: money(row.closingBalance, row.currencyCode) }, { label: t("Net Change", "صافي التغير"), value: money(row.change, row.currencyCode) }]} />
+            <SixReportDetails title={t("Movements for", "حركات") + " " + row.accountName}><ReportKeyValues items={([
+              [t("Income", "الدخل"), row.movements!.income], [t("Expenses", "المصروفات"), row.movements!.expenses], [t("Refunds", "المبالغ المستردة"), row.movements!.refunds], [t("Transfers in", "التحويلات الواردة"), row.movements!.transfersIn], [t("Transfers out", "التحويلات الصادرة"), row.movements!.transfersOut], [t("Credit-card repayments in (included above)", "سداد البطاقات الوارد (مشمول أعلاه)"), row.movements!.creditCardRepaymentsIn], ['Credit-card repayments out (included above)', row.movements!.creditCardRepaymentsOut],
             ] as const).map(([label, value]) => ({ label, value: money(value, row.currencyCode) }))} /></SixReportDetails>
-          </> : <AppText variant="caption">{row.reason ?? 'Account movements could not be reconciled.'}</AppText>}
+          </> : <AppText variant="caption">{row.reason ?? t("Account movements could not be reconciled.", "تعذرت مطابقة حركات الحساب.")}</AppText>}
           {row.diagnostics.filter(item => item.kind !== 'account').map((item, i) => <AppText key={i} variant="caption">{item.kind}: {item.id} · {item.reason}</AppText>)}
         </SixReportDetails>
       </View>)}

@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
 import { StatementSixChrome, StatementSixRows } from '@/features/finance/components/reporting/StatementSixUI';
 import { reportRoutePeriod } from '@/features/finance/utils/reportRoutePeriod';
@@ -13,6 +14,7 @@ import { useTheme } from '@/theme';
 /** Raw recorded quantity movements only; no market valuation or inferred balances. */
 export default function AssetsStatementScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const { spacing } = useTheme();
   const params = useLocalSearchParams<{ from?: string; to?: string; month?: string; assetId?: string }>();
   const hydrated = useFinanceHydrated();
@@ -54,16 +56,16 @@ export default function AssetsStatementScreen() {
       && validateAssetOpeningDate(assets, asset.id, asset.openingBalanceDate).valid
       && assetReportHistoryAvailable(asset, period!.from)));
   return <Screen scroll>
-    <Pressable accessibilityRole="button" accessibilityLabel="Back to Assets Report"
+    <Pressable accessibilityRole="button" accessibilityLabel={t("Back to Assets Report", "العودة إلى تقرير الأصول")}
       onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
       <AppText>‹ Assets Report</AppText>
     </Pressable>
     <StatementSixChrome kind={'Assets'} from={period?.from ?? "—"} to={period?.to ?? "—"} category={assetId ? 'Selected asset' : 'All assets'} currency={undefined} />
-    {!period || !selectionValid ? <Card><AppText>Invalid statement filters.</AppText></Card> :
-      !hydrated ? <Card><AppText>Loading assets...</AppText></Card> :
-      rows === null ? <Card><AppText>Statement unavailable.</AppText></Card> :
+    {!period || !selectionValid ? <Card><AppText>{t("Invalid statement filters.", "فلاتر كشف الحساب غير صالحة.")}</AppText></Card> :
+      !hydrated ? <Card><AppText>{t("Loading assets...", "جارٍ تحميل الأصول...")}</AppText></Card> :
+      rows === null ? <Card><AppText>{t("Statement unavailable.", "كشف الحساب غير متاح.")}</AppText></Card> :
       incomplete ? <Card><AppText color="textSecondary">Some asset history is unverified. Movement details are withheld until the opening date and history are validated.</AppText></Card> :
-      entries.length === 0 ? <Card><AppText>No verified quantity movements in this period.</AppText></Card> :
+      entries.length === 0 ? <Card><AppText>{t("No verified quantity movements in this period.", "لا توجد حركات كمية متحقق منها في هذه الفترة.")}</AppText></Card> :
       <StatementSixRows secondColumnLabel="Asset" rows={entries.map(item => ({ id: item.id, date: item.date, category: item.name, description: item.note || 'Recorded quantity movement', amount: String(item.amount) + ' ' + item.unit }))} />
   }<StatementExportActions />
   </Screen>;

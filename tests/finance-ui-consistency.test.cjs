@@ -10,6 +10,10 @@ const root = path.resolve(__dirname, '..');
 const original = Module._load;
 let scheme = 'light';
 Module._load = function(id, parent, main) {
+  // This renderer supplies fake React/store contexts. Supply its explicit English
+  // localization boundary too; localization/provider behavior is tested separately.
+  if (id.endsWith('/LanguageProvider')) return {useAppLanguage: () => ({language:'en',isRTL:false,t:(english)=>english,setLanguage:()=>{}})};
+
   if (id === 'react') return { ...React, useState: value => [value, () => {}] };
   if (id === 'react-native') return { View: 'View', Pressable: 'Pressable', Modal: 'Modal', ScrollView: 'ScrollView', KeyboardAvoidingView: 'KeyboardAvoidingView', ActivityIndicator: 'ActivityIndicator', Platform: { OS: 'android' }, StyleSheet: { create: x => x, absoluteFill: {}, hairlineWidth: 1 } };
   if (id === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 28, bottom: 24, left: 0, right: 0 }) };
@@ -72,7 +76,7 @@ test('shared form retains bottom sheet, Android close, keyboard and scroll behav
   const tree = FormModal({ visible: true, title: 'Edit', onClose: () => closed++, children: React.createElement('Field') });
   assert.equal(tree.props.transparent, true);
   assert.equal(tree.props.animationType, 'slide');
-  assert.equal(tree.props.navigationBarTranslucent, true);
+  assert.equal(tree.props.navigationBarTranslucent, false);
   tree.props.onRequestClose(); assert.equal(closed, 1);
   assert.equal(nodes(tree, 'KeyboardAvoidingView')[0].props.behavior, 'height');
   assert.equal(nodes(tree, 'KeyboardAvoidingView')[0].props.style[1].paddingTop, 36);
@@ -158,7 +162,41 @@ test('Finance calendar icons use gold including custom date controls and Transfe
     }
   }
   walk(path.join(root, 'src/features/finance')); walk(path.join(root, 'src/app/finance'));
-  assert.ok(count >= 10);
+  // Shared DateField replaces duplicated inline calendar icons. Check every
+  // remaining literal icon above, then the migrated callers explicitly.
+  assert.ok(count > 0, 'shared calendar icon must remain present');
+  const callers = {
+    'src/features/finance/components/AddAccountModal.tsx': 1,
+    'src/features/finance/components/AddDebtModal.tsx': 2,
+    'src/features/finance/components/AddTransactionModal.tsx': 1,
+    'src/features/finance/components/AccountDetails.tsx': 1,
+    'src/features/finance/components/AssetEntriesModal.tsx': 1,
+    'src/features/finance/components/TransferModal.tsx': 1,
+    'src/features/finance/screens/AssetsScreen.tsx': 1,
+    'src/app/finance/loans.tsx': 3,
+    'src/app/finance/debts.tsx': 2,
+    'src/app/finance/installment-contract.tsx': 1,
+  };
+  for (const [file, expected] of Object.entries(callers)) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const imported = ast.statements.filter(ts.isImportDeclaration).flatMap(n => {
+      if (!n.moduleSpecifier.text.endsWith('/FinanceDateField')) return [];
+      const bindings = n.importClause?.namedBindings;
+      return bindings && ts.isNamedImports(bindings) ? bindings.elements.filter(e => (e.propertyName ?? e.name).text === 'FinanceDateField').map(e => e.name.text) : [];
+    });
+    assert.equal(imported.length, 1, file + ': shared date import');
+    let uses = 0;
+    function visit(node) {
+      if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && imported.includes(node.tagName.getText(ast))) {
+        uses++;
+        assert.ok(node.attributes.properties.some(p => p.name?.getText(ast) === 'pickerOnly' && (!p.initializer || p.initializer.getText(ast) === '{true}')), file + ': calendar-only');
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(ast);
+    assert.equal(uses, expected, file + ': shared calendar count');
+  }
 });
 test('Finance buttons wrap large text and retain disabled, loading and danger semantics in both themes', () => {
   for (scheme of ['light', 'dark']) {
@@ -182,42 +220,49 @@ test('Finance date field is neutral with gold accessible calendar and unchanged 
   assert.equal(input.props.rightElement.props.style.minHeight, 44);
   input.props.onChangeText('٢٠٢٦-١١-١٧');
   assert.equal(value, '2026-11-17');
+  const pickerOnly = FinanceDateField({ value: '2026-11-17', pickerOnly: true, onChange: next => value = next }).props.children[0];
+  assert.equal(pickerOnly.props.editable, false);
+  pickerOnly.props.onChangeText('2026-11-18');
+  assert.equal(value, '2026-11-17', 'picker-only fields ignore manual input');
 });
 
-test('Documents uses Finance modal chrome and Import PDF retains its handler and busy gates', () => {
+test('Documents uses its accepted compact header and Import PDF retains its handler and busy gates', () => {
   const file = 'src/app/finance/documents.tsx';
   const source = fs.readFileSync(path.join(root, file), 'utf8');
-  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const buttons = [];
-  function visit(node) { if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast) === 'FinanceButton') buttons.push(node); ts.forEachChild(node, visit); }
-  visit(ast);
-  const button = buttons.find(n => n.getText(ast).includes('accessibilityLabel="Import PDF"'));
-  assert.ok(button);
-  assert.match(button.getText(ast), /onPress=\{importPdf\}/);
-  assert.match(button.getText(ast), /disabled=\{importing \|\| loading \|\| verifyingId !== null \|\| openingId !== null \|\| savingCategory\}/);
-  assert.match(source, /style=\{\[financeChrome.modalHeader, \{ marginHorizontal: -16, marginTop: -16 \}\]\}/);
-  assert.match(source, /style=\{financeChrome.close\}/);
-  assert.match(source, /name="close" size=\{24\}/);
+  assert.match(source, /iconAction\('document-outline', t\('Import PDF', 'استيراد PDF'\), importPdf, '#DC2626'\)/);
+  assert.match(source, /const busy = importing \|\| loading \|\| verifyingId !== null \|\| openingId !== null \|\| savingCategory/);
+  assert.match(source, /disabled = busy\) => \(/);
+  assert.match(source, /accessibilityLabel=\{label\} disabled=\{disabled\} onPress=\{action\}/);
+  assert.match(source, /const importPdf = async \(\) => \{\s*if \(importLock.current \|\| categoryLock.current \|\| openLock.current \|\| verifyLock.current\) return/);
+  assert.match(source, /testID="documents-add-header"/);
+  assert.match(source, /name="arrow-left" size=\{27\}/);
   assert.match(source, /onPress=\{\(\) => onClose \? onClose\(\) : fromAdd === '1' \? router.navigate\('\/finance\/add'\) : router.back\(\)\}/);
   const modalRoute = fs.readFileSync(path.join(root, 'src/app/finance/add.tsx'), 'utf8');
-  assert.match(modalRoute, /borderTopLeftRadius: 24/);
+  assert.match(modalRoute, /borderTopLeftRadius: financeLayoutTokens\.modalRadius/);
+  assert.match(modalRoute, /borderTopRightRadius: financeLayoutTokens\.modalRadius/);
+  const { financeLayoutTokens } = require('../src/features/finance/constants/financeDesignTokens.ts');
+  assert.equal(financeLayoutTokens.modalRadius, 24);
   assert.doesNotMatch(modalRoute, /borderTopWidth/);
 });
 
-test('New asset selector has white/gold secondary appearance and retains its non-action role', () => {
+test('New asset type uses a non-posting dropdown and saves only through Add asset', () => {
   const source = fs.readFileSync(path.join(root, 'src/features/finance/components/AddAssetModal.tsx'), 'utf8');
-  const block = source.match(/addToChipActive: \{([\s\S]*?)\n  \}/)[1];
-  assert.match(block, /backgroundColor: '#FFFFFF'/);
-  assert.match(block, /borderColor: '#D6B777'/);
-  assert.match(block, /borderWidth: 1.5/);
-  assert.match(block, /minHeight: 52/);
-  assert.match(source, /<View style=\{styles.addToChipActive\}>/);
-  assert.match(source, /isEditing \? 'Edit existing asset' : '\+ New asset'/);
+  assert.match(source, /<FinanceChoiceDropdown label=\{t\('Asset Type',\s*'[^']+'\)\} value=\{selectedType\}/);
+  assert.match(source, /disabled=\{isEditing\}/);
+  assert.match(source, /onChange=\{value => handleSelectType\(value as AssetCategory\)\}/);
+  assert.match(source, /<FinanceChoiceDropdown label=\{t\('Currency',\s*'[^']+'\)\} value=\{selectedCurrency\}/);
+  assert.match(source, /onChange=\{setSelectedCurrency\}/);
+  assert.match(source, /const handleSelectType = \(type: AssetCategory\) => \{/);
+  const selectionHandler = source.split('const handleSelectType = ')[1].split('const handleSave = ')[0];
+  assert.doesNotMatch(selectionHandler, /onSave\s*\(/);
+  assert.match(source, /const handleSave = \(\) => \{/);
+  assert.match(source, /onSave\(\{/);
+  assert.doesNotMatch(source, /<View style=\{styles.addToChipActive\}>/);
 });
 
 test('both debt Add labels use shared primary navy while semantic tabs remain separate', () => {
   const source = fs.readFileSync(path.join(root, 'src/app/finance/debts.tsx'), 'utf8');
-  const add = source.match(/<AppButton\s+title=\{activeTab === 'receivable' \? 'Add receivable' : 'Add payable'\}[\s\S]*?onPress=\{openAddDebt\}\s*\/>/)[0];
+  const add = source.match(/<AppButton\s+title=\{activeTab === 'receivable' \? t\('Add receivable', [^)]*\) : t\('Add payable', [^)]*\)\}[\s\S]*?onPress=\{openAddDebt\}\s*\/>/)[0];
   assert.doesNotMatch(add, /accentColor/);
   assert.match(add, /onPress=\{openAddDebt\}/);
   assert.match(source, /receivableTabActive/);

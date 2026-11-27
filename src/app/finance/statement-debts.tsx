@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
 import { StatementSixChrome, StatementSixRows } from '@/features/finance/components/reporting/StatementSixUI';
 import { reportRoutePeriod, reportRouteCurrency } from '@/features/finance/utils/reportRoutePeriod';
@@ -13,6 +14,7 @@ import { useTheme } from '@/theme';
 /** Detailed read-only payment register for the selected debt report and month. */
 export default function DebtStatementScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const params = useLocalSearchParams<{ direction?: string; currencyCode?: string; from?: string; to?: string; month?: string }>();
   const { spacing } = useTheme();
   const hydrated = useFinanceHydrated();
@@ -42,16 +44,16 @@ export default function DebtStatementScreen() {
       .sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   }, [rows, period, debts]);
   return <Screen scroll>
-    <Pressable accessibilityRole="button" accessibilityLabel="Back to debt report"
+    <Pressable accessibilityRole="button" accessibilityLabel={t("Back to debt report", "العودة إلى تقرير الديون")}
       onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
       <AppText>‹ Debt Report</AppText>
     </Pressable>
     <StatementSixChrome kind={direction === 'receivable' ? 'Receivable' : 'Payable'} from={period?.from ?? "—"} to={period?.to ?? "—"} category={'Recorded payments'} currency={currencyCode || undefined} />
-    {!direction || !period ? <Card><AppText>Invalid statement filters.</AppText></Card> :
-      !hydrated ? <Card><AppText>Loading finance data...</AppText></Card> :
-      rows === null ? <Card><AppText>Statement data unavailable.</AppText></Card> :
+    {!direction || !period ? <Card><AppText>{t("Invalid statement filters.", "فلاتر كشف الحساب غير صالحة.")}</AppText></Card> :
+      !hydrated ? <Card><AppText>{t("Loading finance data...", "جارٍ تحميل البيانات المالية...")}</AppText></Card> :
+      rows === null ? <Card><AppText>{t("Statement data unavailable.", "بيانات كشف الحساب غير متاحة.")}</AppText></Card> :
       rows.some(row => row.status !== 'available') ? <Card><AppText color="textSecondary">Historical data is unverified for one or more records. Payment details are withheld to avoid misleading totals.</AppText></Card> :
-      entries.length === 0 ? <Card><AppText>No recorded payments in this period.</AppText></Card> :
+      entries.length === 0 ? <Card><AppText>{t("No recorded payments in this period.", "لا توجد دفعات مسجلة في هذه الفترة.")}</AppText></Card> :
       <StatementSixRows secondColumnLabel="Person" rows={entries.map(item => ({ id: item.id, date: item.date, category: item.person, description: item.note || 'Recorded payment', amount: item.amount.toFixed(getCurrencyDecimals(item.currency)), currencyCode: item.currency }))} />
   }<StatementExportActions />
   </Screen>;

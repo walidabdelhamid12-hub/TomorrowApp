@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,11 +8,12 @@ import { useTheme } from '@/theme';
 
 /** A native overlay: options never expand the surrounding report card. */
 export function BalanceCurrencyPicker({ value, onSelect }: { value: string; onSelect: (code: string) => void }) {
+  const { t } = useAppLanguage();
   const [open, setOpen] = useState(false);
   const { colors } = useTheme();
   const selected = CURRENCIES.find(item => item.code === value);
   return <>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Balance currency: ${value}`}
+    <Pressable accessibilityRole="button" accessibilityLabel={`${t("Balance currency", "عملة الرصيد")}: ${value}`}
       accessibilityState={{ expanded: open }} onPress={() => setOpen(true)}
       style={{ minHeight: 40, borderWidth: 1, borderColor: colors.border, borderRadius: 9,
         paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -19,11 +21,11 @@ export function BalanceCurrencyPicker({ value, onSelect }: { value: string; onSe
       <Ionicons name="chevron-down" size={15} color={colors.text} />
     </Pressable>
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-      <Pressable accessibilityLabel="Close currency selection" onPress={() => setOpen(false)}
+      <Pressable accessibilityLabel={t("Close currency selection", "إغلاق اختيار العملة")} onPress={() => setOpen(false)}
         style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', paddingHorizontal: 24 }}>
         <Pressable onPress={() => {}} style={{ backgroundColor: colors.surface, borderRadius: 14,
           padding: 14, maxHeight: '70%', borderWidth: 1, borderColor: colors.border }}>
-          <AppText variant="bodyStrong" style={{ fontSize: 17, fontWeight: '800', marginBottom: 8 }}>Select balance currency</AppText>
+          <AppText variant="bodyStrong" style={{ fontSize: 17, fontWeight: '800', marginBottom: 8 }}>{t("Select balance currency", "اختر عملة الرصيد")}</AppText>
           <ScrollView keyboardShouldPersistTaps="handled">
             {CURRENCIES.map(item => <Pressable key={item.code} accessibilityRole="button"
               accessibilityLabel={`${item.flag} ${item.code}`} accessibilityState={{ selected: item.code === value }}

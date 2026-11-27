@@ -25,6 +25,10 @@ class File {
   }
 }
 Module._load = function(id, parent, main) {
+  // This renderer supplies fake React/store contexts. Supply its explicit English
+  // localization boundary too; localization/provider behavior is tested separately.
+  if (id.endsWith('/LanguageProvider')) return {useAppLanguage: () => ({language:'en',isRTL:false,t:(english)=>english,setLanguage:()=>{}})};
+
   if (id === 'react') return hooks;
   if (id === '@react-native-community/datetimepicker') return { __esModule: true, default: 'DateTimePicker' };
   if (id === 'react-native') return { useWindowDimensions: () => ({ width: 390, height: 844, fontScale: 1 }), Platform: { OS: 'android' }, Modal: 'Modal', View: 'View', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', Alert: { alert: (...args) => alerts.push(args) } };
@@ -121,7 +125,7 @@ test('month/account/category controls retain full refund context and preserve ar
   assert.equal(calls.length, 0);
   assert.deepEqual(nodes('View').filter(node => node.props.testID?.startsWith('report-transaction-')).map(node => node.props.testID), ['report-transaction-omr']);
   assert.match(allText(), /1\.237 🇴🇲 OMR/);
-  press('from date: 2026-11-01'); render();
+  press('From date: 2026-11-01'); render();
   assert.equal(nodes('DateTimePicker').length, 1);
 });
 

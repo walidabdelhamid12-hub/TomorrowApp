@@ -1,0 +1,21 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { repository } = require('./documents-local-loader.cjs');
+const ns='tomorrow:documents:v1:';
+const r={id:'one',category:'other',status:'stored',source:'picker',name:'one.pdf',mimeType:'application/pdf',byteSize:12,sha256:'a'.repeat(64),vaultPath:'vault/objects/aa/'+'a'.repeat(64)+'.pdf',createdAt:'2026-11-24T00:00:00.000Z',updatedAt:'2026-11-24T00:00:00.000Z'};
+for(const mode of ['normal','before','after']) test('logical deletion '+mode,async()=>{
+ const map=new Map([['finance','unchanged']]);let fail=false;
+ const backend={getItem:async k=>map.get(k)??null,setItem:async(k,v)=>{if(fail&&k===ns+'deleted:one'&&mode==='before')throw Error();map.set(k,v);if(fail&&k===ns+'deleted:one'&&mode==='after')throw Error();}};
+ const make=()=>repository().createDocumentRepository(backend);const a=make();
+ assert.equal((await a.createIfHashAbsent(r)).ok,true);
+ const other={...r,id:'two',name:'two.pdf'};assert.equal((await a.createIfHashAbsent(other,true)).ok,true);
+ assert.equal((await a.remove(r.id,'stale')).error,'conflict');
+ fail=true;assert.equal((await a.remove(r.id,r.updatedAt)).ok,mode==='normal');fail=false;
+ const b=make();if(mode==='before')assert.equal((await b.list()).value.length,2);
+ assert.equal((await b.remove(r.id,r.updatedAt)).ok,true);
+ assert.deepEqual((await b.list()).value,[other]);assert.equal((await b.read(r.id)).value,null);
+ assert.equal((await b.recoverUnindexed(r.id)).error,'not_found');assert.equal((await b.update({...r,updatedAt:'2026-11-25T00:00:00.000Z'},r.updatedAt)).error,'not_found');
+ assert.equal((await b.remove(other.id,other.updatedAt)).ok,true);
+ assert.equal((await b.createIfHashAbsent({...r,id:'three'})).value.kind,'created');
+ assert.equal((await b.create(r)).error,'duplicate');assert.equal(map.get('finance'),'unchanged');assert.deepEqual(JSON.parse(map.get(ns+'record:one')),r);
+});

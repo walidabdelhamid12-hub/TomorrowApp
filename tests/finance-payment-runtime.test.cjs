@@ -5,7 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), Module = require('node:module'), ts = require('typescript');
 const root = path.resolve(__dirname, '..'), load = Module._load;
 let native, session;
+const phase1Alerts = [];
 Module._load = function(id, parent, main) {
+  if (id === 'react-native') return { Alert: { alert: (...args) => phase1Alerts.push(args) } };
   if (id === '@react-native-async-storage/async-storage') return { __esModule: true, default: native };
   return load.call(this, id.startsWith('@/') ? path.join(root, 'src', id.slice(2)) : id, parent, main);
 };
@@ -416,3 +418,248 @@ for (const key of [F, L]) {
     });
   }
 }
+
+
+test('Phase 1 production hydration rejects malformed evidence without overwriting or allowing retry', async () => {
+  const raw = JSON.stringify({version: 2, state: {...state(F), debts: [{id: 'broken', amount: 'invalid'}]}});
+  const s = await actualSession({tracked: false, data: new Map([[F, raw]])});
+  assert.equal(s.finance.persist.hasHydrated(), false);
+  assert.throws(() => s.finance.setState({assets: []}), /hydrated|persistence/);
+  await tick();
+  assert.equal(s.native.data.get(F), raw);
+  assert.equal(s.native.events.filter(e => e[0] === 'set' && e[1] === F).length, 0);
+});
+
+test('Phase 1 production acknowledges native writes and fences uncertain retries', async () => {
+  const pending = deferred();
+  const s = await actualSession({tracked: false, configure: io => {io.setItem = () => pending.promise;}});
+  const {acknowledgeFinancePersistence: ack} = require('../src/features/finance/store/productionFinancePersistence.ts');
+  s.finance.setState({assets: []});
+  let done = false;
+  const result = ack(F).then(() => {done = true;});
+  await tick(); assert.equal(done, false);
+  pending.reject(new Error('native write failed'));
+  await assert.rejects(result, /persistence write/);
+  assert.throws(() => s.finance.setState({assets: []}), /persistence write/);
+  await assert.rejects(ack(F), /persistence write/);
+});
+
+
+for (const key of [F, L]) {
+  for (const mode of ['null row', 'duplicate', 'bad date', 'bad amount', 'unknown state', 'invalid envelope']) {
+    test(`Phase 1 production ${key} preserves ${mode} evidence and fences writes`, async () => {
+      const saved = state(key);
+      const row = key === F ? {id: 'd', direction: 'payable', amount: 5, currencyCode: 'USD', date: '2026-11-24', payments: []}
+        : {id: 'a', type: 'bank', currencyCode: 'USD', initialBalance: 1};
+      const list = key === F ? 'debts' : 'accounts';
+      saved[list] = [row];
+      if (mode === 'null row') saved[list].push(null);
+      if (mode === 'duplicate') saved[list].push({...row});
+      if (mode === 'bad date') row.openingBalanceDate = '2026-02-30';
+      if (mode === 'bad amount') row[key === F ? 'amount' : 'initialBalance'] = '5';
+      if (mode === 'unknown state') saved.futureEvidence = {retained: true};
+      const raw = JSON.stringify({version: mode === 'invalid envelope' ? '2' : 2, state: saved});
+      const s = await actualSession({tracked: false, data: new Map([[key, raw]])});
+      const store = key === F ? s.finance : s.ledger;
+      assert.equal(store.persist.hasHydrated(), false);
+      assert.throws(() => store.setState({}), /hydrated|persistence/);
+      assert.equal(s.native.data.get(key), raw);
+      assert.equal(s.native.events.filter(e => e[0] === 'set' && e[1] === key).length, 0);
+    });
+  }
+}
+
+test('Phase 1 subscriber acknowledgement covers serialization and production controls cannot erase evidence', async () => {
+  const pending = deferred();
+  const s = await actualSession({tracked: false, configure: io => {io.setItem = () => pending.promise;}});
+  const {acknowledgeFinancePersistence: ack} = require('../src/features/finance/store/productionFinancePersistence.ts');
+  let barrier, done = false;
+  const unsubscribe = s.finance.subscribe(() => {barrier = ack(F).then(() => {done = true;});});
+  s.finance.setState({assets: []}); unsubscribe();
+  await tick(); assert.equal(done, false);
+  pending.resolve(); await barrier; assert.equal(done, true);
+  assert.throws(() => s.finance.persist.clearStorage(), /evidence/);
+  assert.throws(() => s.finance.persist.getOptions().storage.removeItem(F), /evidence/);
+  assert.throws(() => s.finance.persist.setOptions({name: 'other'}), /configuration/);
+});
+
+
+test('Phase 1 uncertain production write is inspectable and restart reads it without replay', async () => {
+  const data = new Map();
+  const s = await actualSession({tracked: false, data, configure: io => {
+    io.setItem = async (key, value) => {data.set(key, value); throw new Error('ACK lost after write');};
+  }});
+  const {acknowledgeFinancePersistence: ack, readFinancePersistenceEvidence: inspect} = require('../src/features/finance/store/productionFinancePersistence.ts');
+  s.finance.setState({assets: []});
+  await assert.rejects(ack(F), /persistence write/);
+  const raw = data.get(F), evidence = await inspect();
+  assert.equal(evidence.postingAllowed, false);
+  assert.equal(evidence.documents.find(d => d.key === F).raw, raw);
+  assert.equal(evidence.documents.find(d => d.key === F).failure.uncertain, true);
+  assert.throws(() => s.finance.setState({assets: []}), /persistence write/);
+  const restarted = await actualSession({tracked: false, data});
+  assert.equal(restarted.finance.persist.hasHydrated(), true);
+  assert.equal(restarted.native.events.some(e => e[0] !== 'get'), false);
+  assert.equal(data.get(F), raw);
+});
+
+
+for (const key of [F, L]) test(`Phase 1 ${key} explicit read retry clears stale metadata without replay`, async () => {
+  const raw = JSON.stringify({version: 2, state: {...state(key), paymentAccounting: {schemaVersion: 1, entityHeads: []}}});
+  const s = await actualSession({tracked: false, data: new Map([[key, raw]])});
+  const store = key === F ? s.finance : s.ledger;
+  assert.equal(store.persist.hasHydrated(), true);
+  assert.equal(Object.hasOwn(store.getState(), 'paymentAccounting'), true);
+  s.native.data.set(key, '{corrupt'); await store.persist.rehydrate();
+  assert.equal(store.persist.hasHydrated(), false);
+  assert.throws(() => store.setState({}), /hydrated|persistence/);
+  const corrected = JSON.stringify({version: 2, state: state(key)});
+  s.native.data.set(key, corrected); await store.persist.rehydrate();
+  assert.equal(store.persist.hasHydrated(), true);
+  assert.equal(Object.hasOwn(store.getState(), 'paymentAccounting'), false);
+  assert.equal(s.native.data.get(key), corrected);
+  assert.equal(s.native.events.some(e => e[0] !== 'get'), false);
+});
+
+
+test('Phase 1 reentrant subscriber barriers and inspection include the outer serialized write', async () => {
+  const first = deferred(), second = deferred(); let issued = 0;
+  const s = await actualSession({tracked: false, configure: io => {
+    io.setItem = async (key, value) => {await (++issued === 1 ? first.promise : second.promise); io.data.set(key, value);};
+  }});
+  const {acknowledgeFinancePersistence: ack, readFinancePersistenceEvidence: inspect} = require('../src/features/finance/store/productionFinancePersistence.ts');
+  let nested = false, barrier, evidence, done = false;
+  const unsubscribe = s.finance.subscribe(() => {
+    if (!nested) {nested = true; s.finance.setState({assets: []});}
+    else {barrier = ack(F).then(() => {done = true;}); evidence = inspect();}
+  });
+  s.finance.setState({assets: []}); unsubscribe();
+  await tick(); first.resolve(); await tick();
+  assert.equal(done, false);
+  assert.throws(() => s.finance.setState({assets: []}), /inspection/);
+  second.resolve(); await barrier;
+  const result = await evidence;
+  assert.equal(done, true); assert.equal(issued, 2);
+  assert.equal(result.documents.find(d => d.key === F).raw, s.native.data.get(F));
+});
+
+
+async function phase1PaymentFixture() {
+  const s = await actualSession({tracked: false});
+  const stamp = {createdAt: '2026-11-25', updatedAt: '2026-11-25'};
+  s.finance.setState({debts: [{...stamp, id:'durable-debt', personName:'Person', direction:'payable', amount:100,
+    currencyCode:'USD', date:'2026-11-25', payments:[]}]});
+  s.ledger.setState({accounts:[{...stamp, id:'durable-bank', name:'Bank', type:'bank', currencyCode:'USD', initialBalance:1000, archived:false}],
+    categories:[{id:'durable-expense',name:'Expense',kind:'expense',icon:'cash',color:'#000000',isDefault:false}]});
+  const persistence = require('../src/features/finance/store/productionFinancePersistence.ts');
+  await Promise.all([persistence.acknowledgeFinancePersistence(F),persistence.acknowledgeFinancePersistence(L)]);
+  return {...s, ...persistence, ...require('../src/features/finance/components/acknowledgedFinanceHandler.ts'),
+    ...require('../src/features/finance/store/paymentOperations.ts')};
+}
+
+test('Phase 1 actual production handler waits for both durable stores and prevents duplicate payment effects', async () => {
+  const s = await phase1PaymentFixture(), gate = deferred();
+  const before = new Map(s.native.data), set = s.native.setItem;
+  s.native.setItem = async (key, raw) => {if(key==='tomorrow:finance-save-intent:v1') await gate.promise; return set(key,raw);};
+  let closed=0,calls=0;
+  const handler=s.acknowledgedFinanceHandler('durable-payment-ui',()=>{
+    calls++;
+    const result=s.postLinkedPayment({entityType:'debt',entityId:'durable-debt',amount:50,date:'2026-11-25',accountId:'durable-bank',categoryId:'durable-expense'});
+    assert.equal(result.ok,true);
+    s.afterFinanceSave(()=>closed++);
+    return result;
+  });
+  const a=handler(),b=handler(); assert.equal(a,b);
+  await tick(); assert.equal(closed,0);
+  const identityKey='tomorrow:finance-submissions:v1';
+  assert.equal(JSON.parse(s.native.data.get(identityKey)).slots[0].state,'open');
+  assert.deepEqual(new Map([...s.native.data].filter(([key])=>key!==identityKey)),before);
+  gate.resolve(); await a; assert.equal(closed,1); assert.equal(calls,1);
+  assert.equal(s.finance.getState().debts[0].payments.length,1);
+  assert.equal(s.ledger.getState().transactions.length,1);
+  assert.equal(s.ledger.getState().transactions[0].amount,50);
+  await handler(); assert.equal(closed,1); assert.equal(calls,1);
+  const receiptKey=s.native.events.find(e=>e[0]==='set'&&e[1].startsWith('tomorrow:finance-save-receipt:v1:'))[1];
+  const receipt=JSON.parse(s.native.data.get(receiptKey));
+  const restarted=await actualSession({tracked:false,data:s.native.data});
+  const {durableFinanceOperations: operations}=require('../src/features/finance/store/productionFinancePersistence.ts');
+  await operations.run(receipt.operationId,{handler:'durable-payment-ui',arguments:[]},()=>{throw new Error('Must not repeat payment');});
+  assert.equal(restarted.finance.getState().debts[0].payments.length,1);
+  assert.equal(restarted.ledger.getState().transactions.length,1);
+  assert.equal(restarted.native.events.some(e=>e[0]!=='get'),false);
+});
+
+test('Phase 1 actual handler preserves interrupted two-store evidence and never closes on lost acknowledgement', async () => {
+  const s=await phase1PaymentFixture(),set=s.native.setItem;
+  s.native.setItem=async(key,raw)=>{await set(key,raw);if(key===L)throw new Error('Lost ledger ACK');};
+  let closed=false;
+  const handler=s.acknowledgedFinanceHandler('lost-payment-ack',()=>{
+    const result=s.postLinkedPayment({entityType:'debt',entityId:'durable-debt',amount:50,date:'2026-11-25',accountId:'durable-bank',categoryId:'durable-expense'});
+    assert.equal(result.ok,true);s.afterFinanceSave(()=>closed=true);
+  });
+  await handler();assert.equal(closed,false);assert.equal(s.durableFinanceOperations.getStatus().phase,'blocked');
+  const bytes=new Map(s.native.data),writes=s.native.events.filter(e=>e[0]==='set').length;
+  await handler();assert.deepEqual(s.native.data,bytes);assert.equal(s.native.events.filter(e=>e[0]==='set').length,writes);
+  const restarted=await actualSession({tracked:false,data:s.native.data});
+  const {durableFinanceOperations: operations}=require('../src/features/finance/store/productionFinancePersistence.ts');
+  const evidence=await operations.inspect();assert.equal(evidence.classification,'applied-unconfirmed');
+  assert.equal(restarted.native.events.some(e=>e[0]!=='get'),false);
+  assert.throws(()=>restarted.ledger.setState({transactions:[]}),/review|interrupted/);
+  assert.equal(operations.getStatus().postingAllowed,false);assert.equal(closed,false);
+});
+
+test('Phase 1 nested form callbacks share one durable operation and ignore unused native press events', async () => {
+  const s=await phase1PaymentFixture();let done=0;
+  const inner=s.acknowledgedFinanceHandler('nested-inner',(name)=>{s.ledger.getState().updateAccount('durable-bank',{name});s.afterFinanceSave(()=>done++);});
+  const outer=s.acknowledgedFinanceHandler('nested-outer',()=>inner('Renamed'));
+  const event={nativeEvent:{}};event.self=event;
+  await outer(event);
+  assert.equal(done,1);assert.equal(s.ledger.getState().accounts[0].name,'Renamed');
+  assert.equal(s.native.events.filter(e=>e[0]==='set'&&e[1]==='tomorrow:finance-save-intent:v1').length,1);
+});
+
+
+test('audit: UI retry after committed-save restart must not create a second financial effect', async () => {
+  const s=await phase1PaymentFixture();let crashImage;
+  const unsubscribe=s.durableFinanceOperations.subscribe(()=>{
+    if(s.durableFinanceOperations.getStatus().phase==='ready' && [...s.native.data.keys()].some(k=>k.startsWith('tomorrow:finance-save-receipt:v1:'))) {
+      crashImage=new Map(s.native.data); // process-loss point before handler completion effects
+    }
+  });
+  const action=()=>s.postLinkedPayment({entityType:'debt',entityId:'durable-debt',amount:50,date:'2026-11-25',accountId:'durable-bank',categoryId:'durable-expense'});
+  await s.acknowledgedFinanceHandler('restart-form-retry',action)();unsubscribe();assert.ok(crashImage);
+  const restarted=await actualSession({tracked:false,data:crashImage});
+  const {acknowledgedFinanceHandler:handler}=require('../src/features/finance/components/acknowledgedFinanceHandler.ts');
+  const {postLinkedPayment:post}=require('../src/features/finance/store/paymentOperations.ts');
+  await handler('restart-form-retry',()=>post({entityType:'debt',entityId:'durable-debt',amount:50,date:'2026-11-25',accountId:'durable-bank',categoryId:'durable-expense'}))();
+  assert.equal(restarted.finance.getState().debts[0].payments.length,1,'Retry of the committed submission must not pay the debt twice');
+  assert.equal(restarted.ledger.getState().transactions.length,1);
+});
+
+
+test('identity: committed result survives UI completion failure and a new handler/restart', async () => {
+ const s=await phase1PaymentFixture();let completed=0;
+ const payload={debtId:'durable-debt',amount:50,date:'2026-11-25',accountId:'durable-bank',categoryId:'durable-expense'};
+ const handler=s.acknowledgedFinanceHandler('completion-failure',()=>s.postLinkedPayment({entityType:'debt',entityId:'durable-debt',amount:50,date:payload.date,accountId:payload.accountId,categoryId:payload.categoryId}),
+  {payload,onCommitted:()=>{completed++;throw new Error('UI crashed after commit');}});
+ await handler();assert.equal(completed,1);assert.equal(s.finance.getState().debts[0].payments.length,1);
+ const data=new Map(s.native.data),restarted=await actualSession({tracked:false,data});
+ const {acknowledgedFinanceHandler:retry}=require('../src/features/finance/components/acknowledgedFinanceHandler.ts');
+ const result=await retry('completion-failure',()=>{throw new Error('Financial callback must not repeat');},{payload,onCommitted:()=>completed++})();
+ assert.equal(result.ok,true);assert.equal(completed,2);
+ assert.equal(restarted.finance.getState().debts[0].payments.length,1);assert.equal(restarted.ledger.getState().transactions.length,1);
+});
+
+test('identity: explicit new operation permits identical payments; conflicting payload cannot reuse one', async () => {
+ const s=await phase1PaymentFixture();const {financeSubmissions}=require('../src/features/finance/store/productionFinancePersistence.ts');
+ const payload={debtId:'durable-debt',amount:50,date:'2026-11-25',accountId:'durable-bank'};
+ const action=()=>s.postLinkedPayment({entityType:'debt',entityId:'durable-debt',amount:50,date:payload.date,accountId:payload.accountId,categoryId:'durable-expense'});
+ const first=s.acknowledgedFinanceHandler('independent-payment',action,{payload});
+ await first();await first();assert.equal(s.finance.getState().debts[0].payments.length,1);
+ await financeSubmissions.startNew('independent-payment');await first();
+ assert.equal(s.finance.getState().debts[0].payments.length,2);assert.equal(s.ledger.getState().transactions.length,2);
+ assert.equal(s.ledger.getState().transactions.reduce((n,t)=>n+t.amount,0),100);
+ const before=new Map(s.native.data);
+ await s.acknowledgedFinanceHandler('independent-payment',()=>{throw new Error('Conflict must not invoke callback');},{payload:{...payload,amount:75}})();
+ assert.deepEqual(s.native.data,before);assert.equal(s.finance.getState().debts[0].payments.length,2);
+});

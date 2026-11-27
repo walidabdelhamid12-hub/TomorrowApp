@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
-import { Alert, Pressable, TextInput, View } from 'react-native';
+import { FinanceDateField } from '@/features/finance/components/FinanceDateField';
+import { formPayload, submitFinanceForm } from './explicitFinanceForm';
+import { useState } from 'react';
+import { Alert, Pressable, View } from 'react-native';
 import { validateAccountOpeningDate } from '@/features/finance/utils/accountOpeningDate';
 import { AppText } from '@/components/ui';
-import { useTheme } from '@/theme';
 import { useAppLanguage } from '@/localization/LanguageProvider';
 import { FinanceDisclosure } from './FinanceDisclosure';
 import { ACCOUNT_TYPE_LABELS } from './AccountCard';
@@ -12,10 +13,13 @@ import { getAccountBalance } from '@/features/finance/utils/ledger';
 import { formatAmount } from '@/features/finance/utils/amountFormat';
 
 export function AccountDetails({ accountId, onClose, amountsVisible = true }: { accountId: string | null; onClose: () => void; amountsVisible?: boolean }) {
-  const { colors } = useTheme();
   const { t } = useAppLanguage();
   const [openingDateDraft, setOpeningDateDraft] = useState('');
-  useEffect(() => { setOpeningDateDraft(''); }, [accountId]);
+  const [loadedAccountId, setLoadedAccountId] = useState(accountId);
+  if (loadedAccountId !== accountId) {
+    setLoadedAccountId(accountId);
+    setOpeningDateDraft('');
+  }
   const verifyOpeningDate = useLedgerStore(s => s.verifyAccountOpeningBalanceDate);
   const accounts = useLedgerStore(s => s.accounts);
   const transactions = useLedgerStore(s => s.transactions);
@@ -41,12 +45,15 @@ export function AccountDetails({ accountId, onClose, amountsVisible = true }: { 
       [
         { text: t('Cancel', 'إلغاء'), style: 'cancel' },
         { text: t('Verify', 'تأكيد'), onPress: () => {
-          if (verifyOpeningDate(account.id, requestedDate)) {
-            setOpeningDateDraft('');
-            Alert.alert(t('Verified', 'تم التحقق'), t('Opening balance date saved.', 'تم حفظ تاريخ الرصيد الافتتاحي.'));
-          } else {
-            Alert.alert(t('Not saved', 'لم يتم الحفظ'), t('Account history changed or verification failed. Please review and retry.', 'تغيّر سجل الحساب أو تعذر التحقق. راجع البيانات وحاول مرة أخرى.'));
-          }
+          return submitFinanceForm('account-opening-date-verification:v1',
+            formPayload('account.verify-opening-date', account.id, { date: requestedDate, initialBalance: account.initialBalance, currencyCode: account.currencyCode }),
+            () => {
+              const latest = useLedgerStore.getState().accounts.filter(a => a.id === account.id);
+              if (latest.length !== 1 || latest[0].initialBalance !== account.initialBalance || latest[0].currencyCode !== account.currencyCode) return false;
+              return verifyOpeningDate(account.id, requestedDate);
+            },
+            () => { setOpeningDateDraft(''); Alert.alert(t('Verified', 'تم التحقق'), t('Opening balance date saved.', 'تم حفظ تاريخ الرصيد الافتتاحي.')); },
+            () => Alert.alert(t('Not saved', 'لم يتم الحفظ'), t('Account history changed or verification failed. Please review and retry.', 'تغيّر سجل الحساب أو تعذر التحقق. راجع البيانات وحاول مرة أخرى.')));
         } },
       ],
     );
@@ -56,7 +63,7 @@ export function AccountDetails({ accountId, onClose, amountsVisible = true }: { 
     ...transactions.filter(t => t.accountId === account.id).map(t => ({ date: t.date, text: t.date + ' · ' + (t.note || t.purpose || t.type) + ' · ' + money(t.amount) })),
     ...transfers.filter(transfer => transfer.fromAccountId === account.id || transfer.toAccountId === account.id).map(transfer => ({ date: transfer.date, text: transfer.date + t(' · Transfer ', ' · تحويل ') + (transfer.fromAccountId === account.id ? t('to ', 'إلى ') : t('from ', 'من ')) + (accounts.find(a => a.id === (transfer.fromAccountId === account.id ? transfer.toAccountId : transfer.fromAccountId))?.name ?? t('Unavailable account', 'حساب غير متاح')) + ' · ' + money(transfer.fromAccountId === account.id ? (transfer.fromAmount ?? transfer.amount) : (transfer.toAmount ?? transfer.amount)) })),
   ].sort((a, b) => b.date.localeCompare(a.date)) : [];
-  return <FinanceDetailsModal title={accountId === null ? undefined : account?.name ?? t('Account unavailable', 'الحساب غير متاح')} onClose={onClose}
+  return <FinanceDetailsModal title={accountId === null ? undefined : account?.name ?? t('Account unavailable', 'الحساب غير متاح')} onClose={onClose} compact
     metrics={account ? [
       { label: t('Current balance', 'الرصيد الحالي'), value: money(getAccountBalance(account, transactions, transfers)) },
       { label: t('Initial balance', 'الرصيد الافتتاحي'), value: money(account.initialBalance) },
@@ -66,7 +73,7 @@ export function AccountDetails({ accountId, onClose, amountsVisible = true }: { 
     ] : []} lines={account ? [] : [t('No unique account is available.', 'لا يوجد حساب واحد مطابق.')]}>
     {account && <>
       <AppText variant="caption" color="textSecondary">{account.archived ? t('Archived', 'مؤرشف') : t('Active', 'نشط')}</AppText>
-      <View style={{ gap: 8, marginVertical: 12 }}>
+      <View style={{ gap: 6, marginVertical: 4 }}>
         <AppText variant="bodyStrong">{t('Opening balance date', 'تاريخ الرصيد الافتتاحي')}</AppText>
         <AppText variant="caption" color="textSecondary">
           {account.openingBalanceDate
@@ -74,19 +81,14 @@ export function AccountDetails({ accountId, onClose, amountsVisible = true }: { 
             : t('Not verified', 'لم يتم التحقق')}
         </AppText>
         <AppText variant="caption" color="textSecondary">
-          {t('This starting balance applies before transactions on this date. Only confirm a date you can verify.', 'يسري الرصيد الافتتاحي قبل معاملات هذا التاريخ. أكّد فقط تاريخًا يمكنك التحقق منه.')}
+          {t('Confirm only a date you can verify.', 'أكّد فقط تاريخًا يمكنك التحقق منه.')}
         </AppText>
-        <TextInput accessibilityLabel={t('Opening balance date (YYYY-MM-DD)', 'تاريخ الرصيد الافتتاحي (YYYY-MM-DD)')}
-          value={openingDateDraft} onChangeText={setOpeningDateDraft}
-          placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation"
-          autoCorrect={false} maxLength={10}
-          placeholderTextColor={colors.textSecondary}
-          style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8,
-            minHeight: 44, paddingHorizontal: 12, color: colors.text }} />
+        <FinanceDateField label={t('Opening balance date', 'تاريخ الرصيد الافتتاحي')}
+          value={openingDateDraft} onChange={setOpeningDateDraft} pickerOnly />
         <Pressable accessibilityRole="button" accessibilityLabel={t('Verify opening balance date', 'تأكيد تاريخ الرصيد الافتتاحي')}
           onPress={submitOpeningDate}
-          style={{ minHeight: 44, justifyContent: 'center', paddingVertical: 8 }}>
-          <AppText variant="bodyStrong">{t('Verify opening date', 'تأكيد تاريخ الافتتاح')}</AppText>
+          style={{ minHeight: 52, justifyContent: 'center', alignItems: 'center', paddingVertical: 10, backgroundColor: '#1E293B', borderRadius: 12 }}>
+          <AppText variant="bodyStrong" style={{ color: '#FFFFFF' }}>{t('Save opening date', 'حفظ تاريخ الافتتاح')}</AppText>
         </Pressable>
       </View>
       {account.notes ? <AppText variant="caption">{account.notes}</AppText> : null}

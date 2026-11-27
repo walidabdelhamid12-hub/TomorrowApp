@@ -24,6 +24,10 @@ const hooks = { ...React,
   useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
 };
 Module._load = function(id, parent, main) {
+  // This renderer supplies fake React/store contexts. Supply its explicit English
+  // localization boundary too; localization/provider behavior is tested separately.
+  if (id.endsWith('/LanguageProvider')) return {useAppLanguage: () => ({language:'en',isRTL:false,t:(english)=>english,setLanguage:()=>{}})};
+
   if (id === 'react') return hooks;
   if (id === 'react-native') return { View: 'View', Pressable: 'Pressable', useColorScheme: () => systemScheme,
     Platform: { OS: 'android' }, StyleSheet: { create: value => value, hairlineWidth: 1 } };

@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
 import { StatementUnifiedChrome } from '@/features/finance/components/reporting/StatementUnifiedChrome';
 import { StatementMobileRows } from '@/features/finance/components/reporting/StatementMobileRows';
@@ -30,6 +31,7 @@ function validDate(value: string | undefined): value is string {
 /** Read-only filtered Expenses Statement. */
 export default function ExpensesStatementScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const params = useLocalSearchParams<{ from?: string; to?: string; accountId?: string; categoryId?: string; currencyCode?: string }>();
   const from = single(params.from);
   const to = single(params.to);
@@ -58,17 +60,17 @@ export default function ExpensesStatementScreen() {
     category: names.categories.get(row.categoryId) ?? (row.categoryId === 'uncategorized' ? 'Uncategorized' : 'Unknown category'),
     description: [row.note, names.accounts.get(row.accountId)].filter(Boolean).join(' · '), amount: row.amount, currency: row.currencyCode, categoryIcon: categories.find(c => c.id === row.categoryId)?.icon as keyof typeof Ionicons.glyphMap | undefined, categoryColor: categories.find(c => c.id === row.categoryId)?.color })) : [];
   return <Screen scroll>
-    <Pressable accessibilityRole="button" accessibilityLabel="Back to Expenses Report" onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}><AppText>‹ Expenses Report</AppText></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel={t("Back to Expenses Report", "العودة إلى تقرير المصروفات")} onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}><AppText>{t('‹ Expenses Report', '‹ تقرير المصروفات')}</AppText></Pressable>
 
-    {!valid ? <AppText accessibilityRole="alert">Invalid or missing statement filters. Return to the Expenses Report.</AppText>
+    {!valid ? <AppText accessibilityRole="alert">{t('Invalid or missing statement filters. Return to the Expenses Report.', 'فلاتر كشف الحساب غير صالحة أو مفقودة. ارجع إلى تقرير المصروفات.')}</AppText>
       : !ready || !statement ? <ActivityIndicator color={moduleColors.finance} /> : <View>
         <StatementUnifiedChrome kind="Expenses" from={from!} to={to!}
-          account={accountId ? names.accounts.get(accountId) ?? 'Unknown account' : 'All accounts'}
-          category={categoryId ? names.categories.get(categoryId) ?? 'Unknown category' : 'All expense categories'} currency={currencyCode}
+          account={accountId ? names.accounts.get(accountId) ?? t('Unknown account', 'حساب غير معروف') : t('All accounts', 'كل الحسابات')}
+          category={categoryId ? names.categories.get(categoryId) ?? t('Unknown category', 'تصنيف غير معروف') : t('All expense categories', 'كل تصنيفات المصروفات')} currency={currencyCode}
           totals={statement.report.currencies.map(total => ({ currencyCode: total.currencyCode, amount: formatAmount(total.expenses, total.currencyCode) }))} />
-        {statement.report.unknown.length > 0 && <AppText accessibilityRole="alert">Incomplete: {statement.report.unknown.length} unverified transaction(s). Known expenses only; exports unavailable.</AppText>}
-        {!statement.reconciled ? <AppText accessibilityRole="alert">Statement cannot be reconciled. Transaction details are hidden.</AppText>
-          : <><StatementMobileRows rows={rows.map(row => ({ ...row, amount: formatAmount(row.amount, row.currency), currencyCode: row.currency }))} />{!rows.length && <AppText>No verified ordinary expenses for this selection.</AppText>}</>}
+        {statement.report.unknown.length > 0 && <AppText accessibilityRole="alert">{t('Incomplete:', 'غير مكتمل:')} {statement.report.unknown.length} {t('unverified transaction(s). Known expenses only; exports unavailable.', 'معاملة غير متحقق منها. المعروض هو المصروفات المؤكدة فقط، والتصدير غير متاح.')}</AppText>}
+        {!statement.reconciled ? <AppText accessibilityRole="alert">{t("Statement cannot be reconciled. Transaction details are hidden.", "تعذرت مطابقة كشف الحساب. تفاصيل المعاملات مخفية.")}</AppText>
+          : <><StatementMobileRows rows={rows.map(row => ({ ...row, amount: formatAmount(row.amount, row.currency), currencyCode: row.currency }))} />{!rows.length && <AppText>{t("No verified ordinary expenses for this selection.", "لا توجد مصروفات عادية متحقق منها لهذا الاختيار.")}</AppText>}</>}
         <StatementExportActions busy={exports.exporting} disabled={!exports.canExport} pdf={exports.exportPdf} excel={exports.exportExcel} share={exports.share} />
       </View>}
   </Screen>;

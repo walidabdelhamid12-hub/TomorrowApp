@@ -1,0 +1,13 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const ts = require('typescript');
+const fs = require('node:fs');
+const m = {exports:{}};
+new Function('module','exports',ts.transpileModule(fs.readFileSync(require('node:path').join(__dirname,'../src/features/documents/domain/imageCapture.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(m,m.exports);
+const {imageCaptureMetadata: meta, MAX_IMAGE_BYTES} = m.exports;
+for(const [mime,ext] of [['image/jpeg','jpg'],['image/png','png'],['image/webp','webp']]) test(mime,()=>assert.deepEqual(meta({uri:'file:///a',mimeType:mime},'doc-1'),{mime,name:'doc-1.'+ext}));
+for(const mime of [undefined,'image/heic','application/pdf']) test('reject '+mime,()=>assert.throws(()=>meta({uri:'file:///a',mimeType:mime},'doc-1')));
+test('reject remote URI',()=>assert.throws(()=>meta({uri:'https://a',mimeType:'image/png'},'doc-1')));
+test('preserve Arabic name',()=>assert.equal(meta({uri:'content://a',mimeType:'image/png',fileName:'فاتورة.png'},'doc-1').name,'فاتورة.png'));
+test('unsafe name fallback',()=>assert.equal(meta({uri:'file:///a',mimeType:'image/png',fileName:'../a.png'},'doc-1').name,'doc-1.png'));
+test('limit',()=>assert.equal(MAX_IMAGE_BYTES,10485760));

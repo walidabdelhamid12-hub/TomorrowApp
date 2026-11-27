@@ -5,8 +5,7 @@ const path = require('node:path');
 const navigation = fs.readFileSync(path.join(__dirname, '../src/app/finance/reports.tsx'), 'utf8');
 const screen = fs.readFileSync(path.join(__dirname, '../src/app/finance/report-loans.tsx'), 'utf8');
 test('Loans is enabled and navigates to its own report', () => {
-  assert.match(navigation, /name === 'Loans' \? '\/finance\/report-loans'/);
-  assert.match(navigation, /name !== 'Loans'/);
+  require('./helpers/assert-finance-report-navigation.cjs')(navigation);
   assert.match(screen, /aggregateLoansReport\(loans, dates\)/);
 });
 test('Loans report stays read-only and preserves uncertainty labels', () => {

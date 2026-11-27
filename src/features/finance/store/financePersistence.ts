@@ -15,7 +15,7 @@ export class FinancePersistenceError extends Error {
 }
 
 /**
- * Opt-in adapter for createJSONStorage. No existing store uses this in Phase 1.
+ * Ordered adapter used by production accounting stores and dormant runtime tests.
  * Each key is ordered independently; callers must await barriers to order keys.
  * A barrier covers writes queued at its invocation, not later writes. Success
  * acknowledges the storage API only, not power-loss durability or atomicity.
@@ -82,5 +82,11 @@ export function createOrderedFinancePersistence(backend: StateStorage) {
   };
   // Forensic draining must wait for issued I/O even when flush rejects a sticky failure.
   const settle = (key: string): Promise<void> => queueFor(key).tail.then(() => {}, () => {});
-  return { storage, flush, settle, runMutation, recordFailure, assertMutationAllowed: () => {}, getFailure: (key: string) => queues.get(key)?.failure };
+  // Explicit read-only hydration retry may inspect corrected/restored bytes.
+  // Uncertain mutation/write/remove failures remain sticky until a new session.
+  const retryRead = (key: string): void => {
+    const queue = queueFor(key);
+    if (queue.failure?.operation === 'read') queue.failure = undefined;
+  };
+  return { storage, flush, settle, runMutation, recordFailure, retryRead, assertMutationAllowed: () => {}, getFailure: (key: string) => queues.get(key)?.failure };
 }

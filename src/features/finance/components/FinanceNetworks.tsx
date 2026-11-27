@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 
 import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
@@ -86,15 +87,16 @@ const NETWORKS: NetworkItem[] = [
 ];
 
 export function FinanceNetworks({ onPress }: FinanceNetworksProps) {
+  const { t } = useAppLanguage();
   const { colors, spacing } = useTheme();
 
   return (
     <View style={{ marginTop: spacing.xl }}>
       <View style={styles.heading}>
         <View>
-          <AppText variant="h3">Networks</AppText>
+          <AppText variant="h3">{t("Networks", "الأقسام")}</AppText>
           <AppText variant="caption" color="textSecondary">
-            Your financial sections
+            {t("Your financial sections", "أقسامك المالية")}
           </AppText>
         </View>
 
@@ -111,7 +113,7 @@ export function FinanceNetworks({ onPress }: FinanceNetworksProps) {
             <Pressable
               key={item.key}
               accessibilityRole="button"
-              accessibilityLabel={`Open ${item.title}`}
+              accessibilityLabel={t(`Open ${item.title}`, `فتح ${({'Accounts': 'الحسابات', 'Assets': 'الأصول', 'Debts': 'الديون', 'Income': 'الدخل', 'Expenses': 'المصروفات', 'Loans': 'القروض', 'Cheques': 'الشيكات', 'Categories': 'التصنيفات'} as Record<string, string>)[item.title] ?? item.title}`)}
               onPress={() => onPress(item.key)}
               style={({ pressed }) => [
                 styles.item,
@@ -138,7 +140,7 @@ export function FinanceNetworks({ onPress }: FinanceNetworksProps) {
               </View>
 
               <AppText style={styles.label}>
-                {item.title}
+                {t(item.title, ({'Accounts': 'الحسابات', 'Assets': 'الأصول', 'Debts': 'الديون', 'Income': 'الدخل', 'Expenses': 'المصروفات', 'Loans': 'القروض', 'Cheques': 'الشيكات', 'Categories': 'التصنيفات'} as Record<string, string>)[item.title] ?? item.title)}
               </AppText>
             </Pressable>
           ))}

@@ -97,6 +97,11 @@ test('large worksheet retains all numeric rows while omitting the bounded chart'
  const parts = unzip(buildReportTableXlsx({ ...base, title:'Income', columns:['Category','Currency','Amount'], rows }));
  assert.equal([...parts.keys()].some(name => name.startsWith('xl/charts/')), false);
  const sheet = parts.get('xl/worksheets/sheet1.xml');
- assert.match(sheet, /<c r="C509" s="5"><v>1\.237<\/v><\/c>/);
+ const last = sheet.match(/<c r="C509" s="(\d+)"><v>1\.237<\/v><\/c>/);
+ assert.ok(last, 'last amount remains a numeric cell');
+ const styles = parts.get('xl/styles.xml');
+ const xfs = styles.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/)[1].match(/<xf\b[^>]*\/>/g);
+ assert.match(xfs[Number(last[1])], /numFmtId="167"/);
+ assert.match(styles, /<numFmt numFmtId="167" formatCode="#,##0\.000"\/>/);
  assert.equal((sheet.match(/<v>1\.237<\/v>/g)||[]).length,501);
 });

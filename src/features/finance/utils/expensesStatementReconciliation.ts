@@ -31,7 +31,7 @@ export function buildExpensesStatement(
   for (let index = 0; index < classified.length; index++) {
     const item = classified[index];
     const tx = context.ledger.transactions[index];
-    if ((item.kind !== 'expense' && item.kind !== 'refund') || rejected.has(tx.id)
+    if ((item.kind !== 'expense' && item.kind !== 'refund' && !(item.kind === 'loan_payment' && item.expenseAmount > 0)) || rejected.has(tx.id)
       || tx.date < period.from || tx.date > period.to
       || (filters.accountId !== undefined && tx.accountId !== filters.accountId)
       || (filters.categoryId !== undefined && (item.categoryId ?? 'uncategorized') !== filters.categoryId)) continue;

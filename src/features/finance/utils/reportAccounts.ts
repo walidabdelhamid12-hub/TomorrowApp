@@ -1,6 +1,7 @@
 import type { LedgerData, Transaction } from '../types/ledger';
 import { getCurrencyDecimals, isSupportedCurrency } from '../constants/currencies';
 import { reportAmountToUnits } from './reportAggregation';
+import { transferSettlementProblem, isTransferFeeClaim, verifiedFeeOwner } from './transferSettlement';
 
 export interface AccountReportPeriod {
   from: string;
@@ -80,6 +81,7 @@ export function aggregateAccountsReport(
 
   const accountsFor = (id: string) => ledger.accounts.filter(account => account.id === id);
   const transactionProblem = (tx: Transaction): string | null => {
+    if (isTransferFeeClaim(tx, ledger) && !verifiedFeeOwner(tx, ledger)) return 'Unverified transfer fee ownership';
     const accounts = accountsFor(tx.accountId);
     if (!validId(tx.id) || ledger.transactions.filter(item => item.id === tx.id).length !== 1
       || accounts.length !== 1 || tx.currencyCode !== accounts[0].currencyCode
@@ -155,6 +157,8 @@ export function aggregateAccountsReport(
     for (const transfer of ledger.transfers.filter(item =>
       item.fromAccountId === account.id || item.toAccountId === account.id)) {
       const badTransfer = (reason: string) => unavailable(reason, 'transfer', transfer.id);
+      const settlementProblem = transferSettlementProblem(ledger, transfer);
+      if (settlementProblem) return badTransfer(settlementProblem);
       const sources = accountsFor(transfer.fromAccountId);
       const destinations = accountsFor(transfer.toAccountId);
       if (!validId(transfer.id) || sources.length !== 1 || destinations.length !== 1

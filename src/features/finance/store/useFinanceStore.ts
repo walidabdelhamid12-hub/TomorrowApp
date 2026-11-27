@@ -1,3 +1,4 @@
+import { assertAccountingHydration } from './accountingHydration';
 import { validateAssetOpeningDate } from '@/features/finance/utils/assetOpeningDate';
 import { isPaymentOperationReceipt, type PaymentOperationReceipt } from '@/features/finance/types/paymentOperations';
 import { reservedPaymentAvailable, reservedPaymentFundingValid } from '@/features/finance/utils/reservedPayments';
@@ -5,7 +6,7 @@ import { canEditLoanPayment, canReverseLoanPayment } from '@/features/finance/ut
 import { assertAccountingStorageVersion, paymentJournalMetadata } from '@/features/finance/types/paymentJournalInstallation';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage } from 'zustand/middleware';
 import { paymentRuntimePersist as persist } from './paymentOperationRuntime';
@@ -178,6 +179,7 @@ function normalizeRecords<T>(
 function migrateFinanceData(
   persistedState: unknown
 ): FinanceData {
+  assertAccountingHydration(persistedState, 'finance');
   const saved = isRecord(persistedState) ? persistedState : {};
 
   return {
@@ -984,6 +986,7 @@ export const useFinanceStore = create<FinanceStore>()(
         const merged = { ...currentState, ...restored };
         // An absent persisted field must not inherit evidence from the old session.
         if (!Object.hasOwn(restored, 'creationProvenance')) delete merged.creationProvenance;
+        if (!Object.hasOwn(restored, 'paymentAccounting')) delete merged.paymentAccounting;
         return merged;
       },
 
@@ -1003,20 +1006,12 @@ export const useFinanceStore = create<FinanceStore>()(
 /* Hydration hook                                                             */
 /* -------------------------------------------------------------------------- */
 
+const subscribeFinanceHydration = (notify: () => void) => {
+  const begin = useFinanceStore.persist.onHydrate(notify);
+  const finish = useFinanceStore.persist.onFinishHydration(notify);
+  return () => { begin(); finish(); };
+};
+
 export function useFinanceHydrated(): boolean {
-  const [hydrated, setHydrated] = useState(() =>
-    useFinanceStore.persist.hasHydrated()
-  );
-
-  useEffect(() => {
-    const unsubscribe = useFinanceStore.persist.onFinishHydration(() =>
-      setHydrated(true)
-    );
-
-    setHydrated(useFinanceStore.persist.hasHydrated());
-
-    return unsubscribe;
-  }, []);
-
-  return hydrated;
+  return useSyncExternalStore(subscribeFinanceHydration, useFinanceStore.persist.hasHydrated, () => false);
 }

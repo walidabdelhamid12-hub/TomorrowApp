@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,7 @@ import { MetalTypeLabel } from '@/features/finance/components/MetalTypeLabel';
 const assetTypes = { local_currency: 'Local currency', foreign_currency: 'Foreign currency', gold: 'Gold', silver: 'Silver' };
 export default function AssetsReportScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const { colors } = useTheme();
   const ready = useFinanceHydrated();
   const currencyReady = useCurrencyHydrated();
@@ -118,7 +120,7 @@ export default function AssetsReportScreen() {
   }}>
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Back"
+      accessibilityLabel={t("Back", "رجوع")}
       onPress={() => router.back()}
       style={{
         width: 44,
@@ -134,7 +136,7 @@ export default function AssetsReportScreen() {
       textAlign: 'center',
       fontSize: 17,
     }}>
-      Tomorrow Finance Report
+      {'Tomorrow Finance Report'}
     </AppText>
     <View style={{ width: 44 }} />
   </View>
@@ -151,26 +153,26 @@ export default function AssetsReportScreen() {
       fontSize: 16,
       fontWeight: '700',
     }}>
-      Assets Report
+      {t("Assets Report", "تقرير الأصول")}
     </AppText>
   </View>
 </View>
     <ReportDates period={period} onChange={setPeriod} />
     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
       <View style={{ flex: 1 }}>
-        <ReportPicker label="Asset Type" value={assetGroup}
+        <ReportPicker label={t("Asset Type", "نوع الأصل")} value={assetGroup}
           onSelect={value => { setAssetGroup(value as 'all' | 'currencies' | 'metals'); setAssetId(null); }}
           options={[
-            { id: 'all', label: 'All Assets' },
-            { id: 'currencies', label: 'Currencies' },
-            { id: 'metals', label: 'Metals' },
+            { id: 'all', label: t("All Assets", "كل الأصول") },
+            { id: 'currencies', label: t("Currencies", "العملات") },
+            { id: 'metals', label: t("Metals", "المعادن") },
           ]} />
       </View>
       <View style={{ flex: 1 }}>
-        <ReportPicker label="Asset" value={assetId ?? ''}
+        <ReportPicker label={t("Asset", "الأصل")} value={assetId ?? ''}
           onSelect={value => setAssetId(value || null)}
           options={[
-            { id: '', label: 'All in group' },
+            { id: '', label: t("All in group", "الكل في المجموعة") },
             ...filteredAssets.map(asset => ({
               id: asset.id,
               label: asset.name + ' · ' +
@@ -182,30 +184,30 @@ export default function AssetsReportScreen() {
           ]} />
       </View>
     </View>
-    {!ready || !rows ? <ActivityIndicator color={moduleColors.finance} /> : selected.length === 0 ? <ReportStatus warning={assetId !== null}>{assetId !== null ? 'Selected asset is unavailable. Select another asset.' : 'No assets for this selection.'}</ReportStatus> : <>
+    {!ready || !rows ? <ActivityIndicator color={moduleColors.finance} /> : selected.length === 0 ? <ReportStatus warning={assetId !== null}>{assetId !== null ? t("Selected asset is unavailable. Select another asset.", "الأصل المحدد غير متاح. اختر أصلًا آخر.") : t("No assets for this selection.", "لا توجد أصول لهذا الاختيار.")}</ReportStatus> : <>
 
-      {primary && <ReportValueCards cards={[{ label: 'Opening quantity', value: primary.openingQuantity!.toFixed(3), unit: unit(primary.unit) }, { label: 'Closing quantity', value: primary.closingQuantity!.toFixed(3), unit: unit(primary.unit) }, { label: 'Net change', value: primary.netChange!.toFixed(3), unit: unit(primary.unit) }]} />}
+      {primary && <ReportValueCards cards={[{ label: t("Opening quantity", "الكمية الافتتاحية"), value: primary.openingQuantity!.toFixed(3), unit: unit(primary.unit) }, { label: t("Closing quantity", "الكمية الختامية"), value: primary.closingQuantity!.toFixed(3), unit: unit(primary.unit) }, { label: t("Net change", "صافي التغير"), value: primary.netChange!.toFixed(3), unit: unit(primary.unit) }]} />}
       <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, marginVertical: 8, backgroundColor: colors.surface }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ flex: 1 }}><AppText variant="bodyStrong" style={{ fontSize: 16, fontWeight: '800' }}>Total Assets Balance</AppText></View>
+          <View style={{ flex: 1 }}><AppText variant="bodyStrong" style={{ fontSize: 16, fontWeight: '800' }}>{t("Total Assets Balance", "إجمالي قيمة الأصول")}</AppText></View>
           <View style={{ flexShrink: 0 }}><BalanceCurrencyPicker value={balanceCurrency} onSelect={setDisplayCurrency} /></View>
         </View>
-        <AppText variant="bodyStrong" style={{ fontSize: 25, fontWeight: '800', marginTop: 8, fontVariant: ['tabular-nums'] }}>{currentValuation !== null && Number.isFinite(currentValuation) ? formatMoney(currentValuation, balanceCurrency) : 'Valuation unavailable'}</AppText>
+        <AppText variant="bodyStrong" style={{ fontSize: 25, fontWeight: '800', marginTop: 8, fontVariant: ['tabular-nums'] }}>{currentValuation !== null && Number.isFinite(currentValuation) ? formatMoney(currentValuation, balanceCurrency) : t("Valuation unavailable", "التقييم غير متاح")}</AppText>
       </View>
-      <ReportChart title="Asset Analysis" currency={chartCurrency} currencies={CURRENCIES.map(item => item.code)} onCurrencySelect={setAnalysisCurrency}
-        empty={chartReady ? 'No positive valued holdings.' : 'Valuation unavailable'} data={chartRows}
-        trendContent={trendKey === null ? <AppText variant="caption">Select one asset for its recorded movements trend. Different units cannot be combined.</AppText> : <AssetTrendChart compact assets={safeHoldings} unit={analysisUnit} />} />
-      <AppText variant="bodyStrong" style={{ marginTop: 6 }}>Assets ({selected.length})</AppText>
+      <ReportChart title={t("Asset Analysis", "تحليل الأصول")} currency={chartCurrency} currencies={CURRENCIES.map(item => item.code)} onCurrencySelect={setAnalysisCurrency}
+        empty={chartReady ? t("No positive valued holdings.", "لا توجد حيازات موجبة متاحة للتقييم.") : t("Valuation unavailable", "التقييم غير متاح")} data={chartRows}
+        trendContent={trendKey === null ? <AppText variant="caption">{t("Select one asset for its recorded movements trend. Different units cannot be combined.", "اختر أصلًا واحدًا لعرض اتجاه حركاته المسجلة. لا يمكن جمع وحدات مختلفة.")}</AppText> : <AssetTrendChart compact assets={safeHoldings} unit={analysisUnit} />} />
+      <AppText variant="bodyStrong" style={{ marginTop: 6 }}>{t("Assets", "الأصول")} ({selected.length})</AppText>
       {selected.map((row, index) => {
         const asset = assets.find(asset => asset.id === row.assetId);
         const verified = available(row);
         return <View key={row.assetId + ':' + index} testID={'asset-report-' + row.assetId} style={{ borderBottomWidth: 1, borderColor: colors.border, paddingVertical: 3 }}>
-          <SixReportDetails title={row.assetName} leadingIcon={iconFor(row.category, row.unit)} subtitle={asset && Number.isFinite(getAssetBalance(asset)) ? 'Current: ' + quantity(getAssetBalance(asset), row.unit) + (asset.category === 'gold' ? ' · ' + asset.karat + 'K' : '') : 'Current quantity unavailable'}>
+          <SixReportDetails title={row.assetName} leadingIcon={iconFor(row.category, row.unit)} subtitle={asset && Number.isFinite(getAssetBalance(asset)) ? t("Current", "الحالي") + ": " + quantity(getAssetBalance(asset), row.unit) + (asset.category === 'gold' ? ' · ' + asset.karat + 'K' : '') : t("Current quantity unavailable", "الكمية الحالية غير متاحة")}>
             <AppText variant="bodyStrong" style={{ marginTop: 6 }}>{row.category === 'gold' || row.category === 'silver' ? <MetalTypeLabel type={row.category} /> : assetTypes[row.category]}</AppText>
             {verified ? <>
-              <ReportKeyValues items={([['Opening quantity', row.openingQuantity], ['Additions', row.additions], ['Withdrawals', row.withdrawals], ['Closing quantity', row.closingQuantity], ['Net change', row.netChange]] as const).map(([label, value]) => ({ label, value: quantity(value, row.unit) }))} />
-              {asset && <SixReportDetails title={row.assetName + ' movements'}><ReportTransactionRows rows={asset.entries.filter(entry => entry.date >= period.from && entry.date <= period.to).map(entry => ({ id: entry.id, date: entry.date, category: assetTypes[row.category], description: entry.note ?? '', amount: 0, formattedAmount: entry.amount.toFixed(3), currency: row.unit }))} /></SixReportDetails>}
-            </> : <AppText variant="caption">{row.reason ?? 'Incomplete or unverified historical quantity. Verify the opening date in Assets.'}</AppText>}
+              <ReportKeyValues items={([[t("Opening quantity", "الكمية الافتتاحية"), row.openingQuantity], [t("Additions", "الإضافات"), row.additions], [t("Withdrawals", "السحوبات"), row.withdrawals], [t("Closing quantity", "الكمية الختامية"), row.closingQuantity], [t("Net change", "صافي التغير"), row.netChange]] as const).map(([label, value]) => ({ label, value: quantity(value, row.unit) }))} />
+              {asset && <SixReportDetails title={row.assetName + " " + t("movements", "الحركات")}><ReportTransactionRows rows={asset.entries.filter(entry => entry.date >= period.from && entry.date <= period.to).map(entry => ({ id: entry.id, date: entry.date, category: assetTypes[row.category], description: entry.note ?? '', amount: 0, formattedAmount: entry.amount.toFixed(3), currency: row.unit }))} /></SixReportDetails>}
+            </> : <AppText variant="caption">{row.reason ?? t("Incomplete or unverified historical quantity. Verify the opening date in Assets.", "الكمية التاريخية غير مكتملة أو غير متحقق منها. راجع تاريخ الافتتاح في الأصول.")}</AppText>}
           </SixReportDetails>
 
         </View>;

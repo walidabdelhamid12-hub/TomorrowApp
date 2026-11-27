@@ -1,4 +1,9 @@
+import { FinanceDateField } from './FinanceDateField';
+import { FinanceButton } from './FinanceButton';
+import { isValidISODate } from '@/features/finance/utils/input';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { FormModal } from '@/features/finance/components/FormModal';
+import { FinanceChoiceDropdown, FINANCE_CURRENCY_CHOICES } from './FinanceChoiceDropdown';
 
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import type {
@@ -11,7 +16,7 @@ import { parseAmount } from '@/features/finance/utils/money';
 import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
 import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -27,6 +32,7 @@ export type AddAssetFormData = {
   selectedType: AssetCategory;
   selectedCurrency: string;
   karat: GoldKarat;
+  openingBalanceDate?: string;
 };
 
 interface AddAssetModalProps {
@@ -109,6 +115,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { t } = useAppLanguage();
   const baseCurrency = useCurrencyStore(
     (state) => state.baseCurrency,
   );
@@ -116,52 +123,32 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
   const isEditing = asset !== null;
 
   const [assetName, setAssetName] = useState('');
-  const [amount, setAmount] = useState('0');
+  const [openingDate, setOpeningDate] = useState('');
+  const [openingDateConfirmed, setOpeningDateConfirmed] = useState(false);
+  const [amount, setAmount] = useState('');
   const [selectedType, setSelectedType] =
     useState<AssetCategory>('local_currency');
   const [selectedCurrency, setSelectedCurrency] =
     useState(baseCurrency);
   const [karat, setKarat] = useState<GoldKarat>(24);
 
-  useEffect(() => {
-    if (!visible) return;
-
-    if (asset) {
-      setAssetName(asset.name);
-      setAmount(String(getAssetBalance(asset)));
-      setSelectedType(asset.category);
-
-      if (
-        asset.category === 'local_currency' ||
-        asset.category === 'foreign_currency'
-      ) {
-        setSelectedCurrency(asset.currencyCode);
-      } else {
-        setSelectedCurrency(baseCurrency);
-      }
-
-      if (asset.category === 'gold') {
-        setKarat(asset.karat);
-      } else {
-        setKarat(24);
-      }
-
-      return;
+  const formContext = { visible, asset, baseCurrency };
+  const [loadedFormContext, setLoadedFormContext] = useState<typeof formContext | null>(null);
+  if (!loadedFormContext || loadedFormContext.visible !== visible || loadedFormContext.asset !== asset || loadedFormContext.baseCurrency !== baseCurrency) {
+    setLoadedFormContext(formContext);
+    if (visible) {
+      setAssetName(asset?.name ?? '');
+      setOpeningDate('');
+      setOpeningDateConfirmed(false);
+      setAmount(asset ? String(getAssetBalance(asset)) : '');
+      setSelectedType(asset?.category ?? 'local_currency');
+      setSelectedCurrency(asset && (asset.category === 'local_currency' || asset.category === 'foreign_currency') ? asset.currencyCode : baseCurrency);
+      setKarat(asset?.category === 'gold' ? asset.karat : 24);
     }
+  }
 
-    setAssetName('');
-    setAmount('0');
-    setSelectedType('local_currency');
-    setSelectedCurrency(baseCurrency);
-    setKarat(24);
-  }, [visible, asset, baseCurrency]);
-
-  // Keep the local asset currency synchronized with the app's base currency.
-  useEffect(() => {
-    if (!isEditing && selectedType === 'local_currency') {
-      setSelectedCurrency(baseCurrency);
-    }
-  }, [baseCurrency, selectedType, isEditing]);
+  // Base-currency changes reset the form above; selecting local currency also
+  // sets the currency in handleSelectType. No second reset effect is needed.
 
   const selectedCurrencyOption = CURRENCY_OPTIONS.find(
     (currency) => currency.code === selectedCurrency,
@@ -188,8 +175,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
 
     if (!assetName.trim()) {
       Alert.alert(
-        'Asset name required',
-        'Enter a name for this asset.',
+        t('Asset name required', 'اسم الأصل مطلوب'),
+        t('Enter a name for this asset.', 'أدخل اسمًا لهذا الأصل.'),
       );
       return;
     }
@@ -200,8 +187,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
       parsedAmount < 0
     ) {
       Alert.alert(
-        'Invalid amount',
-        'Enter a valid non-negative amount.',
+        t('Invalid amount', 'مبلغ غير صالح'),
+        t('Enter a valid non-negative amount.', 'أدخل مبلغًا صالحًا لا يقل عن صفر.'),
       );
       return;
     }
@@ -209,11 +196,17 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
     const isCurrencyAsset = selectedType === 'local_currency' || selectedType === 'foreign_currency';
     const assetCurrency = selectedType === 'local_currency' ? baseCurrency : selectedCurrency;
     if (isCurrencyAsset && !hasValidCurrencyPrecision(amount, assetCurrency)) {
-      Alert.alert('Invalid amount precision', `${assetCurrency} allows up to ${getCurrencyDecimals(assetCurrency)} decimal places. Please correct the amount before saving.`);
+      Alert.alert(t('Invalid amount precision', 'عدد المنازل العشرية غير صالح'), t(`${assetCurrency} allows up to ${getCurrencyDecimals(assetCurrency)} decimal places. Please correct the amount before saving.`, `العملة ${assetCurrency} تسمح بحد أقصى ${getCurrencyDecimals(assetCurrency)} منازل عشرية. صحّح المبلغ قبل الحفظ.`));
+      return;
+    }
+
+    if (!isEditing && openingDate && (!isValidISODate(openingDate) || !openingDateConfirmed)) {
+      Alert.alert(t('Confirm opening date', 'أكد تاريخ الافتتاح'), t('Choose a valid date and confirm the opening history.', 'اختر تاريخًا صحيحًا وأكد بداية السجل.'));
       return;
     }
 
     onSave({
+      ...(!isEditing && openingDate ? { openingBalanceDate: openingDate } : {}),
       assetName: assetName.trim(),
       amount,
       selectedType,
@@ -223,6 +216,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
           : selectedCurrency,
       karat,
     });
+  
   };
 
   const isMetal =
@@ -235,151 +229,44 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
       : selectedCurrencyOption?.symbol ?? selectedCurrency;
 
   return (
-    <FormModal visible={visible} title={isEditing ? 'Edit asset' : 'Add asset'} onClose={onClose}>
+    <FormModal visible={visible} title={isEditing ? t('Edit asset', 'تعديل أصل') : t('Add asset', 'إضافة أصل')} onClose={onClose} onBack={onClose}>
       <View>
-            <Text style={styles.label}>
-              {isEditing ? 'EDITING ASSET' : 'ADD TO'}
-            </Text>
-
-            <View style={styles.addToRow}>
-              <View style={styles.addToChipActive}>
-                <Text style={styles.addToTextActive}>
-                  {isEditing ? 'Edit existing asset' : '+ New asset'}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.label}>ASSET NAME</Text>
+            <Text style={styles.label}>{t('Name', 'الاسم')}</Text>
 
             <TextInput
               style={styles.input}
-              placeholder="e.g. Dollar savings, Gold bars"
+              placeholder={t('e.g. Dollar savings, Gold bars', 'مثال: مدخرات بالدولار، سبائك ذهب')}
               placeholderTextColor="#999"
               value={assetName}
               onChangeText={setAssetName}
             />
 
-            <Text style={styles.label}>ASSET TYPE</Text>
-
-            <View style={styles.assetTypesGrid}>
-              {ASSET_TYPE_OPTIONS.map((type) => {
-                const active = selectedType === type.value;
-
-                return (
-                  <TouchableOpacity
-                    key={type.value}
-                    style={[
-                      styles.assetTypeCard,
-                      active && {
-                        borderColor: type.color,
-                        backgroundColor: type.background,
-                      },
-                      isEditing && styles.disabledTypeCard,
-                    ]}
-                    onPress={() => handleSelectType(type.value)}
-                    disabled={isEditing}
-                    accessibilityRole="button"
-                    accessibilityState={{
-                      selected: active,
-                      disabled: isEditing,
-                    }}
-                  >
-                    <View
-                      style={[
-                        styles.assetIconCircle,
-                        { backgroundColor: type.background },
-                      ]}
-                    >
-                      <Ionicons
-                        name={type.icon}
-                        size={15}
-                        color={type.color}
-                      />
-                    </View>
-
-                    <Text
-                      style={[
-                        styles.assetTypeTitle,
-                        active && { color: type.color },
-                        type.value === 'gold' && { color: '#A97808', fontWeight: '800' },
-                        type.value === 'silver' && { color: '#697586', fontWeight: '800' },
-                      ]}
-                    >
-                      {type.label}
-                    </Text>
-
-                    <Text style={styles.assetTypeSubtitle}>
-                      {type.value === 'local_currency'
-                        ? baseCurrency
-                        : type.subtitle}
-                    </Text>
-
-                    {active && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={13}
-                        color={type.color}
-                        style={styles.selectedCheck}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+              <View style={{ flex: 1, minWidth: 135 }}>
+                <FinanceChoiceDropdown label={t('Asset Type', 'نوع الأصل')} value={selectedType}
+                  disabled={isEditing}
+                  options={ASSET_TYPE_OPTIONS.map(type => ({ value: type.value, label: t(type.label, ({ local_currency: 'عملة محلية', foreign_currency: 'عملة أجنبية', gold: 'ذهب', silver: 'فضة' } as Record<AssetCategory, string>)[type.value]) }))}
+                  onChange={value => handleSelectType(value as AssetCategory)} />
+              </View>
+              <View style={{ flex: 1, minWidth: 135 }}>
+                {selectedType === 'foreign_currency' ? (
+                  <FinanceChoiceDropdown label={t('Currency', 'العملة')} value={selectedCurrency}
+                    options={FINANCE_CURRENCY_CHOICES.filter(item => item.value !== baseCurrency && item.value !== 'EGP')}
+                    onChange={setSelectedCurrency} />
+                ) : (
+                  <FinanceChoiceDropdown label={t('Asset Currency / Metal', 'عملة الأصل / المعدن')}
+                    value={selectedType === 'local_currency' ? baseCurrency : selectedType}
+                    disabled options={selectedType === 'local_currency'
+                      ? FINANCE_CURRENCY_CHOICES.filter(item => item.value === baseCurrency)
+                      : [{ value: selectedType, label: selectedType === 'gold' ? t('Gold', 'ذهب') : t('Silver', 'فضة') }]}
+                    onChange={() => {}} />
+                )}
+              </View>
             </View>
-
-            {selectedType === 'foreign_currency' && (
-              <>
-                <Text style={styles.label}>CURRENCY</Text>
-
-                <View style={styles.currenciesGrid}>
-                  {CURRENCY_OPTIONS.map((currency) => {
-                    const active =
-                      selectedCurrency === currency.code;
-
-                    return (
-                      <TouchableOpacity
-                        key={currency.code}
-                        style={[
-                          styles.currencyCard,
-                          active && styles.currencyCardActive,
-                        ]}
-                        onPress={() =>
-                          setSelectedCurrency(currency.code)
-                        }
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: active }}
-                      >
-                        <Text style={styles.currencyFlag}>
-                          {currency.flag}
-                        </Text>
-
-                        <Text
-                          style={[
-                            styles.currencyCode,
-                            active && styles.currencyCodeActive,
-                          ]}
-                        >
-                          {currency.code}
-                        </Text>
-
-                        <Text
-                          style={[
-                            styles.currencySymbol,
-                            active && styles.currencySymbolActive,
-                          ]}
-                        >
-                          {currency.symbol}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </>
-            )}
 
             {selectedType === 'gold' && (
               <>
-                <Text style={styles.label}>GOLD KARAT</Text>
+                <Text style={styles.label}>{t('GOLD KARAT', 'عيار الذهب')}</Text>
 
                 <View style={styles.karatRow}>
                   {([24, 22, 21, 18, 14] as GoldKarat[]).map(
@@ -412,20 +299,20 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
                 </View>
 
                 <Text style={styles.helperText}>
-                  For gold, enter the weight in grams.
+                  {t('For gold, enter the weight in grams.', 'للذهب، أدخل الوزن بالجرام.')}
                 </Text>
               </>
             )}
 
             {selectedType === 'silver' && (
               <Text style={styles.helperText}>
-                For silver, enter the weight in grams.
+                {t('For silver, enter the weight in grams.', 'للفضة، أدخل الوزن بالجرام.')}
               </Text>
             )}
 
             <>
               <Text style={styles.label}>
-                {isEditing ? 'CURRENT BALANCE' : 'AMOUNT'}
+                {isEditing ? t('CURRENT BALANCE', 'الرصيد الحالي') : t('Starting balance / quantity', 'الرصيد / الكمية الافتتاحية')}
               </Text>
 
               <View style={styles.balanceContainer}>
@@ -439,7 +326,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
                     keyboardType="decimal-pad"
                     value={amount}
                     onChangeText={setAmount}
-                    placeholder="0"
+                    placeholder=""
                     placeholderTextColor="#999"
                   />
                 </View>
@@ -447,20 +334,25 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
 
               {isEditing && (
                 <Text style={styles.helperText}>
-                  Enter the new total balance. Previous movements will be preserved.
+                  {t('Enter the new total balance. Previous movements will be preserved.', 'أدخل الرصيد الإجمالي الجديد. ستُحفظ الحركات السابقة.')}
                 </Text>
               )}
             </>
 
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleSave}
-              accessibilityRole="button"
-            >
-              <Text style={styles.saveButtonText}>
-                {isEditing ? 'Update asset' : 'Create asset'}
-              </Text>
-            </TouchableOpacity>
+            {!isEditing && <View style={{ marginTop: 12, gap: 8 }}>
+              <FinanceDateField label={t('Opening date (optional)', 'تاريخ الافتتاح (اختياري)')}
+                value={openingDate} pickerOnly
+                onChange={value => { setOpeningDate(value); setOpeningDateConfirmed(false); }}
+                onClear={() => { setOpeningDate(''); setOpeningDateConfirmed(false); }} />
+              {openingDate ? <TouchableOpacity accessibilityRole="checkbox"
+                accessibilityState={{ checked: openingDateConfirmed }}
+                onPress={() => setOpeningDateConfirmed(value => !value)}
+                style={{ minHeight: 44, justifyContent: 'center' }}>
+                <Text style={styles.helperText}>{openingDateConfirmed ? '☑' : '☐'} {t('Confirm this is the complete recorded opening history.', 'أكد أن هذا هو تاريخ بداية سجل الأصل الكامل.')}</Text>
+              </TouchableOpacity> : null}
+            </View>}
+            <FinanceButton title={isEditing ? t('Update asset', 'تحديث الأصل') : t('Create asset', 'إنشاء أصل')}
+              style={styles.saveButton} onPress={handleSave} />
       </View>
     </FormModal>
   );

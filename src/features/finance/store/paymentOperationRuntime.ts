@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { StateCreator } from 'zustand/vanilla';
 import { persist, createJSONStorage, type PersistOptions, type StateStorage } from 'zustand/middleware';
+import { productionFinancePersist } from './productionFinancePersistence';
 import { createOrderedFinancePersistence } from './financePersistence';
 import { createPaymentOperationStore, PAYMENT_OPERATION_STORAGE_KEY } from './usePaymentOperationStore';
 import { freezeEvidence, object, sameEvidence, text, type EntityRef, type RevisionHead } from '../types/paymentRecovery';
@@ -448,8 +449,8 @@ export function installPaymentRuntimeBeforeStores(runtime: PaymentOperationRunti
 
 /**
  * Middleware inside Zustand persist: guards the complete persisted set, not
- * merely the underlying state update. Default production mode returns the
- * original persist middleware unchanged, preserving existing sync behavior.
+ * merely the underlying state update. Production uses ordered, acknowledged
+ * persistence without constructing or activating the dormant payment journal.
  */
 export function paymentRuntimePersist<T, P = T>(
   initializer: StateCreator<T, [['zustand/persist', unknown]], []>,
@@ -460,7 +461,7 @@ export function paymentRuntimePersist<T, P = T>(
   const runtime = installed;
   if (!runtime) {
     legacyBindings.add(key);
-    return persist(initializer, options);
+    return productionFinancePersist(initializer, options);
   }
   runtime.bind(key);
   const tracked = runtime.persistence;

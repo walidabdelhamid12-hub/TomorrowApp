@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
 import { StatementSixChrome, StatementSixRows } from '@/features/finance/components/reporting/StatementSixUI';
 import { reportRoutePeriod } from '@/features/finance/utils/reportRoutePeriod';
@@ -13,6 +14,7 @@ import { useTheme } from '@/theme';
 /** Read-only loan payment register. Amount excludes late fees; fees are displayed separately. */
 export default function LoansStatementScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const params = useLocalSearchParams<{ loanId?: string; from?: string; to?: string; month?: string }>();
   const { spacing } = useTheme();
   const hydrated = useFinanceHydrated();
@@ -43,16 +45,16 @@ export default function LoansStatementScreen() {
       .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   }, [rows, period, loans]);
   return <Screen scroll>
-    <Pressable accessibilityRole="button" accessibilityLabel="Back to Loans Report"
+    <Pressable accessibilityRole="button" accessibilityLabel={t("Back to Loans Report", "العودة إلى تقرير القروض")}
       onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
       <AppText>‹ Loans Report</AppText>
     </Pressable>
     <StatementSixChrome kind={'Loans'} from={period?.from ?? "—"} to={period?.to ?? "—"} category={loanId ? 'Selected loan' : 'All loans'} currency={loanId ? loans.find(loan => loan.id === loanId)?.currencyCode : undefined} />
-    {!period ? <Card><AppText>Invalid statement month.</AppText></Card> :
-      !hydrated ? <Card><AppText>Loading loans...</AppText></Card> :
-      rows === null ? <Card><AppText>Statement unavailable.</AppText></Card> :
+    {!period ? <Card><AppText>{t("Invalid statement month.", "شهر كشف الحساب غير صالح.")}</AppText></Card> :
+      !hydrated ? <Card><AppText>{t("Loading loans...", "جارٍ تحميل القروض...")}</AppText></Card> :
+      rows === null ? <Card><AppText>{t("Statement unavailable.", "كشف الحساب غير متاح.")}</AppText></Card> :
       rows.some(row => row.status !== 'available') ? <Card><AppText color="textSecondary">Historical data is unverified for one or more records. Payment details are withheld to avoid misleading totals.</AppText></Card> :
-      entries.length === 0 ? <Card><AppText>No recorded payments in this period.</AppText></Card> :
+      entries.length === 0 ? <Card><AppText>{t("No recorded payments in this period.", "لا توجد دفعات مسجلة في هذه الفترة.")}</AppText></Card> :
       <StatementSixRows secondColumnLabel="Loan" rows={entries.map(item => ({ id: item.id, date: item.date, category: item.name, description: (item.note || 'Recorded payment') + (item.lateFee > 0 ? ' · Late fee: ' + item.lateFee.toFixed(getCurrencyDecimals(item.currency)) : ''), amount: item.amount.toFixed(getCurrencyDecimals(item.currency)), currencyCode: item.currency }))} />
   }<StatementExportActions />
   </Screen>;

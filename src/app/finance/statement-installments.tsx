@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
 import { StatementSixChrome, StatementSixRows } from '@/features/finance/components/reporting/StatementSixUI';
 import { reportRoutePeriod, reportRouteCurrency } from '@/features/finance/utils/reportRoutePeriod';
@@ -12,6 +13,7 @@ import { useTheme } from '@/theme';
 /** Scheduled due dates only. Does not infer payment status or account effects. */
 export default function InstallmentsStatementScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const { spacing } = useTheme();
   const params = useLocalSearchParams<{ currencyCode?: string; from?: string; to?: string; month?: string }>();
   const saved = useSyncExternalStore(installmentsStorage.subscribe, installmentsStorage.getState, installmentsStorage.getState);
@@ -33,17 +35,17 @@ export default function InstallmentsStatementScreen() {
   }, [saved, period]);
   const entries = statement?.entries.filter(entry => !currencyCode || entry.currency === currencyCode) ?? [];
   return <Screen scroll>
-    <Pressable accessibilityRole="button" accessibilityLabel="Back to Installments Report"
+    <Pressable accessibilityRole="button" accessibilityLabel={t("Back to Installments Report", "العودة إلى تقرير الأقساط")}
       onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
       <AppText>‹ Installments Report</AppText>
     </Pressable>
     <StatementSixChrome kind={'Installments'} from={period?.from ?? "—"} to={period?.to ?? "—"} category={'Scheduled dues'} currency={currencyCode || undefined} />
-    {!period ? <Card><AppText>Invalid statement month.</AppText></Card> :
-      saved.hydration === 'blocked' ? <Card><AppText>Saved installments unavailable.</AppText></Card> :
-      saved.hydration !== 'ready' ? <Card><AppText>Loading contracts...</AppText></Card> :
-      statement === null ? <Card><AppText>Schedule statement unavailable.</AppText></Card> :
-      !statement.reconciled ? <Card><AppText>Schedule totals do not reconcile. Details are withheld.</AppText></Card> :
-      entries.length === 0 ? <Card><AppText>No installments scheduled in this period.</AppText></Card> :
+    {!period ? <Card><AppText>{t("Invalid statement month.", "شهر كشف الحساب غير صالح.")}</AppText></Card> :
+      saved.hydration === 'blocked' ? <Card><AppText>{t("Saved installments unavailable.", "الأقساط المحفوظة غير متاحة.")}</AppText></Card> :
+      saved.hydration !== 'ready' ? <Card><AppText>{t("Loading contracts...", "جارٍ تحميل العقود...")}</AppText></Card> :
+      statement === null ? <Card><AppText>{t("Schedule statement unavailable.", "كشف جدول الأقساط غير متاح.")}</AppText></Card> :
+      !statement.reconciled ? <Card><AppText>{t("Schedule totals do not reconcile. Details are withheld.", "إجماليات الجدول غير متطابقة. التفاصيل مخفية.")}</AppText></Card> :
+      entries.length === 0 ? <Card><AppText>{t("No installments scheduled in this period.", "لا توجد أقساط مجدولة لهذه الفترة.")}</AppText></Card> :
       <StatementSixRows secondColumnLabel="Contract" rows={entries.map(item => ({ id: item.id, date: item.date, category: item.name, description: 'Scheduled due · not a recorded payment', amount: String(item.amount), currencyCode: item.currency }))} />
   }<StatementExportActions />
   </Screen>;

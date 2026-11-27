@@ -190,3 +190,18 @@ test('accepts ordinary same-currency metadata', () => {
     date: '2026-11-10',
   }), true);
 });
+test('phone regression: actual manual-rate expression produces store-valid USD 10 / OMR 4 metadata', () => {
+  const modalPath = path.join(root, 'src/features/finance/components/AddTransactionModal.tsx');
+  const ast = ts.createSourceFile(modalPath, fs.readFileSync(modalPath, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let expression;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(ast) === 'manualEffectiveRate') expression = node.initializer.getText(ast);
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert.ok(expression);
+  const compute = new Function('manualAccountAmount', 'originalValue', 'return (' + expression + ')');
+  const payload = { amount: 4, currencyCode: 'OMR', date: '2026-11-24', originalAmount: 10, originalCurrencyCode: 'USD', accountFxRate: compute(4, 10), directHistoricalFx: {source:'manual',accountCurrencyCode:'OMR',transactionCurrencyCode:'USD',rate:2.5,rateDate:'2026-11-24'} };
+  assert.equal(payload.accountFxRate, .4);
+  assert.equal(isValidCrossCurrencyMetadata(payload), true);
+  assert.equal(isValidCrossCurrencyMetadata({...payload,accountFxRate:2.5}), false);
+});

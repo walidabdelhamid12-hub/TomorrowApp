@@ -466,13 +466,12 @@ test('global uniqueness includes two unmanaged parents when provenance exists el
   x.finance.debts.push(a, b);
   assert.throws(() => V().readFinanceCreationProvenance(x.finance), /Duplicate payment ownership/);
 });
-test('legacy hydration without provenance retains duplicate history without repairing or certifying it', async () => {
+test('legacy hydration without provenance blocks duplicate ownership and preserves original history', async () => {
   const { x, owner } = ownedHistoryFixture('debt'); delete x.finance.creationProvenance;
   owner.payments = [{ id: 'legacy-shared', amount: 1, date: day }];
   const other = clone(owner); other.id = 'legacy-other'; x.finance.debts.push(other);
   const bytes = raw(x), s = await actual(x);
-  assert.equal(s.finance.persist.hasHydrated(), true);
-  assert.deepEqual(s.finance.getState().debts, x.finance.debts);
+  assert.equal(s.finance.persist.hasHydrated(), false);
   assert.deepEqual(Object.fromEntries(s.native.data), bytes);
   assert.equal(Object.hasOwn(s.finance.getState(), 'creationProvenance'), false);
   assert.equal(verify(x).installation, 'blocked');
@@ -510,12 +509,14 @@ for (const kind of ['debt', 'loan']) {
     assert.deepEqual(JSON.parse(s.native.data.get(F)).state, expected);
   });
 }
-for (const payments of [undefined, null, 'corrupt', {}]) test(`unowned legacy loan keeps existing normalization for ${String(payments)}`, async () => {
+for (const payments of [undefined, null, 'corrupt', {}]) test(`unowned legacy loan rejects malformed history and preserves evidence for ${String(payments)}`, async () => {
   const { x, owner } = ownedHistoryFixture('loan'); delete x.finance.creationProvenance;
   if (payments === undefined) delete owner.payments; else owner.payments = payments;
-  const s = await actual(x); assert.equal(s.finance.persist.hasHydrated(), true);
-  assert.deepEqual(s.finance.getState().loans.at(-1).payments, []);
-  assert.equal(Object.hasOwn(s.finance.getState(), 'creationProvenance'), false);
+  const bytes = raw(x);
+  const s = await actual(x); assert.equal(s.finance.persist.hasHydrated(), false);
+  assert.deepEqual(Object.fromEntries(s.native.data), bytes);
+  assert.throws(() => s.finance.getState().clearAssets(), /persistence read/);
+  assert.deepEqual(Object.fromEntries(s.native.data), bytes);
 });
 test('valid Finance provenance preserves accounting findings and remains uncertified', () => {
   const x = withCreationEvidence(), without = clone(x); delete without.finance.creationProvenance;

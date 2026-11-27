@@ -25,6 +25,10 @@ class File {
   }
 }
 Module._load = function(id, parent, main) {
+  // This renderer supplies fake React/store contexts. Supply its explicit English
+  // localization boundary too; localization/provider behavior is tested separately.
+  if (id.endsWith('/LanguageProvider')) return {useAppLanguage: () => ({language:'en',isRTL:false,t:(english)=>english,setLanguage:()=>{}})};
+
   if (id === 'react') return hooks;
   if (id === '@react-native-community/datetimepicker') return { __esModule: true, default: 'DateTimePicker' };
   if (id === 'react-native') return { Platform: { OS: 'android' }, Modal: 'Modal', View: 'View', Pressable: 'Pressable', ScrollView: 'ScrollView', ActivityIndicator: 'ActivityIndicator', Alert: { alert: (...args) => alerts.push(args) } };
@@ -165,8 +169,8 @@ for (const [name, component] of reports) test(name + ' renders compact header, f
   const back = nodes('Pressable').filter(node => node.props.accessibilityLabel === 'Back');
   assert.equal(back.length, 1); assert.equal(back[0].props.accessibilityRole, 'button');
   assert.ok(nodes('Ionicons', back[0]).some(node => node.props.name === 'arrow-back'));
-  assert.ok(nodes('Pressable').some(node => node.props.accessibilityLabel === 'from date: 2026-11-01'));
-  assert.ok(nodes('Pressable').some(node => node.props.accessibilityLabel === 'to date: 2026-11-12'));
+  assert.ok(nodes('Pressable').some(node => node.props.accessibilityLabel === 'From date: 2026-11-01'));
+  assert.ok(nodes('Pressable').some(node => node.props.accessibilityLabel === 'To date: 2026-11-12'));
   // Reports without any selected data intentionally omit their footer.
   if (['income', 'expenses', 'accounts'].includes(name)) assertFooter();
   press('Back'); assert.deepEqual(calls, ['back']);
@@ -190,14 +194,14 @@ test('Income retains category icons/colors, exact currency, expandable details a
 });
 test('date controls update the period, order reversed bounds, and dismiss without changes', () => {
   const component = reports[0][1]; render(component); openDetails('Transactions (1)', component); assert.match(allText(), /November salary/);
-  press('from date: 2026-11-01'); render(component);
+  press('From date: 2026-11-01'); render(component);
   nodes('DateTimePicker')[0].props.onChange({ type: 'set' }, new Date(2026, 10, 15)); render(component);
   assert.deepEqual(states[0], { from: '2026-11-15', to: '2026-11-15' });
   assert.match(allText(), /2026-11-15/); assert.doesNotMatch(allText(), /November salary/);
-  press('to date: 2026-11-15'); render(component); nodes('DateTimePicker')[0].props.onChange({ type: 'dismissed' }); render(component);
+  press('To date: 2026-11-15'); render(component); nodes('DateTimePicker')[0].props.onChange({ type: 'dismissed' }); render(component);
   assert.equal(nodes('DateTimePicker').length, 0); assert.match(allText(), /2026-11-15/);
   assert.deepEqual(states[0], { from: '2026-11-15', to: '2026-11-15' });
-  press('to date: 2026-11-15'); render(component);
+  press('To date: 2026-11-15'); render(component);
   nodes('DateTimePicker')[0].props.onChange({ type: 'set' }, new Date(2026, 10, 10)); render(component);
   assert.deepEqual(states[0], { from: '2026-11-10', to: '2026-11-10' });
   assert.match(allText(), /November salary/);

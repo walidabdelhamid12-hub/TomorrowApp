@@ -1,3 +1,8 @@
+import { isValidISODate } from '@/features/finance/utils/input';
+import { FinanceDateField } from '@/features/finance/components/FinanceDateField';
+import { formPayload, submitFinanceForm } from '@/features/finance/components/explicitFinanceForm';
+import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
+import { acknowledgedFinanceHandler } from '@/features/finance/components/acknowledgedFinanceHandler';
 import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
 import { financeChrome } from '@/features/finance/components/financeChrome';
 import { validateAssetOpeningDate } from '@/features/finance/utils/assetOpeningDate';
@@ -5,7 +10,7 @@ import { useFinanceConfirmation } from '@/features/finance/components/useFinance
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Screen } from '@/components/ui';
 import type { AddAssetFormData } from '@/features/finance/components/AddAssetModal';
@@ -16,12 +21,14 @@ import { useCurrencyHydrated, useCurrencyStore } from '@/features/finance/store/
 import { useFinanceHydrated, useFinanceStore } from '@/features/finance/store/useFinanceStore';
 import type { Asset } from '@/features/finance/types/finance';
 import { getAssetBalance, roundMoney, todayISO } from '@/features/finance/utils/finance';
-import { formatMoney, formatNumber } from '@/features/finance/utils/money';
+import { formatMoney, formatNumber, parseAmount } from '@/features/finance/utils/money';
 import { getAssetValueInBase } from '@/features/finance/utils/valuation';
 import { moduleColors, useTheme } from '@/theme';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 
 export default function AssetsScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const { colors, spacing } = useTheme();
   const { confirm, confirmation } = useFinanceConfirmation();
   const accent = moduleColors.finance;
@@ -87,75 +94,73 @@ export default function AssetsScreen() {
   };
 
   const confirmDeleteAsset = (asset: Asset) => {
-    const message = 'This will permanently delete the asset and all of its recorded movements.';
+    const message = t('This will permanently delete the asset and all of its recorded movements.', 'سيتم حذف الأصل وجميع حركاته المسجلة نهائيًا.');
 
-    confirm(`Delete "${asset.name}"?`, message, () => deleteAsset(asset.id), 'Delete');
+    confirm(t(`Delete "${asset.name}"?`, `حذف "${asset.name}"؟`), message, () => acknowledgedFinanceHandler("src/features/finance/screens/AssetsScreen.tsx:94", () => undefined, {
+      payload: { operation: 'deleteAsset', targetId: asset.id },
+      mutate: () => {
+        if (useFinanceStore.getState().assets.filter(item => item.id === asset.id).length !== 1) return false;
+        deleteAsset(asset.id);
+        return !useFinanceStore.getState().assets.some(item => item.id === asset.id);
+      },
+      onCommitted: result => { if (result !== true) Alert.alert(t('Cannot delete asset', 'تعذر حذف الأصل')); },
+    })(), t('Delete', 'حذف'));
   };
 
   const saveAsset = (data: AddAssetFormData) => {
-    if (!data.assetName.trim()) {
-      Alert.alert('Invalid asset', 'Enter an asset name.');
+    const amount = parseAmount(data.amount);
+    const currencyCode = data.selectedType === 'local_currency' ? baseCurrency : data.selectedCurrency;
+    const currencyAsset = data.selectedType === 'local_currency' || data.selectedType === 'foreign_currency';
+    if (!data.assetName.trim() || amount === null || amount < 0 || !Number.isSafeInteger(Math.round(amount * 1000))
+      || (currencyAsset && !hasValidCurrencyPrecision(data.amount, currencyCode))) {
+      Alert.alert(t('Invalid asset', 'أصل غير صالح'), t('Enter a valid name and amount.', 'أدخل اسمًا ومبلغًا صالحين.'));
       return;
     }
-
-    const amount = Number(data.amount);
-    if (!data.amount.trim() || !Number.isFinite(amount) || amount < 0) {
-      Alert.alert('Invalid asset', 'Enter a valid non-negative amount.');
+    if (editingAsset && editingAsset.category !== data.selectedType) {
+      Alert.alert(t('Asset type cannot be changed', 'لا يمكن تغيير نوع الأصل'));
       return;
     }
-
-    if (editingAsset) {
-      if (editingAsset.category !== data.selectedType) {
-        Alert.alert('Asset type cannot be changed', 'The type of an existing asset cannot be changed.');
-        return;
-      }
-
-      if (editingAsset.category === 'gold') {
-        updateAsset(editingAsset.id, { name: data.assetName.trim(), karat: data.karat });
-      } else if (editingAsset.category === 'local_currency' || editingAsset.category === 'foreign_currency') {
-        updateAsset(editingAsset.id, { name: data.assetName.trim(), currencyCode: data.selectedCurrency });
-      } else {
-        updateAsset(editingAsset.id, { name: data.assetName.trim() });
-      }
-
-      const latestAsset = useFinanceStore.getState().assets.find((item) => item.id === editingAsset.id);
-      if (!latestAsset) {
-        Alert.alert('Asset not found', 'This asset could not be found. No balance movement was recorded.');
-        return;
-      }
-
-      const difference = roundMoney(amount - getAssetBalance(latestAsset));
-      if (difference !== 0) {
-        const entryId = addAssetEntry(latestAsset.id, {
-          date: todayISO(),
-          amount: difference,
-          note: 'Balance adjustment',
-        });
-        if (!entryId) {
-          Alert.alert('Adjustment not saved', 'The asset balance was not changed because the movement could not be saved.');
-          return;
+    const targetId = editingAsset?.id ?? null;
+    const expectedUpdatedAt = editingAsset?.updatedAt;
+    const openingDate = targetId ? undefined : data.openingBalanceDate;
+    if (openingDate !== undefined && !isValidISODate(openingDate)) {
+      Alert.alert(t('Invalid opening date', 'تاريخ افتتاح غير صالح'));
+      return;
+    }
+    const date = openingDate ?? todayISO();
+    const targetAmount = roundMoney(amount);
+    const input = data.selectedType === 'gold' ? { name: data.assetName.trim(), category: 'gold' as const, karat: data.karat }
+      : data.selectedType === 'silver' ? { name: data.assetName.trim(), category: 'silver' as const }
+      : data.selectedType === 'local_currency' ? { name: data.assetName.trim(), category: 'local_currency' as const, currencyCode }
+      : { name: data.assetName.trim(), category: 'foreign_currency' as const, currencyCode };
+    return submitFinanceForm("src/features/finance/screens/AssetsScreen.tsx:97", formPayload(targetId ? 'asset.edit' : 'asset.create', targetId, input,
+      { targetAmount, date, expectedUpdatedAt, ...(openingDate !== undefined ? { openingDate } : {}) }), () => {
+        if (targetId) {
+          const current = useFinanceStore.getState().assets.filter(item => item.id === targetId);
+          if (current.length !== 1 || current[0].updatedAt !== expectedUpdatedAt || current[0].category !== input.category) return false;
+          updateAsset(targetId, input);
         }
-      }
-
-      closeAssetModal();
-      return;
-    }
-
-    let assetId: string;
-    if (data.selectedType === 'gold') {
-      assetId = addAsset({ name: data.assetName.trim(), category: 'gold', karat: data.karat });
-    } else if (data.selectedType === 'silver') {
-      assetId = addAsset({ name: data.assetName.trim(), category: 'silver' });
-    } else if (data.selectedType === 'local_currency') {
-      assetId = addAsset({ name: data.assetName.trim(), category: 'local_currency', currencyCode: baseCurrency });
-    } else {
-      assetId = addAsset({ name: data.assetName.trim(), category: 'foreign_currency', currencyCode: data.selectedCurrency });
-    }
-
-    if (amount !== 0) {
-      addAssetEntry(assetId, { date: todayISO(), amount, note: 'Opening balance' });
-    }
-    closeAssetModal();
+        const id = targetId ?? addAsset(input);
+        if (!id) throw new Error('Asset creation returned no identity.');
+        const matches = useFinanceStore.getState().assets.filter(item => item.id === id);
+        if (matches.length !== 1 || !Object.entries(input).every(([key, value]) => (matches[0] as unknown as Record<string, unknown>)[key] === value)) {
+          throw new Error('Asset metadata was not fully accepted.');
+        }
+        const difference = roundMoney(targetAmount - getAssetBalance(matches[0]));
+        if (!Number.isSafeInteger(Math.round(difference * 1000))) throw new Error('Asset adjustment is outside the safe numeric range.');
+        if (difference !== 0 && !addAssetEntry(id, { date, amount: difference, note: targetId ? 'Balance adjustment' : 'Opening balance' })) {
+          // Throw inside the durable callback: restore the metadata and movement together.
+          throw new Error('Asset movement rejected; the asset change must not be partially saved.');
+        }
+        // Explicitly confirmed history is verified within the same durable operation.
+        if (openingDate !== undefined && !verifyAssetOpeningBalanceDate(id, openingDate)) {
+          throw new Error('Asset opening history verification failed.');
+        }
+        const after = useFinanceStore.getState().assets.filter(item => item.id === id);
+        if (after.length !== 1 || getAssetBalance(after[0]) !== targetAmount
+          || (openingDate !== undefined && after[0].openingBalanceDate !== openingDate)) throw new Error('Asset balance or opening date postcondition failed.');
+        return id;
+      }, closeAssetModal, () => Alert.alert(t('Asset not saved', 'لم يُحفظ الأصل'), t('Review the current asset details.', 'راجع بيانات الأصل الحالية.')));
   };
 
   if (!ready) {
@@ -180,23 +185,23 @@ export default function AssetsScreen() {
           onPress={() => router.back()}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t("Go back", "رجوع")}
           style={financeChrome.back}
         >
           <Ionicons name="arrow-back" size={20} color="#D6B777" />
         </Pressable>
         <View style={styles.headerText}>
-          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>Assets</AppText>
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>{t("Assets", "الأصول")}</AppText>
           <AppText variant="caption" style={{ color: '#CBD5E1' }}>{assets.length} asset(s)</AppText>
         </View>
       </View>
 
       <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-        Track cash holdings, foreign currencies, gold, and silver, including their recorded movements and converted values.
+        {t("Track cash holdings, foreign currencies, gold, and silver, including their recorded movements and converted values.", "متابعة الأرصدة النقدية والعملات الأجنبية والذهب والفضة وحركاتها المسجلة وقيمها المحوّلة.")}
       </AppText>
 
       <AppButton
-        title="Add asset"
+        title={t("Add asset", "إضافة أصل")}
         accentColor="#1E293B"
         leftIcon={<Ionicons name="add" size={20} color={colors.onPrimary} />}
         onPress={() => openAsset(null)}
@@ -205,7 +210,7 @@ export default function AssetsScreen() {
       {assets.length === 0 ? (
         <View style={[styles.emptyCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
           <Ionicons name="diamond-outline" size={42} color={colors.textSecondary} />
-          <AppText color="textSecondary">No assets added yet.</AppText>
+          <AppText color="textSecondary">{t("No assets added yet.", "لم تتم إضافة أصول بعد.")}</AppText>
         </View>
       ) : (
         <View style={styles.list}>
@@ -217,15 +222,15 @@ export default function AssetsScreen() {
               : `${formatMoney(balance, asset.currencyCode)} ${asset.currencyCode}`;
             const valuation = getValuation(asset);
             const convertedValue = valuation === null
-              ? 'Valuation unavailable'
+              ? t('Valuation unavailable', 'التقييم غير متاح')
               : `${formatMoney(valuation, baseCurrency)} ${baseCurrency}`;
             const categoryLabel = asset.category === 'local_currency'
-              ? 'Local currency'
+              ? t('Local currency', 'عملة محلية')
               : asset.category === 'foreign_currency'
-                ? 'Foreign currency'
+                ? t('Foreign currency', 'عملة أجنبية')
                 : asset.category === 'gold'
-                  ? `Gold · ${asset.karat}K`
-                  : 'Silver';
+                  ? `${t('Gold', 'ذهب')} · ${asset.karat}K`
+                  : t('Silver', 'فضة');
 
             return (
               <View key={asset.id}>
@@ -234,30 +239,31 @@ export default function AssetsScreen() {
                   onViewEntries={() => openEntries(asset)} onEdit={() => openAsset(asset)}
                   onDelete={() => confirmDeleteAsset(asset)} />
                 <AppText variant="caption" color="textSecondary">
-                  {asset.openingBalanceDate ? 'Verified history starts: ' + asset.openingBalanceDate : 'Opening history not verified'}
+                  {asset.openingBalanceDate ? t('Verified history starts:', 'بداية السجل المتحقق منه:') + ' ' + asset.openingBalanceDate : t('Opening history not verified', 'لم يتم التحقق من بداية السجل')}
                 </AppText>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Verify history for ${asset.name}`}
+                <Pressable accessibilityRole="button" accessibilityLabel={t("Verify history for ", "التحقق من سجل ") + asset.name}
                   onPress={() => { setVerificationAssetId(asset.id); setVerificationDate(''); }}
                   style={{ minHeight: 44, justifyContent: 'center' }}>
-                  <AppText>Verify opening history date</AppText>
+                  <AppText>{t("Verify opening history date", "التحقق من تاريخ بداية السجل")}</AppText>
                 </Pressable>
                 {verificationAssetId === asset.id && <View style={{ gap: 8 }}>
-                  <TextInput accessibilityLabel="Asset opening date (YYYY-MM-DD)"
-                    value={verificationDate} onChangeText={setVerificationDate} placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.textSecondary}
-                    style={{ borderWidth: 1, borderColor: colors.border, color: colors.text, minHeight: 44, paddingHorizontal: 12 }} />
-                  <AppButton title="Confirm verified date" accentColor={accent} onPress={() => {
+                  <FinanceDateField label={t('Asset opening date', 'تاريخ بداية الأصل')}
+                    value={verificationDate} onChange={setVerificationDate} pickerOnly />
+                  <AppButton title={t("Confirm verified date", "تأكيد التاريخ المتحقق منه")} accentColor={accent} onPress={() => {
                     const date = verificationDate.trim();
                     const check = validateAssetOpeningDate(assets, asset.id, date);
-                    if (!check.valid) { Alert.alert('Cannot verify asset history', check.reason); return; }
-                    Alert.alert('Confirm asset history', 'Confirm the recorded opening quantity and all movements from this date are complete. No balances will change.', [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Verify', onPress: () => {
-                        if (verifyAssetOpeningBalanceDate(asset.id, date)) {
-                          setVerificationAssetId(null);
-                          Alert.alert('Verified', 'Asset history start date saved.');
-                        } else Alert.alert('Not saved', 'Asset history changed or verification failed.');
-                      } },
+                    if (!check.valid) { Alert.alert(t("Cannot verify asset history", "تعذر التحقق من سجل الأصل"), check.reason); return; }
+                    Alert.alert(t("Confirm asset history", "تأكيد سجل الأصل"), t("Confirm the recorded opening quantity and all movements from this date are complete. No balances will change.", "أكد اكتمال الكمية الافتتاحية المسجلة وجميع الحركات منذ هذا التاريخ. لن تتغير الأرصدة."), [
+                      { text: t("Cancel", "إلغاء"), style: 'cancel' },
+                      { text: t("Verify", "تحقق"), onPress: () => {
+    return submitFinanceForm("src/features/finance/screens/AssetsScreen.tsx:257",
+      formPayload('asset.verify-opening-date', asset.id, { date }, { expectedUpdatedAt: asset.updatedAt }),
+      () => {
+        const matches = useFinanceStore.getState().assets.filter(item => item.id === asset.id);
+        return matches.length === 1 && matches[0].updatedAt === asset.updatedAt && verifyAssetOpeningBalanceDate(asset.id, date);
+      }, () => { setVerificationAssetId(null); Alert.alert(t("Verified", "تم التحقق"), t("Asset history start date saved.", "تم حفظ تاريخ بداية سجل الأصل.")); },
+      () => Alert.alert(t("Not saved", "لم يتم الحفظ"), t("Asset history changed or verification failed.", "تغير سجل الأصل أو فشل التحقق.")));
+  } },
                     ]);
                   }} />
                 </View>}

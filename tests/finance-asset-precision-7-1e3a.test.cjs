@@ -20,6 +20,6 @@ test('7.1E-3A metals are excluded and invalid precision blocks save', () => {
   const guard = body.indexOf('if (isCurrencyAsset && !hasValidCurrencyPrecision');
   const save = body.indexOf('onSave({');
   assert.ok(guard >= 0 && save > guard);
-  assert.match(body.slice(guard, save), /Alert\.alert\('Invalid amount precision'/);
+  assert.match(body.slice(guard, save), /Alert\.alert\(t\('Invalid amount precision',/);
   assert.match(body.slice(guard, save), /return;/);
 });

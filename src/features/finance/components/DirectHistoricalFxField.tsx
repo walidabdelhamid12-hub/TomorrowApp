@@ -1,7 +1,8 @@
-import { View } from 'react-native';
-import { AppButton, AppInput, AppText } from '@/components/ui';
+import { useAppLanguage } from '@/localization/LanguageProvider';
+import { TextInput, View } from 'react-native';
+import { AppButton, AppText } from '@/components/ui';
 import { getCurrencyFlag } from '@/features/finance/constants/currencies';
-import { moduleColors, useTheme } from '@/theme';
+import { useTheme } from '@/theme';
 
 type DirectHistoricalFxFieldProps = {
   accountCurrencyCode: string;
@@ -12,9 +13,11 @@ type DirectHistoricalFxFieldProps = {
   manualMode: boolean;
   manualRate: string;
   readOnly?: boolean;
+  compact?: boolean;
+  manualOnly?: boolean;
   error?: string;
-  onFetch: () => void;
-  onManualMode: () => void;
+  onFetch?: () => void;
+  onManualMode?: () => void;
   onManualRateChange: (value: string) => void;
 };
 
@@ -27,16 +30,19 @@ export function DirectHistoricalFxField({
   manualMode,
   manualRate,
   readOnly = false,
+  compact = false,
+  manualOnly = false,
   error,
   onFetch,
   onManualMode,
   onManualRateChange,
 }: DirectHistoricalFxFieldProps) {
   const { colors, spacing } = useTheme();
+  const { t } = useAppLanguage();
 
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const rateLabel = transactionDate === todayKey ? 'Live Rate' : 'Historical Rate';
+  const rateLabel = transactionDate === todayKey ? t('Live Rate', 'السعر الحالي') : t('Historical Rate', 'السعر التاريخي');
   const displayRate = (value: number) => Number(value.toPrecision(5)).toString();
 
   const validRate =
@@ -44,8 +50,8 @@ export function DirectHistoricalFxField({
 
   return (
     <View style={{ gap: spacing.sm }}>
-      <AppText color="textSecondary" variant="caption">
-        Historical Exchange Rate
+      <AppText color="textSecondary" variant="caption" style={{ fontWeight: '700' }}>
+        {t("Historical Exchange Rate", "سعر الصرف التاريخي")}
       </AppText>
 
       <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -71,13 +77,14 @@ export function DirectHistoricalFxField({
               gap: 4,
             }}
           >
-            <AppText variant="caption" color={colors.finance.neutral.accent}>
+            <AppText variant="caption" color={colors.finance.neutral.accent} style={{ fontWeight: '700', textAlign: 'center' }}>
               {item.label}
             </AppText>
 
             <View
               style={{
                 minHeight: 48,
+                alignItems: index === 1 && !readOnly && (manualMode || manualOnly) ? 'stretch' : 'center',
                 borderWidth: 1,
                 borderRadius: 10,
                 paddingHorizontal: 6,
@@ -87,43 +94,39 @@ export function DirectHistoricalFxField({
                 borderColor:
                   index === 2
                     ? colors.finance.balance.border
-                    : colors.finance.neutral.border,
+                    : '#D6B777',
               }}
             >
-              <AppText
+              {index === 1 && !readOnly && (manualMode || manualOnly) ? <TextInput
+                accessibilityLabel={`Manual rate (${transactionCurrencyCode} per 1 ${accountCurrencyCode})`}
+                value={manualRate} onChangeText={onManualRateChange} keyboardType="decimal-pad"
+                style={{ color: colors.text, fontSize: 14, padding: 0, minHeight: 44, textAlign: 'center', fontWeight: '700' }}
+              /> : <AppText
                 style={{
                   fontSize: 14,
+                  fontWeight: '700',
+                  textAlign: 'center',
                   fontVariant: index === 1 ? ['tabular-nums'] : undefined,
                 }}
                 numberOfLines={1}
                 adjustsFontSizeToFit
               >
                 {item.value}
-              </AppText>
+              </AppText>}
             </View>
           </View>
         ))}
       </View>
 
-      <AppText variant="caption" color="textSecondary">
+      {!compact && <AppText variant="caption" color="textSecondary">
         1 {accountCurrencyCode} = {validRate ? displayRate(rate!) : '—'}{' '}
         {transactionCurrencyCode}
-      </AppText>
+      </AppText>}
 
       {readOnly && validRate ? (
         <AppText variant="caption" color="textSecondary">
-          Derived from historical reference rates
+          {t("Derived from historical reference rates", "محسوب من أسعار الصرف المرجعية التاريخية")}
         </AppText>
-      ) : null}
-
-      {!readOnly && manualMode ? (
-        <AppInput
-          label={`Manual rate (${transactionCurrencyCode} per 1 ${accountCurrencyCode})`}
-          value={manualRate}
-          onChangeText={onManualRateChange}
-          keyboardType="decimal-pad"
-          placeholder="Enter direct historical rate"
-        />
       ) : null}
 
       {error ? (
@@ -132,7 +135,7 @@ export function DirectHistoricalFxField({
         </AppText>
       ) : null}
 
-      {!readOnly ? (
+      {!readOnly && !manualOnly && onFetch && onManualMode ? (
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <View style={{ flex: 1 }}>
           <AppButton
@@ -146,7 +149,7 @@ export function DirectHistoricalFxField({
 
         <View style={{ flex: 1 }}>
           <AppButton
-            title={manualMode ? 'Use API Rate' : 'Enter Manual Rate'}
+            title={manualMode ? t('Use API Rate', 'استخدام سعر الصرف الآلي') : t('Enter Manual Rate', 'إدخال سعر الصرف يدويًا')}
             accentColor={'#1E293B'}
             disabled={loading}
             onPress={onManualMode}

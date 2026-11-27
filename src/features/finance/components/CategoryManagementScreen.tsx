@@ -1,10 +1,13 @@
+import { acknowledgedFinanceHandler } from './acknowledgedFinanceHandler';
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { FormModal } from './FormModal';
 import { FinanceButton } from './FinanceButton';
 import { financeChrome } from '@/features/finance/components/financeChrome';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
     Alert,
     Pressable,
@@ -81,24 +84,28 @@ function CategoryEditor({
   onSave,
 }: CategoryEditorProps) {
   const { colors, radius } = useTheme();
+  const { t } = useAppLanguage();
 
   const [name, setName] = useState('');
   const [icon, setIcon] = useState<string>(ICON_OPTIONS[0]);
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
 
-  React.useEffect(() => {
+  const editorContext = visible ? category ?? 'new' : null;
+  const [loadedEditorContext, setLoadedEditorContext] = useState<typeof editorContext>(null);
+  if (loadedEditorContext !== editorContext) {
+    setLoadedEditorContext(editorContext);
     if (visible) {
       setName(category?.name ?? '');
       setIcon(category?.icon ?? ICON_OPTIONS[0]);
       setColor(category?.color ?? COLOR_OPTIONS[0]);
     }
-  }, [visible, category]);
+  }
 
   const handleSave = () => {
     const cleanName = name.trim();
 
     if (!cleanName) {
-      Alert.alert('Missing name', 'Please enter a category name.');
+      Alert.alert(t('Missing name', 'الاسم مطلوب'), t('Please enter a category name.', 'يرجى إدخال اسم التصنيف.'));
       return;
     }
 
@@ -106,15 +113,15 @@ function CategoryEditor({
   };
 
   return (
-    <FormModal visible={visible} title={category ? 'Edit category' : 'Add category'} onClose={onClose}>
+    <FormModal visible={visible} title={category ? t('Edit category', 'تعديل التصنيف') : t('Add category', 'إضافة تصنيف')} onClose={onClose}>
           <AppText color="textSecondary" style={styles.fieldLabel}>
-            Category name
+            {t("Category name", "اسم التصنيف")}
           </AppText>
 
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder="Enter category name"
+            placeholder={t("Enter category name", "أدخل اسم التصنيف")}
             placeholderTextColor={colors.textDisabled}
             style={[
               styles.nameInput,
@@ -129,7 +136,7 @@ function CategoryEditor({
           />
 
           <AppText color="textSecondary" style={styles.fieldLabel}>
-            Choose an icon
+            {t("Choose an icon", "اختر أيقونة")}
           </AppText>
 
           <View style={styles.iconGrid}>
@@ -159,7 +166,7 @@ function CategoryEditor({
           </View>
 
           <AppText color="textSecondary" style={styles.fieldLabel}>
-            Choose a color
+            {t("Choose a color", "اختر لونًا")}
           </AppText>
 
           <View style={styles.colorGrid}>
@@ -181,8 +188,8 @@ function CategoryEditor({
           </View>
 
           <View style={{ gap: 12 }}>
-            <FinanceButton title="Save category" onPress={handleSave} />
-            <FinanceButton title="Cancel" variant="outline" onPress={onClose} />
+            <FinanceButton title={t("Save category", "حفظ التصنيف")} onPress={handleSave} />
+            <FinanceButton title={t("Cancel", "إلغاء")} variant="outline" onPress={onClose} />
           </View>
     </FormModal>
   );
@@ -192,10 +199,14 @@ export function CategoryManagementScreen({
   onBack,
 }: CategoryManagementScreenProps) {
   const { colors, spacing, radius } = useTheme();
+  const { confirm, confirmation } = useFinanceConfirmation();
+  const { t } = useAppLanguage();
 
   const categories = useLedgerStore((state) => state.categories);
   const addCategory = useLedgerStore((state) => state.addCategory);
   const updateCategory = useLedgerStore((state) => state.updateCategory);
+  const archiveCategory = useLedgerStore((state) => state.archiveCategory);
+  const transactions = useLedgerStore((state) => state.transactions);
   const deleteCategory = useLedgerStore((state) => state.deleteCategory);
 
   const [activeKind, setActiveKind] = useState<CategoryKind>('expense');
@@ -223,29 +234,59 @@ export function CategoryManagementScreen({
   };
 
   const handleSave = (name: string, icon: string, color: string) => {
-    if (editingCategory) {
-      const patch: CategoryPatch = {
-        name,
-        icon,
-        color,
-      };
+    const targetId = editingCategory?.id;
+    const patch: CategoryPatch = { name, icon, color };
+    const input: NewCategoryInput = { name, kind: activeKind, icon, color };
+    const payload = targetId
+      ? { operation: 'updateCategory', targetId, patch }
+      : { operation: 'addCategory', input };
+    return acknowledgedFinanceHandler(
+      'src/features/finance/components/CategoryManagementScreen.tsx:228',
+      () => undefined,
+      {
+        payload,
+        mutate: () => {
+          if (targetId) {
+            const before = useLedgerStore.getState().categories.filter(item => item.id === targetId);
+            if (before.length !== 1) return false;
+            updateCategory(targetId, patch);
+            const after = useLedgerStore.getState().categories.find(item => item.id === targetId);
+            return !!after && after.name === name && after.icon === icon && after.color === color;
+          }
+          return !!addCategory(input);
+        },
+        onCommitted: result => {
+          if (result === true) closeEditor();
+          else Alert.alert(t('Could not save category.', 'تعذر حفظ التصنيف.'));
+        },
+      },
+    )();
+  };
 
-      updateCategory(editingCategory.id, patch);
-    } else {
-      const input: NewCategoryInput = {
-        name,
-        kind: activeKind,
-        icon,
-        color,
-      };
-
-      addCategory(input);
-    }
-
-    closeEditor();
+  const setCategoryArchived = (targetId: string, archived: boolean) => {
+    return acknowledgedFinanceHandler(
+      'finance.category-management.archive.v1',
+      () => undefined,
+      {
+        payload: { operation: 'archiveCategory', targetId, archived },
+        mutate: () => archiveCategory(targetId, archived),
+        onCommitted: result => {
+          if (result !== true) Alert.alert(t('Could not change category archive status.', 'تعذر تغيير حالة أرشفة التصنيف.'));
+        },
+      },
+    )();
   };
 
   const handleDelete = (category: Category) => {
+    if (transactions.some(transaction => transaction.categoryId === category.id)) {
+      Alert.alert(t('Archive category?', 'أرشفة التصنيف؟'),
+        t('Existing transactions will keep this category.', 'ستحتفظ المعاملات السابقة بهذا التصنيف.'), [
+          { text: t('Cancel', 'إلغاء'), style: 'cancel' },
+          { text: t('Archive', 'أرشفة'), onPress: () => { void setCategoryArchived(category.id, true); } },
+        ]);
+      return;
+    }
+
     if (category.isDefault) {
       Alert.alert(
         'Default category',
@@ -254,29 +295,21 @@ export function CategoryManagementScreen({
       return;
     }
 
-    Alert.alert(
-      'Delete category',
-      `Are you sure you want to delete "${category.name}"?`,
-      [
+    confirm(
+      t('Delete category', 'حذف التصنيف'),
+      t(`Are you sure you want to delete "${category.name}"?`, `هل تريد حذف "${category.name}"؟`),
+      () => acknowledgedFinanceHandler(
+        'src/features/finance/components/CategoryManagementScreen.tsx:271',
+        () => undefined,
         {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            const deleted = deleteCategory(category.id);
-
-            if (!deleted) {
-              Alert.alert(
-                'Cannot delete category',
-                'This category is already used by a transaction.',
-              );
-            }
+          payload: { operation: 'deleteCategory', targetId: category.id },
+          mutate: () => deleteCategory(category.id),
+          onCommitted: result => {
+            if (result !== true) Alert.alert('Cannot delete category', 'This category is already used by a transaction.');
           },
         },
-      ],
+      )(),
+      t('Delete', 'حذف'),
     );
   };
 
@@ -292,7 +325,7 @@ export function CategoryManagementScreen({
           <Pressable
             onPress={onBack}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={t("Go back", "رجوع")}
             hitSlop={10}
             style={financeChrome.back}
           >
@@ -301,16 +334,16 @@ export function CategoryManagementScreen({
         ) : null}
 
         <View style={styles.headerText}>
-          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>Categories</AppText>
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>{t("Categories", "التصنيفات")}</AppText>
           <AppText style={{ color: '#CBD5E1' }} variant="caption">
-            Manage your income and expense categories
+            {t("Manage your income and expense categories", "إدارة تصنيفات الدخل والمصروفات")}
           </AppText>
         </View>
 
         <Pressable
           onPress={openAddEditor}
           accessibilityRole="button"
-          accessibilityLabel="Add category"
+          accessibilityLabel={t("Add category", "إضافة تصنيف")}
           style={[
             styles.addButton,
             { backgroundColor: '#D6B777' },
@@ -318,7 +351,7 @@ export function CategoryManagementScreen({
         >
           <Ionicons name="add" size={21} color="#1E293B" />
           <AppText style={{ color: '#1E293B' }} variant="label">
-            Add
+            {t("Add", "إضافة")}
           </AppText>
         </Pressable>
       </View>
@@ -394,7 +427,7 @@ export function CategoryManagementScreen({
               />
 
               <AppText color="textSecondary">
-                No categories yet. Add your first category.
+                {t("No categories yet. Add your first category.", "لا توجد تصنيفات بعد. أضف أول تصنيف.")}
               </AppText>
             </View>
           </Card>
@@ -426,14 +459,19 @@ export function CategoryManagementScreen({
                     </AppText>
 
                     <AppText color="textSecondary" variant="caption">
-                      {category.isDefault
+                      {category.archived ? t('Archived', 'مؤرشف') : category.isDefault
                         ? 'Default category'
                         : 'Custom category'}
                     </AppText>
                   </View>
 
                   <FinanceActionButtons label={category.name} onEdit={() => openEditEditor(category)}
-                    onDelete={category.isDefault ? undefined : () => handleDelete(category)} />
+                    onDelete={category.isDefault || category.archived ? undefined : () => handleDelete(category)} />
+                  {category.archived && (
+                    <Pressable accessibilityRole="button" onPress={() => { void setCategoryArchived(category.id, false); }}>
+                      <AppText>{t('Restore', 'استعادة')}</AppText>
+                    </Pressable>
+                  )}
                 </View>
               </Card>
             ))}
@@ -447,6 +485,7 @@ export function CategoryManagementScreen({
         onClose={closeEditor}
         onSave={handleSave}
       />
+      {confirmation}
     </View>
   );
 }

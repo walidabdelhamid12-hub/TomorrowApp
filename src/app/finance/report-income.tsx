@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -19,6 +20,7 @@ import { ReportTableActions } from '@/features/finance/components/reporting/Repo
 /** Ordinary income only. All displayed rows come from the reconciled statement. */
 export default function IncomeReportScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const { ready, context, accounts, categories } = useExpenseLedger();
   const [period, setPeriod] = useReportPeriod();
   const [accountId, setAccountId] = useState('');
@@ -48,21 +50,21 @@ export default function IncomeReportScreen() {
     <ReportDashboardHeader kind="income" />
     <ReportDashboardDates period={period} onChange={setPeriod} />
     <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-      <ReportPicker label="Account" value={accountId} onSelect={setAccountId} options={[{ id: '', label: 'All accounts' }, ...accounts.map(account => ({ id: account.id, label: account.name + ' ' + currencyLabel(account.currencyCode) + (account.archived ? ' · Archived' : '') }))]} />
-      <ReportPicker label="Category" value={categoryId} onSelect={setCategoryId} options={[{ id: '', label: 'All Categories' }, ...categories.filter(category => category.kind === 'income').map(category => ({ id: category.id, label: category.name, icon: category.icon as keyof typeof Ionicons.glyphMap, color: category.color }))]} />
+      <ReportPicker label={t("Account", "الحساب")} value={accountId} onSelect={setAccountId} options={[{ id: '', label: t('All accounts', 'كل الحسابات') }, ...accounts.map(account => ({ id: account.id, label: account.name + ' ' + currencyLabel(account.currencyCode) + (account.archived ? ' · ' + t('Archived', 'مؤرشف') : '') }))]} />
+      <ReportPicker label={t("Category", "التصنيف")} value={categoryId} onSelect={setCategoryId} options={[{ id: '', label: t('All Categories', 'كل التصنيفات') }, ...categories.filter(category => category.kind === 'income').map(category => ({ id: category.id, label: category.name, icon: category.icon as keyof typeof Ionicons.glyphMap, color: category.color }))]} />
     </View>
     {!ready || !statement || !report ? <ActivityIndicator color={moduleColors.finance} /> : <>
-      {!!report.unknown.length && <AppText accessibilityRole="alert">Incomplete report · {report.unknown.length} unverified transaction(s). Known subtotals only; exports unavailable.</AppText>}
-      {!currencies.length && <AppText>No verified ordinary income transactions for this period.</AppText>}
+      {!!report.unknown.length && <AppText accessibilityRole="alert">{t('Incomplete report', 'تقرير غير مكتمل')} · {report.unknown.length} {t('unverified transaction(s). Known subtotals only; exports unavailable.', 'معاملة غير مؤكدة. الإجماليات المعروفة فقط متاحة؛ التصدير غير متاح.')}</AppText>}
+      {!currencies.length && <AppText>{t("No verified ordinary income transactions for this period.", "لا توجد معاملات دخل عادية متحقق منها لهذه الفترة.")}</AppText>}
 
       <ReportDashboardMetrics kind="income" total={current?.income ?? 0} currency={activeCurrency}
         transactionCount={selectedRows.length} currencyCount={currencies.length} incomplete={report.unknown.length > 0} />
-      <ReportChart title="Income Analysis" currencies={currencies.map(item => item.currencyCode)} onCurrencySelect={setCurrency} currency={activeCurrency} description="Positive ordinary income categories only." empty="No positive income to chart." data={report.incomeCategories.filter(item => item.currencyCode === activeCurrency).map(item => { const category = categories.find(category => category.id === item.categoryId); return { id: item.categoryId, label: category?.name ?? 'Uncategorized', amount: item.amount, color: category?.color }; })} />
-      {!statement.reconciled ? <AppText accessibilityRole="alert">Statement cannot be reconciled; details are hidden.</AppText> : <ReportDetails title={`Transactions (${selectedRows.length})`}><ReportTransactionRows rows={selectedRows.map(row => { const category = categories.find(category => category.id === row.categoryId); return { id: row.id, date: row.date, category: category?.name ?? 'Uncategorized', categoryIcon: category?.icon as keyof typeof Ionicons.glyphMap | undefined, categoryColor: category?.color, description: [row.note, names.accounts.get(row.accountId)].filter(Boolean).join(' · '), amount: row.amount, currency: row.currencyCode, percent: transactionBase > 0 ? Math.abs(row.amount) / transactionBase * 100 : null }; })} /></ReportDetails>}
+      <ReportChart title={t("Income Analysis", "تحليل الدخل")} currencies={currencies.map(item => item.currencyCode)} onCurrencySelect={setCurrency} currency={activeCurrency} description={t("Positive ordinary income categories only.", "تصنيفات الدخل العادي الموجبة فقط.")} empty={t("No positive income to chart.", "لا توجد مبالغ دخل موجبة لعرضها.")} data={report.incomeCategories.filter(item => item.currencyCode === activeCurrency).map(item => { const category = categories.find(category => category.id === item.categoryId); return { id: item.categoryId, label: category?.name ?? 'Uncategorized', amount: item.amount, color: category?.color }; })} />
+      {!statement.reconciled ? <AppText accessibilityRole="alert">{t("Statement cannot be reconciled; details are hidden.", "تعذرت مطابقة كشف الحساب؛ التفاصيل مخفية.")}</AppText> : <ReportDetails title={`${t('Transactions', 'المعاملات')} (${selectedRows.length})`}><ReportTransactionRows rows={selectedRows.map(row => { const category = categories.find(category => category.id === row.categoryId); return { id: row.id, date: row.date, category: category?.name ?? 'Uncategorized', categoryIcon: category?.icon as keyof typeof Ionicons.glyphMap | undefined, categoryColor: category?.color, description: [row.note, names.accounts.get(row.accountId)].filter(Boolean).join(' · '), amount: row.amount, currency: row.currencyCode, percent: transactionBase > 0 ? Math.abs(row.amount) / transactionBase * 100 : null }; })} /></ReportDetails>}
     </>}
   </Screen>
   {ready && statement && report && <ReportTableActions
     statement={() => router.push({ pathname: '/finance/statement-income', params: { from: period.from, to: period.to, ...filters, currencyCode: activeCurrency } })}
-    table={{ title: 'Income Report', period, notice: 'Ordinary income only. Selected account, category and currency; previous-period comparison is not a posted balance.', verified: exportSafe, columns: ['Date', 'Account', 'Category', 'Description', 'Amount', 'Currency'], rows: exportRows.map(row => [row.date, row.account, row.category, row.note ?? '', Number(row.amount), row.currency]) }} />}
+    table={{ title: t('Income Report', 'تقرير الدخل'), period, notice: t('Ordinary income only. Selected account, category and currency; previous-period comparison is not a posted balance.', 'الدخل العادي فقط. وفق الحساب والتصنيف والعملة المختارة؛ المقارنة بالفترة السابقة ليست رصيدًا مُرحّلًا.'), verified: exportSafe, columns: [t('Date', 'التاريخ'), t('Account', 'الحساب'), t('Category', 'التصنيف'), t('Description', 'الوصف'), t('Amount', 'المبلغ'), t('Currency', 'العملة')], rows: exportRows.map(row => [row.date, row.account, row.category, row.note ?? '', Number(row.amount), row.currency]) }} />}
   </View>;
 }

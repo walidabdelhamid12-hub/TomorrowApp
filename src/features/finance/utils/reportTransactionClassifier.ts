@@ -1,7 +1,12 @@
-import type { FinanceData } from '@/features/finance/types/finance';
+import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
+import { getLoanTotal } from './finance';
+import { settlementMinor } from './transferSettlement';
+import type { Loan, LoanPayment, FinanceData } from '@/features/finance/types/finance';
 import type { LedgerData, Transaction, Transfer } from '@/features/finance/types/ledger';
 import type { PropertyContract, PropertyInstallment, PropertyInstallmentPayment } from '@/features/finance/types/propertyInstallments';
-import { isProtectedTransaction, isVerifiedLoanReceipt, resolvePayment } from '@/features/finance/utils/paymentTransactionOwnership';
+import { isProtectedTransaction, isVerifiedLoanReceipt, resolvePayment, transactionReferences } from '@/features/finance/utils/paymentTransactionOwnership';
+
+import { isTransferFeeClaim, verifiedFeeOwner } from './transferSettlement';
 
 export type ReportTransactionKind =
   | 'income' | 'expense' | 'refund' | 'transfer' | 'credit_card_payment'
@@ -65,6 +70,47 @@ function propertyPaymentVerified(tx: Transaction, ctx: ReportClassificationConte
     && ctx.ledger.accounts.filter(a => a.id === tx.accountId && a.currencyCode === tx.currencyCode).length === 1;
 }
 
+/** Proportional allocation in currency minor units, cumulative rounding avoids penny drift.
+ * Legacy explicit splits take precedence. Early settlement uses outstanding principal,
+ * not the original contract ratio. Unproven allocations remain unknown. */
+export function verifiedLoanFinanceCost(loan: Loan, target: LoanPayment): number | null {
+  const units = (value: unknown) => settlementMinor(value, loan.currencyCode);
+  const principal = units(loan.receivedAmount ?? loan.principalAmount);
+  const total = units(getLoanTotal(loan));
+  if (principal === null || total === null || total <= 0n || principal > total) return null;
+  if (loan.payments.filter(p => p.id === target.id).length !== 1) return null;
+  let paid = 0n, allocated = 0n, simplePaid = 0n, simplePrincipal = 0n;
+  const round = (n: bigint, d: bigint) => (n * 2n + d) / (d * 2n);
+  for (const payment of loan.payments) {
+    const amount = units(payment.amount), fee = units(payment.latePaymentFee ?? 0);
+    if (amount === null || amount <= 0n || fee === null || paid + amount > total) return null;
+    let part: bigint;
+    if (payment.paymentMode === 'split' || payment.principalAmount !== undefined || payment.interestAmount !== undefined) {
+      const explicit = units(payment.principalAmount);
+      const interest = payment.interestAmount === undefined ? null : units(payment.interestAmount);
+      if (explicit === null || explicit > amount || (payment.interestAmount !== undefined && (interest === null || interest + explicit !== amount))) return null;
+      part = explicit;
+    } else if (loan.settlementPaymentId === payment.id) {
+      const remaining = principal - allocated;
+      part = remaining < amount ? remaining : amount;
+    } else {
+      simplePaid += amount;
+      const next = round(simplePaid * principal, total);
+      part = next - simplePrincipal;
+      simplePrincipal = next;
+    }
+    if (part < 0n || part > amount || allocated + part > principal) return null;
+    paid += amount;
+    allocated += part;
+    if (payment.id === target.id) {
+      const cost = amount - part + fee;
+      if (cost > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+      return Number(cost) / 10 ** getCurrencyDecimals(loan.currencyCode);
+    }
+  }
+  return null;
+}
+
 /**
  * Pure, fail-closed classifier. Does not modify the ledger or authorize posting.
  * Unverified legacy ownership is UNKNOWN, never ordinary P&L.
@@ -85,6 +131,11 @@ export function classifyReportTransaction(
     return result(tx, 'unknown', 'Invalid or duplicate ledger transaction/account');
   }
 
+  if (isTransferFeeClaim(tx, ledger)) {
+    return verifiedFeeOwner(tx, ledger) && transactionReferences(finance, tx.id) === 0 &&
+      !(ctx.property?.payments.some(p => p.ledgerTransactionId === tx.id) ?? false)
+      ? result(tx, 'expense', 'Verified transfer fee expense') : result(tx, 'unknown', 'Unverified or conflicting transfer fee ownership');
+  }
   if (tx.entryType === 'refund') {
     const originals = ledger.transactions.filter(t => t.id === tx.relatedTransactionId);
     const original = originals[0];
@@ -125,7 +176,12 @@ export function classifyReportTransaction(
   if (references.length === 1) {
     const verified = resolvePayment(references[0], finance, ledger);
     if (!verified || verified.transaction.id !== tx.id) return result(tx, 'unknown', 'Unverified linked payment');
-    if (references[0].entityType === 'loan') return result(tx, 'loan_payment', 'Verified loan payment; split not inferred');
+    if (references[0].entityType === 'loan') {
+      const loan = finance.loans.find(l => l.id === references[0].entityId)!;
+      const cost = verifiedLoanFinanceCost(loan, verified.payment);
+      if (cost === null) return result(tx, 'unknown', 'Loan financing cost cannot be allocated from saved terms');
+      return { ...result(tx, 'loan_payment', 'Verified loan payment; interest and late fee only'), expenseAmount: cost };
+    }
     return result(tx, verified.parent && 'direction' in verified.parent && verified.parent.direction === 'receivable'
       ? 'debt_collection' : 'debt_payment', 'Verified debt payment');
   }

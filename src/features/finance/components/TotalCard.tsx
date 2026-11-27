@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { lightColors, type FinanceTone } from '@/theme/colors';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +49,7 @@ interface TotalCardProps {
   onToggleAmounts: () => void;
   onNetworkPress: (key: FinanceNetworkKey) => void;
   chequesTotal?: number;
+  scheduledThisMonth?: number | null;
   transfersTotal?: number;
 }
 
@@ -58,6 +60,8 @@ interface NetworkItem {
   icon: IconName;
   amount?: number;
   sign?: '+' | '-';
+  amountLabel?: string;
+  unavailableLabel?: string;
 }
 
 const NETWORK_ITEMS: NetworkItem[] = [
@@ -166,6 +170,7 @@ function NetworkCard({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open ${item.label}`}
+        accessibilityHint={visible ? item.amountLabel : undefined}
         onPress={onPress}
         style={({ pressed }) => [
           styles.networkCardBody,
@@ -183,7 +188,7 @@ function NetworkCard({
               <AppText style={[styles.networkLabel, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{item.label}</AppText>
             </View>
             <AppText style={[styles.networkAmount, { color: amountColor }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
-              {item.key === 'cheques' ? '' : visible ? (formattedAmount ?? (item.key === 'categories' ? 'Manage categories' : 'Open to view')) : '••••••'}
+              {visible ? (formattedAmount ?? item.unavailableLabel ?? '') : ''}
             </AppText>
           </View>
         </View>
@@ -210,8 +215,10 @@ export function TotalCard({
   onToggleAmounts,
   onNetworkPress,
   transfersTotal,
+  scheduledThisMonth,
 }: TotalCardProps) {
   const { spacing, colors } = useTheme();
+  const { t } = useAppLanguage();
 
   const setBaseCurrency = useCurrencyStore(
     (state) => state.setBaseCurrency,
@@ -228,10 +235,10 @@ export function TotalCard({
   );
 
   const currencyFlag = selectedCurrency?.flag ?? '🌐';
-  const hiddenValue = '••••••';
+  const hiddenValue = '';
 
   const order: FinanceNetworkKey[] = ['expenses', 'income', 'accounts', 'assets', 'cheques', 'loans', 'debts', 'transfers', 'categories'];
-  const networkItems = NETWORK_ITEMS.filter(item => item.key !== 'categories').sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key)).map((item) => {
+  const networkItems = NETWORK_ITEMS.map(item => ({ ...item, label: t(item.label, ({"Accounts": "الحسابات", "Assets": "الأصول", "Debts": "الديون", "Income": "الإيرادات", "Expenses": "المصروفات", "Loans": "القروض", "Installments": "الأقساط", "Categories": "التصنيفات", "Transfers": "التحويلات"} as Record<string, string>)[item.label] ?? item.label) })).filter(item => item.key !== 'categories').sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key)).map((item) => {
     switch (item.key) {
       case 'accounts':
         return { ...item, amount: accountsTotal };
@@ -258,7 +265,8 @@ export function TotalCard({
         return { ...item, amount: receivablesTotal - payablesTotal };
 
       case 'cheques':
-        return item;
+        if (scheduledThisMonth === undefined) return item;
+        return { ...item, amount: scheduledThisMonth ?? undefined, amountLabel: t('Scheduled this month', 'المجدول هذا الشهر'), unavailableLabel: t('Unavailable', 'غير متاح') };
 
       case 'transfers':
         return { ...item, amount: transfersTotal };
@@ -282,10 +290,10 @@ export function TotalCard({
             </View>
 
             <AppText style={styles.netWorthLabel}>
-              TOTAL BALANCE
+              {t("TOTAL BALANCE", "إجمالي الرصيد")}
             </AppText>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel={amountsVisible ? 'Hide Finance amounts' : 'Show Finance amounts'}
+          <Pressable accessibilityRole="button" accessibilityLabel={amountsVisible ? t('Hide Finance amounts', 'إخفاء المبالغ المالية') : t('Show Finance amounts', 'إظهار المبالغ المالية')}
             accessibilityState={{ selected: amountsVisible }} onPress={onToggleAmounts}
             style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
             <Ionicons name={amountsVisible ? 'eye-outline' : 'eye-off-outline'} size={20} color="#B68C42" />
@@ -333,8 +341,8 @@ export function TotalCard({
 
         <View style={[styles.worthRow, { borderColor: '#CBD5E1' }]}>
           <Ionicons name="trending-up" size={19} color="#B68C42" />
-          <AppText variant="caption" style={{ fontWeight: '800', color: '#14263C' }}>Net Worth</AppText>
-          <Pressable accessibilityRole="button" accessibilityLabel="Explain Net Worth" accessibilityState={{ expanded: explanationOpen }}
+          <AppText variant="caption" style={{ fontWeight: '800', color: '#14263C' }}>{t("Net Worth", "صافي الثروة")}</AppText>
+          <Pressable accessibilityRole="button" accessibilityLabel={t("Explain Net Worth", "شرح صافي الثروة")} accessibilityState={{ expanded: explanationOpen }}
             onPress={() => setExplanationOpen(value => !value)} style={styles.visibilityButton}>
             <Ionicons name="information-circle-outline" size={19} color="#B68C42" />
           </Pressable>
@@ -346,7 +354,7 @@ export function TotalCard({
           <AppText variant="caption" color="#475569">
             Account balances + assets + receivables − payables − remaining received loan principal. Credit-card balances are already included in accounts. Future contractual installments include financing costs and are not subtracted again. Totals use underlying precision; adding rounded displays can differ by 0.01.
           </AppText>
-          {loansInstallmentsRemainingTotal !== undefined && <AppText variant="caption" color="#475569">
+          {amountsVisible && loansInstallmentsRemainingTotal !== undefined && <AppText variant="caption" color="#475569">
             {'Loan future contractual payments: ' + (amountsVisible ? formatAmount(loansInstallmentsRemainingTotal, baseCurrency) + ' ' + baseCurrency : hiddenValue)}
           </AppText>}
         </View>}
@@ -361,7 +369,7 @@ export function TotalCard({
         ) : null}
       </Card>
 
-      <View accessibilityLabel="Finance sections" style={[styles.networkGrid, { marginTop: spacing.sm }]}>
+      <View accessibilityLabel={t("Finance sections", "أقسام المالية")} style={[styles.networkGrid, { marginTop: spacing.sm }]}>
         {networkItems.map((item) => (
           <NetworkCard
             key={item.key}
@@ -383,12 +391,12 @@ export function TotalCard({
           <View style={[styles.currencyModal, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
               <AppText variant="h3">
-                Choose base currency
+                {t("Choose base currency", "اختيار العملة الأساسية")}
               </AppText>
 
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Close currency picker"
+                accessibilityLabel={t("Close currency picker", "إغلاق اختيار العملة")}
                 onPress={() => setCurrencyPickerOpen(false)}
                 hitSlop={10}
               >
@@ -404,7 +412,7 @@ export function TotalCard({
               color="textSecondary"
               style={styles.modalDescription}
             >
-              Totals will be displayed in the selected currency.
+              {t("Totals will be displayed in the selected currency.", "سيتم عرض الإجماليات بالعملة المختارة.")}
             </AppText>
 
             <ScrollView style={styles.currencyList}>
@@ -592,6 +600,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     marginTop: 1,
+    minHeight: 18,
   },
   networkEye: {
     alignSelf: 'center',

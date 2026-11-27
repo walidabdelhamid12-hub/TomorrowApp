@@ -194,7 +194,7 @@ test('internal/credit-card transfers and verified financing remain excluded',()=
   const payment=tx('payment','expense',10,{purpose:'loan_payment',linkedEntityType:'loan',linkedEntityId:'loan',linkedPaymentId:'p'});
   const collection=tx('collection','income',7,{purpose:'debt_collection',linkedEntityType:'debt',linkedEntityId:'debt',linkedPaymentId:'d'});
   const data=context([receipt,payment,collection,tx('operating','income',1)]);
-  data.finance.loans=[{id:'loan',currencyCode:'EGP',receiptTransactionId:'receipt',receivedAmount:100,receivedAt:receipt.date,
+  data.finance.loans=[{id:'loan',currencyCode:'EGP',receiptTransactionId:'receipt',receivedAmount:100,receivedAt:receipt.date,totalRepaymentAmount:100,
     payments:[{id:'p',amount:10,latePaymentFee:0,date:payment.date,accountId:'egp',ledgerTransactionId:'payment'}]}];
   data.finance.debts=[{id:'debt',currencyCode:'EGP',direction:'receivable',payments:[{id:'d',amount:7,date:collection.date,accountId:'egp',ledgerTransactionId:'collection'}]}];
   data.ledger.transfers=[{id:'t',type:'internal',amount:100,fromAccountId:'egp',toAccountId:'usd',date:period.from},

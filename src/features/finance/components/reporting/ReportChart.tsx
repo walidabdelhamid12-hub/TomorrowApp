@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +13,7 @@ export function ReportChart({ data, currency, formatValue, title = "Category ana
   const [mode, setMode] = useState<'donut' | 'vertical' | 'horizontal' | 'trend'>('donut');
   const [picker, setPicker] = useState<'currency' | 'chart' | null>(null);
   const { colors } = useTheme();
+  const { t } = useAppLanguage();
   const displayAmount = formatValue ?? ((amount: number) => formatAmount(amount, currency));
   const positive = data.filter(item => Number.isFinite(item.amount) && item.amount > 0);
   // Scale before summing ratios so even large chart-only magnitudes remain finite.
@@ -22,29 +24,29 @@ export function ReportChart({ data, currency, formatValue, title = "Category ana
   return <View style={{ marginVertical: 5, padding: 7, borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.surface }}>
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 5 }}>
       <AppText variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}
-        style={{ flex: 1, minWidth: 0, fontWeight: '800', color: title.toLowerCase().includes('income') ? '#15803D' : title.toLowerCase().includes('expense') ? '#DC2626' : '#0B315C', fontSize: 14 }}>{title}</AppText>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Choose analysis currency, ${currency}`} accessibilityState={{ expanded: picker === 'currency' }}
+        style={{ flex: 1, minWidth: 0, fontWeight: '800', color: title.toLowerCase().includes('income') ? '#15803D' : title.toLowerCase().includes('expense') ? '#DC2626' : '#0B315C', fontSize: 14 }}>{title === 'Category analysis' ? t('Category analysis', 'تحليل التصنيفات') : title}</AppText>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${t("Choose analysis currency", "اختيار عملة التحليل")}, ${currency}`} accessibilityState={{ expanded: picker === 'currency' }}
         onPress={() => setPicker('currency')} style={{ width: 74, minHeight: 40, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
         <AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ fontSize: 11, fontWeight: '700' }}>{currencyLabel(currency)}</AppText>
         <Ionicons name="chevron-down" size={12} color={colors.text} />
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Choose chart type, ${mode}`} accessibilityState={{ expanded: picker === 'chart' }}
+      <Pressable accessibilityRole="button" accessibilityLabel={`${t("Choose chart type", "اختيار نوع الرسم البياني")}, ${mode}`} accessibilityState={{ expanded: picker === 'chart' }}
         onPress={() => setPicker('chart')} style={{ width: 62, minHeight: 40, borderWidth: 1, borderColor: colors.border, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
         <Ionicons name={mode === 'donut' ? 'pie-chart' : mode === 'vertical' ? 'bar-chart' : mode === 'trend' ? 'trending-up' : 'stats-chart'} size={20} color="#0B315C" />
         <Ionicons name="chevron-down" size={12} color={colors.text} />
       </Pressable>
     </View>
     <Modal transparent visible={picker !== null} animationType="fade" onRequestClose={() => setPicker(null)}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close analysis selector" onPress={() => setPicker(null)}
+      <Pressable accessibilityRole="button" accessibilityLabel={t("Close analysis selector", "إغلاق اختيار التحليل")} onPress={() => setPicker(null)}
         style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', paddingHorizontal: 30 }}>
         <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 12, maxHeight: '70%' }}>
-          <AppText variant="bodyStrong" style={{ marginBottom: 8 }}>{picker === 'currency' ? 'Select currency' : 'Chart type'}</AppText>
+          <AppText variant="bodyStrong" style={{ marginBottom: 8 }}>{picker === 'currency' ? t('Select currency', 'اختيار العملة') : t('Chart type', 'نوع الرسم البياني')}</AppText>
           <ScrollView>
             {(picker === 'currency' ? (currencies.length ? currencies : [currency]).map(code => ({ id: code, label: currencyLabel(code), icon: 'cash-outline' as const })) : [
-              { id: 'donut', label: 'Donut', icon: 'pie-chart' as const },
-              { id: 'vertical', label: 'Vertical', icon: 'bar-chart' as const },
-              { id: 'horizontal', label: 'Horizontal', icon: 'stats-chart' as const },
-              ...(trendContent !== undefined ? [{ id: 'trend', label: 'Trend', icon: 'trending-up' as const }] : []),
+              { id: 'donut', label: t('Donut', 'دائري'), icon: 'pie-chart' as const },
+              { id: 'vertical', label: t('Vertical', 'عمودي'), icon: 'bar-chart' as const },
+              { id: 'horizontal', label: t('Horizontal', 'أفقي'), icon: 'stats-chart' as const },
+              ...(trendContent !== undefined ? [{ id: 'trend', label: t('Trend', 'الاتجاه'), icon: 'trending-up' as const }] : []),
             ]).map(option => <Pressable key={option.id} accessibilityRole="button" accessibilityLabel={option.label}
               accessibilityState={{ selected: picker === 'currency' ? currency === option.id : mode === option.id }}
               onPress={() => { if (picker === 'currency') onCurrencySelect?.(option.id); else setMode(option.id as 'donut' | 'vertical' | 'horizontal' | 'trend'); setPicker(null); }}
@@ -59,7 +61,7 @@ export function ReportChart({ data, currency, formatValue, title = "Category ana
     </Modal>
     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, minHeight: 120 }}>
       <View style={{ flex: 1, minWidth: 0, gap: 8, paddingTop: 5 }}>
-        <AppText variant="caption" style={{ fontSize: 10, fontWeight: '700' }}>Category · %</AppText>
+        <AppText variant="caption" style={{ fontSize: 10, fontWeight: '700' }}>{t('Category · %', 'التصنيف · %')}</AppText>
         {positive.map((item, index) => <View key={item.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0 }}>
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: item.color || CATEGORY_COLORS[index % CATEGORY_COLORS.length] }} />
           <AppText variant="caption" numberOfLines={1} ellipsizeMode="tail" style={{ flexShrink: 1, fontSize: 10 }}>{item.label}</AppText>

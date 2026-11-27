@@ -172,11 +172,11 @@ test('terminal loans have zero principal; partial records do not each consume a 
   assert.equal(getLoanNextDueDate(partial), '2026-11-01');
   assert.equal(getLoanRemainingInstallments(loanFixture({ payments: [{ amount: 12000 }] })), 11);
 });
-function summaryFor(loans, assets = []) {
+function summaryFor(loans, assets = [], debts = []) {
   const previous = Module._load;
   const file = require.resolve('../src/features/finance/hooks/useFinanceSummary.ts'); delete require.cache[file];
   const currency = { baseCurrency: 'EGP', rates: { EGP: 1, USD: 55.4154 }, verifiedCurrencies: ['EGP', 'USD'], metals: { gold24PerGram: null, silverPerGram: null } };
-  const finance = { assets, loans, debts: [], cheques: [] };
+  const finance = { assets, loans, debts, cheques: [] };
   const ledger = { accounts: [], transactions: [], transfers: [] };
   Module._load = function(id, parent, main) {
     if (id === 'react') return { useMemo: fn => fn() };
@@ -214,4 +214,26 @@ test('a one-cent difference from summing rounded asset rows is expected; subtota
   assert.equal(summary.assetsTotal, 1.108308);
   assert.equal(summary.netWorth, summary.assetsTotal);
   assert.equal(formatAmount(summary.netWorth, 'EGP'), '1.11');
+});
+
+
+test('R5: fully settled debts do not contribute to dashboard debt totals or net worth', () => {
+  const payment = (id, amount) => ({id,amount,date:'2026-11-27'});
+  const debts = [
+    {id:'payable',direction:'payable',amount:100,currencyCode:'USD',payments:[payment('p1',40),payment('p2',60)]},
+    {id:'receivable',direction:'receivable',amount:100,currencyCode:'USD',payments:[payment('p3',100)]},
+  ];
+  const before = structuredClone(debts);
+  const result = summaryFor([], [], debts);
+  assert.equal(result.receivablesTotal,0); assert.equal(result.payablesTotal,0); assert.equal(result.netWorth,0);
+  assert.deepEqual(debts,before);
+});
+test('R5: another open receivable contributes exactly once; settled debts remain zero', () => {
+  const debts = [
+    {id:'settled',direction:'receivable',currencyCode:'USD',amount:100,payments:[{id:'p',amount:100,date:'2026-11-27'}]},
+    {id:'open',direction:'receivable',currencyCode:'USD',amount:100,payments:[]},
+    {id:'paid',direction:'payable',currencyCode:'USD',amount:60,payments:[{id:'q',amount:60,date:'2026-11-27'}]},
+  ];
+  const result = summaryFor([], [], debts);
+  assert.equal(result.receivablesTotal,5541.54); assert.equal(result.payablesTotal,0); assert.equal(result.netWorth,5541.54);
 });

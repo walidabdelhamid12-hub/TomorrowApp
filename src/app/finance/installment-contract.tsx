@@ -1,27 +1,22 @@
+import { FinanceDateField } from '@/features/finance/components/FinanceDateField';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { financeChrome } from '@/features/finance/components/financeChrome';
 import { FinanceInput as AppInput } from '@/features/finance/components/FinanceInput';
 import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { FinanceChoiceDropdown, FINANCE_CURRENCY_CHOICES } from '@/features/finance/components/FinanceChoiceDropdown';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { shouldStackFinanceFields } from '@/features/finance/utils/formLayout';
+import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
 
 import { AppText, Card, Screen } from '@/components/ui';
-import { CURRENCIES } from '@/features/finance/constants/currencies';
 import { FinanceActionButtons } from '@/features/finance/components/FinanceActionButtons';
 import { installmentsStorage } from '@/features/finance/store/installmentsStorage';
 import { validateStandaloneInstallmentDraft } from '@/features/finance/utils/installmentDraft';
 import type { InstallmentCalculationInput, InstallmentScheduleItem } from '@/features/finance/types/installments';
 import { moduleColors, useTheme } from '@/theme';
-
-function parseISODate(value: string): Date {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date();
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : new Date();
-}
 
 function kindLabel(kind: string): string {
   return kind === 'down_payment' ? 'Down payment' : kind === 'regular' ? 'Regular installment' : 'Irregular installment';
@@ -29,17 +24,17 @@ function kindLabel(kind: string): string {
 
 type DraftRow = { key: number; originalId?: string; kind: InstallmentScheduleItem['kind']; dueDate: string; amount: string };
 const initialRows: DraftRow[] = [{ key: 1, kind: 'regular', dueDate: '', amount: '' }];
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  EGP: 'E£', OMR: 'ر.ع.', SAR: 'ر.س', AED: 'د.إ', USD: '\u0024',
-  EUR: '€', GBP: '£', JOD: 'د.أ', QAR: 'ر.ق', KWD: 'د.ك',
-};
 
 export default function InstallmentContractScreen() {
   const { id, mode } = useLocalSearchParams<{ id?: string; mode?: string }>();
   const isNew = id === undefined || id === 'new';
   const wantsEdit = mode === 'edit';
   const router = useRouter();
+  const { t } = useAppLanguage();
   const { colors, spacing } = useTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const stackFields = shouldStackFinanceFields(width, fontScale);
+  const { confirm, confirmation } = useFinanceConfirmation();
   const saved = useSyncExternalStore(installmentsStorage.subscribe, installmentsStorage.getState, installmentsStorage.getState);
   useEffect(() => { if (installmentsStorage.getState().hydration === 'idle') void installmentsStorage.hydrate(); }, []);
   const [draftOpen, setDraftOpen] = useState(isNew || wantsEdit);
@@ -47,9 +42,8 @@ export default function InstallmentContractScreen() {
   const [currencyCode, setCurrencyCode] = useState('OMR');
   const [totalAmount, setTotalAmount] = useState('');
   const [rows, setRows] = useState<DraftRow[]>(initialRows);
-  const [nextKey, setNextKey] = useState(2);
+  const nextKey = useRef(2);
   const [selectedRowKey, setSelectedRowKey] = useState(1);
-  const [datePickerRow, setDatePickerRow] = useState<number | null>(null);
   const [draftError, setDraftError] = useState('');
   const [draftSummary, setDraftSummary] = useState<string | null>(null);
   const [saveBusy, setSaveBusy] = useState(false);
@@ -62,9 +56,9 @@ export default function InstallmentContractScreen() {
     setCurrencyCode('OMR');
     setTotalAmount('');
     setRows([{ key: 1, kind: 'regular', dueDate: '', amount: '' }]);
-    setNextKey(2);
+    nextKey.current = 2;
     setSelectedRowKey(1);
-    setDatePickerRow(null);
+   
     setDraftSummary(null);
     setDraftError('');
   };
@@ -78,9 +72,9 @@ export default function InstallmentContractScreen() {
     setCurrencyCode(record.contract.currencyCode);
     setTotalAmount(record.contract.totalAmount);
     setRows(existingRows);
-    setNextKey(existingRows.length + 1);
+    nextKey.current = existingRows.length + 1;
     setSelectedRowKey(existingRows[0]?.key ?? 1);
-    setDatePickerRow(null);
+   
     setDraftSummary(null);
     setDraftError('');
     setSaveMessage('');
@@ -91,14 +85,12 @@ export default function InstallmentContractScreen() {
   const [deleteMessage, setDeleteMessage] = useState('');
   const confirmDelete = (record: (typeof saved.contracts)[number]) => {
     if (deleteInFlight.current || saveInFlight.current || saved.hydration !== 'ready' || saved.writeStatus !== 'idle') return;
-    Alert.alert('Delete contract?', 'Delete "' + record.name + '" and its installment schedule? This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => { void performDelete(record.contract.id, record.updatedAt); } },
-    ]);
+    confirm(t('Delete contract?', 'حذف العقد؟'), t('Delete', 'حذف') + ' "' + record.name + '" ' + t('and its installment schedule? This cannot be undone.', 'وجدول أقساطه؟ لا يمكن التراجع عن هذا الإجراء.'),
+      () => performDelete(record.contract.id, record.updatedAt), t('Delete', 'حذف'));
   };
   const performDelete = async (id: string, revision: string) => {
     if (deleteInFlight.current || saveInFlight.current || installmentsStorage.getState().hydration !== 'ready' ||
-        installmentsStorage.getState().writeStatus !== 'idle') return;
+        installmentsStorage.getState().writeStatus !== 'idle') return false;
     deleteInFlight.current = true;
     setDeleteBusy(true);
     setDeleteMessage('');
@@ -106,13 +98,15 @@ export default function InstallmentContractScreen() {
       const outcome = await installmentsStorage.deleteContract(id, revision);
       if (!outcome.ok) {
         setDeleteMessage('Delete was not confirmed (' + outcome.error.code + '). Check saved contracts before retrying.');
-        return;
+        return false;
       }
       if (editing?.id === id) resetDraft();
       setDeleteMessage('Contract deleted and storage verified. No balances were changed.');
       router.back();
+      return true;
     } catch {
       setDeleteMessage('Delete could not be confirmed. Check saved contracts before retrying.');
+      return false;
     } finally {
       deleteInFlight.current = false;
       setDeleteBusy(false);
@@ -210,42 +204,63 @@ export default function InstallmentContractScreen() {
   const tone = colors.finance.account;
   const selectedRow = rows.find(row => row.key === selectedRowKey) ?? rows[0];
   const selectedIndex = rows.findIndex(row => row.key === selectedRow.key);
+  const appendRow = () => {
+    if (saveBusy || saveInFlight.current) return;
+    const key = nextKey.current++;
+    setRows(previous => [...previous, {key,kind:'regular',dueDate:'',amount:''}]);
+    setSelectedRowKey(key); setDraftSummary(null); setDraftError('');
+  };
+  const removeSelectedRow = () => {
+    if (saveBusy || saveInFlight.current || rows.length <= 1) return;
+    const remove = () => {
+      if (saveInFlight.current) return false;
+      const remaining = rows.filter(row => row.key !== selectedRow.key);
+      if (!remaining.length) return false;
+      setRows(remaining); setSelectedRowKey(remaining[Math.min(selectedIndex, remaining.length - 1)].key);
+      setDraftSummary(null); setDraftError('');
+      return true;
+    };
+    if (selectedRow.originalId || selectedRow.amount || selectedRow.dueDate) {
+      confirm(t('Remove installment from draft?', 'حذف القسط من المسودة؟'), t('The saved contract will not change until you save.', 'لن يتغير العقد المحفوظ حتى تضغط حفظ.'), remove, t('Remove', 'حذف'));
+    } else remove();
+  };
+
 
   return (
-    <Screen scroll>
+    <Screen scroll edges={['top','bottom']}>
       <View style={financeChrome.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back to Installments" onPress={() => router.back()}
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Back to Installments", "العودة إلى الأقساط")} onPress={() => router.back()}
           style={financeChrome.back}>
           <Ionicons name="arrow-back" size={20} color="#D6B777" />
         </Pressable>
         <View style={styles.headerText}>
-          <AppText variant="caption" style={{ color: '#CBD5E1' }}>{record?.name ?? 'Standalone installments'}</AppText>
-          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>{isNew ? 'New Contract' : wantsEdit ? 'Edit Contract' : 'Contract Details'}</AppText>
+          <AppText variant="caption" style={{ color: '#CBD5E1' }}>{record?.name ?? t('Standalone installments', 'أقساط مستقلة')}</AppText>
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>{isNew ? t('New Contract', 'عقد جديد') : wantsEdit ? t('Edit Contract', 'تعديل العقد') : t('Contract Details', 'تفاصيل العقد')}</AppText>
         </View>
       </View>
       <AppText color="textSecondary" style={{ marginBottom: spacing.md }}>
-        Track saved contract schedules. Payments and balance posting are not available here.
+        {t("Track saved contract schedules. Payments and balance posting are not available here.", "متابعة جداول العقود المحفوظة. الدفع وترحيل الأرصدة غير متاحين هنا.")}
       </AppText>
       {saved.hydration === 'blocked' ? (
-        <Card variant="filled"><AppText color="danger">Saved contracts could not be loaded.</AppText>
-          <AppButton title="Retry loading" onPress={() => { void installmentsStorage.hydrate(); }} /></Card>
+        <Card variant="filled"><AppText color="danger">{t("Saved contracts could not be loaded.", "تعذر تحميل العقود المحفوظة.")}</AppText>
+          <AppButton title={t("Retry loading", "إعادة المحاولة")} onPress={() => { void installmentsStorage.hydrate(); }} /></Card>
       ) : saved.hydration !== 'ready' ? (
-        <Card variant="filled"><AppText>Loading contract...</AppText></Card>
+        <Card variant="filled"><AppText>{t("Loading contract...", "جارٍ تحميل العقد...")}</AppText></Card>
       ) : !isNew && !record ? (
-        <Card variant="filled"><AppText color="danger">Contract not found. Return to Installments.</AppText></Card>
+        <Card variant="filled"><AppText color="danger">{t("Contract not found. Return to Installments.", "العقد غير موجود. ارجع إلى الأقساط.")}</AppText></Card>
       ) : !isNew && !draftOpen && record ? (
         <Card variant="outlined" padded={false} style={[styles.contractCard, { backgroundColor: tone.surface, borderColor: tone.border }]}>
           <AppText variant="bodyStrong">{record.name}</AppText>
-          <AppText>Contract total: {record.contract.totalAmount} {record.contract.currencyCode}</AppText>
-          <AppText color="textSecondary">{record.contract.schedule.length} scheduled installments</AppText>
+          <AppText><AppText style={{ fontWeight: '700' }}>{t('Contract total', 'إجمالي العقد')}: </AppText>{record.contract.totalAmount} {record.contract.currencyCode}</AppText>
+          <AppText color="textSecondary">{record.contract.schedule.length} {t('scheduled installments', 'أقساط مجدولة')}</AppText>
           <View style={[styles.details, { borderTopColor: tone.border }]}>
             {record.contract.schedule.map(row => (
               <View key={row.id} style={styles.detailRow}>
                 <View style={styles.flex}>
-                  <AppText>{kindLabel(row.kind)}</AppText>
-                  <AppText variant="caption" color="textSecondary">Due {row.dueDate}</AppText>
+                  <AppText variant="bodyStrong">{kindLabel(row.kind)}</AppText>
+                  <AppText variant="caption" color="textSecondary">{t('Due', 'تاريخ الاستحقاق')} {row.dueDate}</AppText>
                 </View>
-                <AppText>{row.amount} {record.contract.currencyCode}</AppText>
+                <AppText variant="bodyStrong">{row.amount} {record.contract.currencyCode}</AppText>
               </View>
             ))}
           </View>
@@ -257,108 +272,72 @@ export default function InstallmentContractScreen() {
       <Card variant="outlined" padded={false} style={[styles.contractCard, { borderColor: tone.border, marginTop: spacing.md }]}>
         <View style={styles.contractToggle}>
           <Ionicons name="document-text-outline" size={20} color="#1E293B" />
-          <AppText variant="bodyStrong" style={styles.flex}>{editing ? 'Edit Contract' : 'New Contract'}</AppText>
+          <AppText variant="bodyStrong" style={[styles.flex, { fontWeight: '800' }]}>{editing ? t('Edit Contract', 'تعديل العقد') : t('New Contract', 'عقد جديد')}</AppText>
         </View>
         {draftOpen && (
           <View style={styles.draftList}>
             <AppText variant="caption" color="textSecondary">
-              {editing ? 'Edit this standalone contract. Nothing is posted to balances.' : 'Validate a draft or save a new standalone contract. Nothing is posted to balances.'}
+              {editing ? t('Edit this standalone contract. Nothing is posted to balances.', 'عدّل هذا العقد المستقل. لن يتم ترحيل أي مبالغ إلى الأرصدة.') : t('Validate a draft or save a new standalone contract. Nothing is posted to balances.', 'تحقق من المسودة أو احفظ عقدًا مستقلًا جديدًا. لن يتم ترحيل أي مبالغ إلى الأرصدة.')}
             </AppText>
-            <View style={styles.twoColumns}>
-              <View style={styles.column}>
-                <AppInput label="Contract Name" placeholder="Office plan"
-                  value={contractName} onChangeText={value => { setContractName(value); setDraftSummary(null); }} />
-              </View>
-              <View style={styles.column}>
-                <AppInput label="Total Amount" placeholder="1200.000" keyboardType="decimal-pad"
+            <AppInput label={t("Contract Name", "اسم العقد")} placeholder={t("Office plan", "خطة المكتب")}
+              value={contractName} onChangeText={value => { setContractName(value); setDraftSummary(null); }} />
+            <View style={[styles.twoColumns, stackFields && {flexDirection:'column',alignItems:'stretch'}]}>
+              <View style={[styles.column, stackFields && {flex:0}]}>
+                <AppInput label={t("Total Amount", "المبلغ الإجمالي")} placeholder="1200.000" keyboardType="decimal-pad"
                   value={totalAmount} onChangeText={value => { setTotalAmount(value); setDraftSummary(null); }} />
               </View>
-            </View>
-            <View style={styles.twoColumns}>
-              <View style={styles.column}>
-                <AppInput label="Due Date" placeholder="YYYY-MM-DD"
-                  value={selectedRow.dueDate} onChangeText={value => changeRow(selectedRow.key, { dueDate: value })}
-                  rightElement={
-                    <Pressable accessibilityRole="button" accessibilityLabel={'Choose due date for installment ' + (selectedIndex + 1)}
-                      hitSlop={10} onPress={() => setDatePickerRow(selectedRow.key)}>
-                      <Ionicons name="calendar-outline" size={20} color="#D6B777" />
-                    </Pressable>
-                  } />
-              </View>
-              <View style={styles.column}>
-                <AppInput label="Amount" placeholder="300.000" keyboardType="decimal-pad"
-                  value={selectedRow.amount} onChangeText={value => changeRow(selectedRow.key, { amount: value })} />
-              </View>
-            </View>
-            {datePickerRow === selectedRow.key && (
-              <DateTimePicker value={parseISODate(selectedRow.dueDate)} mode="date" display="default"
-                onChange={(event: DateTimePickerEvent, selected?: Date) => {
-                  setDatePickerRow(null);
-                  if (event.type === 'set' && selected) {
-                    const iso = [selected.getFullYear(), String(selected.getMonth() + 1).padStart(2, '0'),
-                      String(selected.getDate()).padStart(2, '0')].join('-');
-                    changeRow(selectedRow.key, { dueDate: iso });
-                  }
-                }} />
-            )}
-            <View style={styles.choiceColumns}>
-              <View style={styles.choiceColumn}>
-                <FinanceChoiceDropdown label="Currency" value={currencyCode}
-                  options={FINANCE_CURRENCY_CHOICES}
+              <View style={[styles.column, stackFields && {flex:0}]}>
+                <FinanceChoiceDropdown label={t("Currency", "العملة")} value={currencyCode} options={FINANCE_CURRENCY_CHOICES}
                   onChange={value => { setCurrencyCode(value); setDraftSummary(null); }} />
               </View>
-              <View style={styles.choiceColumn}>
-                <FinanceChoiceDropdown label="Installment Type" value={selectedRow.kind}
-                  options={[{ value: 'regular', label: 'Regular' }, { value: 'irregular', label: 'Irregular' },
-                    { value: 'down_payment', label: 'Down Payment' }]}
-                  onChange={value => changeRow(selectedRow.key, { kind: value as InstallmentScheduleItem['kind'] })} />
+            </View>
+            <View style={[styles.twoColumns, stackFields && {flexDirection:'column',alignItems:'stretch'}]}>
+              <View style={[styles.column, stackFields && {flex:0}]}>
+                <AppInput label={t("Installment Amount", "مبلغ القسط")} placeholder="300.000" keyboardType="decimal-pad"
+                  value={selectedRow.amount} onChangeText={value => changeRow(selectedRow.key, { amount: value })} />
+              </View>
+              <View style={[styles.column, stackFields && {flex:0}]}>
+                <AppText variant="label" style={{fontWeight:'700'}}>{t('Installment Count','عدد الأقساط')}</AppText>
+                <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderWidth:1,borderColor:'#D6B777',borderRadius:10,minHeight:52}}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={t('Remove selected installment','حذف القسط المحدد')} disabled={rows.length<=1 || saveBusy}
+                    onPress={removeSelectedRow} style={{minWidth:44,minHeight:48,alignItems:'center',justifyContent:'center',opacity:rows.length<=1?0.4:1}}><Ionicons name="remove" size={20} color="#B88C39" /></Pressable>
+                  <AppText variant="bodyStrong">{rows.length}</AppText>
+                  <Pressable accessibilityRole="button" accessibilityLabel={t('Add installment','إضافة قسط')} disabled={saveBusy} onPress={appendRow}
+                    style={{minWidth:44,minHeight:48,alignItems:'center',justifyContent:'center'}}><Ionicons name="add" size={20} color="#B88C39" /></Pressable>
+                </View>
               </View>
             </View>
+            <FinanceDateField key={selectedRow.key} label={t("Due Date", "تاريخ الاستحقاق")}
+              value={selectedRow.dueDate} onChange={value => changeRow(selectedRow.key, { dueDate: value })} pickerOnly />
+            <FinanceChoiceDropdown label={t("Installment Type", "نوع القسط")} value={selectedRow.kind}
+              options={[{ value: 'regular', label: 'Regular' }, { value: 'irregular', label: 'Irregular' },
+                { value: 'down_payment', label: 'Down Payment' }]}
+              onChange={value => changeRow(selectedRow.key, { kind: value as InstallmentScheduleItem['kind'] })} />
             <View style={styles.installmentSelector}>
-              <AppText variant="bodyStrong">Installment</AppText>
+              <AppText variant="bodyStrong" color="#936B1E">{t("Installment", "القسط")}</AppText>
               <View style={styles.installmentPicker}>
                 {rows.map((row, index) => (
                   <Pressable key={row.key} accessibilityRole="button"
-                    accessibilityLabel={'Edit installment ' + (index + 1)}
+                    accessibilityLabel={t('Edit installment ', 'تعديل القسط ') + (index + 1)}
                     accessibilityState={{ selected: selectedRow.key === row.key }}
-                    onPress={() => { setSelectedRowKey(row.key); setDatePickerRow(null); }}
+                    onPress={() => { setSelectedRowKey(row.key); }}
                     style={[styles.installmentNumber, { borderColor: selectedRow.key === row.key ? moduleColors.finance : colors.border,
                       backgroundColor: selectedRow.key === row.key ? tone.surface : colors.surface }]}>
-                    <AppText variant="caption">{index + 1}</AppText>
+                    <AppText variant="caption" color="#936B1E" style={{ fontWeight: '800' }}>{index + 1}</AppText>
                   </Pressable>
                 ))}
               </View>
-              {rows.length > 1 && (
-                <AppButton title="Remove" variant="ghost" fullWidth={false}
-                  onPress={() => {
-                    const remaining = rows.filter(row => row.key !== selectedRow.key);
-                    setRows(remaining);
-                    setSelectedRowKey(remaining[Math.min(selectedIndex, remaining.length - 1)].key);
-                    setDatePickerRow(null);
-                    setDraftSummary(null);
-                    setDraftError('');
-                  }} />
-              )}
             </View>
-            <AppButton title="Add installment" accentColor="#1E293B"
-              leftIcon={<Ionicons name="add-circle-outline" size={20} color={colors.onPrimary} />} onPress={() => {
-                setRows(previous => [...previous, { key: nextKey, kind: 'regular', dueDate: '', amount: '' }]);
-                setSelectedRowKey(nextKey);
-                setNextKey(value => value + 1);
-                setDatePickerRow(null);
-                setDraftSummary(null);
-                setDraftError('');
-              }} />
-            <AppButton title="Validate draft (no save)" accentColor="#1E293B" onPress={checkDraft} />
-            <AppButton title={saveBusy ? 'Saving contract...' : editing ? 'Save Changes' : 'Save Contract'} accentColor="#1E293B"
+            <AppButton style={{ minHeight:44,paddingVertical:8 }} title={t("Validate draft (no save)", "التحقق من المسودة (دون حفظ)")} accentColor="#1E293B" onPress={checkDraft} />
+            <AppButton style={{ minHeight: 44, paddingVertical: 8 }} title={saveBusy ? t('Saving contract...', 'جارٍ حفظ العقد...') : editing ? t('Save Changes', 'حفظ التغييرات') : t('Save Contract', 'حفظ العقد')} accentColor="#1E293B"
               disabled={saveBusy || saved.hydration !== 'ready' || saved.writeStatus !== 'idle'}
               onPress={() => { void saveContract(); }} />
-             {editing && <AppButton title="Cancel Edit" variant="ghost" disabled={saveBusy}
+             {editing && <AppButton title={t("Cancel Edit", "إلغاء التعديل")} variant="ghost" disabled={saveBusy}
                onPress={() => { resetDraft(); router.back(); }} />}
             {saveMessage ? <AppText color="textSecondary">{saveMessage}</AppText> : null}
             {draftError ? <AppText color="danger">{draftError}</AppText> : null}
             {draftSummary ? <View style={[styles.draftRow, { borderColor: tone.border }]}>
-              <AppText variant="bodyStrong">Valid draft — not saved</AppText>
+              <AppText variant="bodyStrong">{t("Valid draft — not saved", "مسودة صالحة — لم تُحفظ")}</AppText>
               <AppText>{draftSummary}</AppText>
             </View> : null}
           </View>
@@ -367,6 +346,7 @@ export default function InstallmentContractScreen() {
       )}
       {saveMessage ? <AppText color="textSecondary">{saveMessage}</AppText> : null}
 
+      {confirmation}
     </Screen>
   );
 }
@@ -379,7 +359,7 @@ const styles = StyleSheet.create({
   emptyContent: { alignItems: 'center', gap: 10, paddingVertical: 16 },
   previewToggle: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 14, marginTop: 14 },
   list: { gap: 12 },
-  contractCard: { padding: 10, borderRadius: 14 },
+  contractCard: { padding: 8, borderRadius: 14 },
   installmentCard: { padding: 10, borderRadius: 14 },
   cardHeading: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48 },
   icon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
@@ -395,7 +375,7 @@ const styles = StyleSheet.create({
   twoColumns: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' },
   choiceColumns: { gap: 10, alignItems: 'stretch' },
   choiceColumn: { width: '100%', minWidth: 0 },
-  column: { flexGrow: 1, flexBasis: 160, minWidth: 0 },
+  column: { flex: 1, minWidth: 0 },
   currencyOptions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 7, columnGap: 5 },
   currencyCard: { width: '18.5%', minHeight: 70, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2, paddingVertical: 6, borderRadius: 9, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fafafa', gap: 2 },
   currencyCardActive: { borderColor: '#059669', backgroundColor: '#ecfdf5' },

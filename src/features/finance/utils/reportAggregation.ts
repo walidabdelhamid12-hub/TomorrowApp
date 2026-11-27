@@ -1,6 +1,7 @@
 import { getCurrencyDecimals, isSupportedCurrency } from '../constants/currencies';
 import type { ReportClassificationContext } from './reportTransactionClassifier';
 import { classifyReportTransactions } from './reportTransactionClassifier';
+import { transferSettlementProblem } from './transferSettlement';
 
 export interface ReportPeriod {
   from: string;
@@ -169,6 +170,14 @@ export function aggregateOperatingReport(
   const incomeCategories = new Map<string, number>();
   const expenseCategories = new Map<string, number>();
   const unknown: ReportUnknownTransaction[] = [];
+  // A missing fee row must not disappear from the P&L as an apparently complete period.
+  for (const transfer of ctx.ledger.transfers) {
+    const problem = transferSettlementProblem(ctx.ledger, transfer);
+    if (!problem || (validDate(transfer.date) && (transfer.date < period.from || transfer.date > period.to))) continue;
+    if (selected.accountId !== undefined && transfer.fromAccountId !== selected.accountId &&
+        ctx.ledger.accounts.filter(a => a.id === transfer.fromAccountId).length === 1) continue;
+    unknown.push({ id: transfer.id, date: transfer.date, reason: problem });
+  }
 
   let includedTransactions = 0;
 
@@ -224,7 +233,7 @@ export function aggregateOperatingReport(
 
     if (item.kind !== 'income'
       && item.kind !== 'expense'
-      && item.kind !== 'refund') {
+      && item.kind !== 'refund' && !(item.kind === 'loan_payment' && item.expenseAmount > 0)) {
       return;
     }
 

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import React, { useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -10,6 +11,7 @@ interface ModalProps {
 
 // --- 1. مودال إضافة الحساب ---
 export const AddAccountModal: React.FC<ModalProps> = ({ visible, onClose, onSave }) => {
+  const { t } = useAppLanguage();
   const [accountName, setAccountName] = useState('');
   const [amount, setAmount] = useState('0');
   const [selectedType, setSelectedType] = useState('Cash');
@@ -40,23 +42,23 @@ export const AddAccountModal: React.FC<ModalProps> = ({ visible, onClose, onSave
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.headerRow}>
-            <Text style={styles.modalTitle}>Add account</Text>
+            <Text style={styles.modalTitle}>{t('Add account', 'إضافة حساب')}</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color="#333" />
             </TouchableOpacity>
           </View>
 
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={styles.label}>Name</Text>
+            <Text style={styles.label}>{t('Name', 'الاسم')}</Text>
             <TextInput
               style={[styles.input, { textAlign: 'right' }]}
-              placeholder="e.g. CIB, CASH"
+              placeholder={t('e.g. CIB, CASH', 'مثال: بنك أو نقدي')}
               placeholderTextColor="#999"
               value={accountName}
               onChangeText={setAccountName}
             />
 
-            <Text style={styles.label}>TYPE</Text>
+            <Text style={styles.label}>{t('TYPE', 'النوع')}</Text>
             <View style={styles.typesRow}>
               {['Cash', 'Bank', 'Wallet', 'Savings', 'Credit card'].map((type) => (
                 <TouchableOpacity
@@ -64,12 +66,12 @@ export const AddAccountModal: React.FC<ModalProps> = ({ visible, onClose, onSave
                   style={[styles.typeChip, selectedType === type && styles.typeChipActive]}
                   onPress={() => setSelectedType(type)}
                 >
-                  <Text style={[styles.typeText, selectedType === type && styles.typeTextActive]}>{type}</Text>
+                  <Text style={[styles.typeText, selectedType === type && styles.typeTextActive]}>{t(type, ({ Cash: 'نقدي', Bank: 'بنك', Wallet: 'محفظة', Savings: 'ادخار', 'Credit card': 'بطاقة ائتمان' } as Record<string, string>)[type] ?? type)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            <Text style={styles.label}>CURRENCY</Text>
+            <Text style={styles.label}>{t('CURRENCY', 'العملة')}</Text>
             <View style={styles.currenciesRow}>
               {['EGP', 'OMR', 'SAR', 'AED', 'USD', 'EUR', 'GBP', 'JOD', 'QAR', 'KWD'].map((curr) => (
                 <TouchableOpacity
@@ -82,7 +84,7 @@ export const AddAccountModal: React.FC<ModalProps> = ({ visible, onClose, onSave
               ))}
             </View>
 
-            <Text style={styles.label}>Starting balance</Text>
+            <Text style={styles.label}>{t('Starting balance', 'الرصيد الافتتاحي')}</Text>
             <View style={styles.balanceContainer}>
               <Text style={styles.currencySymbolText}>{selectedCurrency} {amount}</Text>
             </View>
@@ -111,7 +113,7 @@ export const AddAccountModal: React.FC<ModalProps> = ({ visible, onClose, onSave
             </View>
 
             <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-              <Text style={styles.saveButtonText}>Add account</Text>
+              <Text style={styles.saveButtonText}>{t('Add account', 'إضافة حساب')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -123,6 +125,7 @@ export const AddAccountModal: React.FC<ModalProps> = ({ visible, onClose, onSave
 
 // --- 2. مودال إضافة الأصل ---
 export const AddAssetModal: React.FC<ModalProps> = ({ visible, onClose, onSave }) => {
+  const { t } = useAppLanguage();
   const [assetName, setAssetName] = useState('');
   const [amount, setAmount] = useState('0');
   const [selectedType, setSelectedType] = useState('Local');
@@ -153,23 +156,23 @@ export const AddAssetModal: React.FC<ModalProps> = ({ visible, onClose, onSave }
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.headerRow}>
-            <Text style={styles.modalTitle}>Assets</Text>
+            <Text style={styles.modalTitle}>{t('Assets', 'الأصول')}</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color="#333" />
             </TouchableOpacity>
           </View>
 
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={styles.label}>Asset name</Text>
+            <Text style={styles.label}>{t('Asset name', 'اسم الأصل')}</Text>
             <TextInput
               style={[styles.input, { textAlign: 'right' }]}
-              placeholder="e.g. Dollar savings, Gold"
+              placeholder={t('e.g. Dollar savings, Gold', 'مثال: مدخرات بالدولار أو ذهب')}
               placeholderTextColor="#999"
               value={assetName}
               onChangeText={setAssetName}
             />
 
-            <Text style={styles.label}>CURRENCY</Text>
+            <Text style={styles.label}>{t('CURRENCY', 'العملة')}</Text>
             <View style={styles.currenciesRow}>
               {['OMR', 'EGP', 'USD', 'EUR', 'SAR', 'AED', 'GBP', 'QAR', 'KWD'].map((curr) => (
                 <TouchableOpacity
@@ -182,7 +185,7 @@ export const AddAssetModal: React.FC<ModalProps> = ({ visible, onClose, onSave }
               ))}
             </View>
 
-            <Text style={styles.label}>Amount</Text>
+            <Text style={styles.label}>{t('Amount', 'المبلغ')}</Text>
             <View style={styles.balanceContainer}>
               <Text style={styles.currencySymbolText}>{selectedCurrency} {amount}</Text>
             </View>
@@ -211,7 +214,7 @@ export const AddAssetModal: React.FC<ModalProps> = ({ visible, onClose, onSave }
             </View>
 
             <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-              <Text style={styles.saveButtonText}>Create asset</Text>
+              <Text style={styles.saveButtonText}>{t('Create asset', 'إنشاء أصل')}</Text>
             </TouchableOpacity>
           </View>
         </View>

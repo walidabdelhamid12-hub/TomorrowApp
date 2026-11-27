@@ -136,7 +136,7 @@ test('account details requires explicit user confirmation before metadata-only v
   const source = fs.readFileSync(path.join(__dirname,
     '../src/features/finance/components/AccountDetails.tsx'), 'utf8');
   assert.match(source, /Verify opening balance date/);
-  assert.match(source, /Alert\.alert\('Verify opening balance date'/);
+  assert.match(source, /Alert\.alert\(t\('Verify opening balance date'/);
   assert.match(source, /verifyOpeningDate\(account\.id,/);
   assert.match(source, /validateAccountOpeningDate/);
   assert.doesNotMatch(source, /updateAccount\(|addTransaction\(|addTransfer\(/);
@@ -144,7 +144,7 @@ test('account details requires explicit user confirmation before metadata-only v
 
 test('account edits warn before invalidating a verified financial basis', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/app/finance/accounts.tsx'), 'utf8');
-  assert.match(source, /basisChanged && editingAccount\.openingBalanceDate/);
+  assert.match(source, /editingAccount\?\.openingBalanceDate && \(accountInput\.initialBalance !== editingAccount\.initialBalance \|\| accountInput\.currencyCode !== editingAccount\.currencyCode\)/);
   assert.match(source, /Opening date verification will be cleared/);
   assert.match(source, /Cancel.*style: 'cancel'/s);
   assert.match(source, /Continue.*onPress/s);
@@ -160,9 +160,15 @@ test('new account form requires explicit opening date confirmation', () => {
 });
 test('account creation never assumes the date and warns if metadata verification fails', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/app/finance/accounts.tsx'), 'utf8');
-  assert.match(source, /isValidISODate\(data\.openingBalanceDate\)/);
-  assert.match(source, /verifyOpeningDate\(newAccountId, data\.openingBalanceDate\)/);
-  assert.match(source, /Opening date not verified/);
+  assert.match(source, /const openingDate = targetId \? undefined : data\.openingBalanceDate/);
+  assert.match(source, /openingDate !== undefined && !isValidISODate\(openingDate\)/);
+  assert.match(source, /applyAccountForm\(useLedgerStore.getState, targetId, accountInput, openingDate, expectedUpdatedAt\)/);
+  assert.match(source, /Account not saved/);
+  const helper = fs.readFileSync(path.join(__dirname, '../src/features/finance/components/explicitFinanceForm.ts'), 'utf8');
+  assert.match(helper, /read\(\)\.addAccount\(input, openingDate\) \|\| null/);
+  const store = fs.readFileSync(path.join(__dirname, '../src/features/finance/store/useLedgerStore.ts'), 'utf8');
+  assert.match(store, /!validateAccountOpeningDate\(\{ \.\.\.state, accounts: \[\.\.\.state.accounts, account\] \}, account.id, openingDate\)\.valid\) return ''/);
+  assert.ok(store.indexOf('account.openingBalanceDate = openingDate;') < store.indexOf('set({ accounts: [...state.accounts, account] });'));
 });
 
 test('invalid stored dates are not presented as verified in account details', () => {
@@ -175,7 +181,7 @@ test('invalid stored dates are not presented as verified in account details', ()
 test('account creation rejects runtime injection of historical date metadata', () => {
   const source = fs.readFileSync(path.join(__dirname,
     '../src/features/finance/store/useLedgerStore.ts'), 'utf8');
-  const create = source.slice(source.indexOf('addAccount: (input) => {'),
+  const create = source.slice(source.indexOf('addAccount: (input, openingDate) => {'),
     source.indexOf('verifyAccountOpeningBalanceDate: (id, date) =>'));
   assert.match(create, /hasOwnProperty\.call\(input, 'openingBalanceDate'\)/);
   assert.match(create, /return ''/);
@@ -209,9 +215,13 @@ test('malformed opening date from persisted JSON fails closed without changing b
 test('opening-date field uses theme text and border colors', () => {
   const source = fs.readFileSync(path.join(__dirname,
     '../src/features/finance/components/AccountDetails.tsx'), 'utf8');
-  assert.match(source, /color: colors\.text/);
-  assert.match(source, /borderColor: colors\.border/);
-  assert.match(source, /placeholderTextColor=\{colors\.textSecondary\}/);
+  assert.match(source, /<FinanceDateField[\s\S]*?value=\{openingDateDraft\}[\s\S]*?pickerOnly/);
+  const shared = fs.readFileSync(path.join(__dirname, '../src/features/finance/components/FinanceDateField.tsx'), 'utf8');
+  assert.match(shared, /editable=\{!pickerOnly\}/);
+  assert.match(shared, /fieldStyle=\{\{ borderColor: error \? '#DC2626' : '#CBD5E1'/);
+  const input = fs.readFileSync(path.join(__dirname, '../src/components/ui/AppInput.tsx'), 'utf8');
+  assert.match(input, /color: colors\.text/);
+  assert.match(input, /placeholderTextColor=\{colors\.textDisabled\}/);
 });
 
 test('Zustand persistence keeps account metadata in v2 without a new migration', () => {

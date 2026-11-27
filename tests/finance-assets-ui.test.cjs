@@ -11,7 +11,7 @@ const load = Module._load;
 let states, cursor, finance, currency, alerts, calls, theme, ledger, effects, params, paymentCalls;
 let appStateListener, appStateRemoved = false;
 let dimensions = { width: 390, height: 844, fontScale: 1 };
-const hooks = { ...React, useEffect: (fn, deps) => {
+const hooks = { ...React, useSyncExternalStore: (_subscribe, get) => get(), useEffect: (fn, deps) => {
   const key = cursor++; const previous = states[key];
   if (!previous || !deps || deps.some((d, i) => d !== previous[i])) { states[key] = deps; effects.push(fn); }
 }, useRef: initial => { const key = cursor++; if (!(key in states)) states[key] = { current: initial }; return states[key]; }, useMemo: fn => fn(), useState: initial => {
@@ -23,11 +23,25 @@ function Ionicon(props) { return React.createElement('Ionicon', props); }
 Ionicon.glyphMap = {};
 function MaterialIcon(props) { return React.createElement('MaterialIcon', props); }
 Module._load = function(id, parent, main) {
-  if (id === '@/features/finance/components/FinanceDateField') return { FinanceDateField: 'DateField' };
-  if (id === '@/features/finance/components/FinanceButton') return { FinanceButton: 'AppButton' };
-  if (id === '@/features/finance/components/FinanceInput') return { FinanceInput: 'AppInput' };
+  // These layout/interaction tests inject domain stores. Native acknowledgement
+  // ordering is verified separately by real-store Phase 1 integration tests.
+  if (id.endsWith('/acknowledgedFinanceHandler')) return {acknowledgedFinanceHandler: (_label, action, contract) => (...args) => {
+    // Layout tests use an explicitly synchronous simulated acknowledgement.
+    // The real durable adapter and asynchronous receipt lifecycle have separate tests.
+    const result = contract?.mutate ? contract.mutate('submission-ui-fixture') : action(...args);
+    contract?.onCommitted?.(result);
+    return result;
+  }, afterFinanceSave: effect => effect()};
+  if (id.endsWith('/FinanceSubmissionReceipt')) return {FinanceSubmissionReceipt: () => null};
+  if (id.endsWith('/AccountDropdown') && path.basename(parent?.filename ?? '') !== 'TransferModal.tsx') return {AccountDropdown: 'AccountDropdown'};
+  if (id.endsWith('/FinanceSaveStatus')) return {FinanceSaveStatus: () => null};
+
+  if (id === '@/features/finance/components/FinanceDateField' || (id === './FinanceDateField' && path.basename(parent?.filename ?? '') === 'AddDebtModal.tsx')) return { FinanceDateField: 'DateField' };
+  if ((id === '@/features/finance/components/FinanceButton' || (id === './FinanceButton' && path.basename(parent?.filename ?? '') === 'AddDebtModal.tsx'))) return { FinanceButton: 'AppButton' };
+  if (id === '@/features/finance/components/FinanceInput' || (id === './FinanceInput' && ['AddAccountModal.tsx', 'AddDebtModal.tsx'].includes(path.basename(parent?.filename ?? '')))) return { FinanceInput: 'AppInput' };
+  if (id === '@/localization/LanguageProvider') return { useAppLanguage: () => ({ language: 'en', isRTL: false, t: (english, _arabic) => english }) };
   if (id === 'react') return hooks;
-  if (id === 'react-native') return { useWindowDimensions: () => dimensions, AppState: { addEventListener: (_event, callback) => { appStateListener = callback; return { remove() { appStateRemoved = true; } }; } }, View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', Modal: 'Modal', ScrollView: 'ScrollView', TextInput: 'TextInput', KeyboardAvoidingView: 'KeyboardAvoidingView',
+  if (id === 'react-native') return { useWindowDimensions: () => dimensions, AppState: { addEventListener: (_event, callback) => { appStateListener = callback; return { remove() { appStateRemoved = true; } }; } }, View: 'View', Text: 'Text', TouchableOpacity: 'TouchableOpacity', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', Modal: 'Modal', ScrollView: 'ScrollView', TextInput: 'TextInput', KeyboardAvoidingView: 'KeyboardAvoidingView',
     PanResponder: { create: handlers => ({ panHandlers: handlers }) }, Animated: { Value: function() { this.interpolate = () => 0; this.stopAnimation = () => {}; this.setValue = () => {}; }, timing: () => ({ start() {}, stop() {} }), loop: () => ({ start() {}, stop() {} }) },
     StyleSheet: { create: value => value, hairlineWidth: 1 }, Platform: { OS: 'android' },
     Alert: { alert: (...args) => alerts.push(args) } };
@@ -47,13 +61,18 @@ Module._load = function(id, parent, main) {
   if (id === '@expo/vector-icons') return { Ionicons: Ionicon, MaterialCommunityIcons: MaterialIcon };
   if (id === 'expo-router') return { useLocalSearchParams: () => params, useRouter: () => ({ push: href => calls.push({ push: href }), back: () => calls.push('back'), replace: () => calls.push('replace') }) };
   if (id === '@/features/finance/providers/RatesAutoRefreshProvider') return { useRatesAutoRefresh: () => ({ refresh: async () => null, isRefreshing: false, lastResult: null }) };
+  if (id === '@/features/finance/store/installmentsStorage') return { installmentsStorage: { subscribe: () => () => {}, getState: () => ({ hydration: 'ready', writeStatus: 'idle', contracts: [] }), hydrate: async () => undefined } };
   if (id === '@/features/finance/store/useFinancePreferences') return { useFinancePreferences: select => select(privacy) };
   if (id === '@/features/finance/components/AddTransactionModal') return { AddTransactionModal: 'AddTransactionModal' };
   if (id === '@/features/finance/components/TransferModal') return { TransferModal: 'TransferModal' };
   if (id === '@/theme') return { useTheme: () => theme, moduleColors: { finance: '#10B981' } };
   if (id === '@/components/ui') return { Card: 'Card', AppText: 'AppText', AppButton: 'AppButton', Screen: 'Screen', DateField: 'DateField', AppInput: 'AppInput', ChipSelect: 'ChipSelect' };
   if (id === '@/features/finance/components/AddAssetModal') return { AddAssetModal: 'AddAssetModal' };
-  if (id === '@/features/finance/components/FormModal') return { FormModal: 'FormModal' };
+  // Parent-screen layout tests treat this independently tested account form as a
+  // boundary, like the asset and transaction forms. The flattened hook mock
+  // cannot share its state slots with conditionally mounted LoanDetails children.
+  if (id === '@/features/finance/components/AddAccountModal') return { AddAccountModal: 'AddAccountModal' };
+  if ((id === '@/features/finance/components/FormModal' || (id === './FormModal' && path.basename(parent?.filename ?? '') === 'AddDebtModal.tsx'))) return { FormModal: 'FormModal' };
   if (id === '@/features/finance/store/paymentOperations') return Object.fromEntries(['confirmLoanReceipt', 'postLinkedPayment', 'editLinkedPayment', 'reverseLinkedPayment'].map(name => [name, (...args) => { calls.push(name); paymentCalls.push([name, ...args]); return { ok: true }; }]));
   if (id === '@/features/finance/components/AssetEntriesModal') return { AssetEntriesModal: 'AssetEntriesModal' };
   if (id === '@/features/finance/store/useLedgerStore') return { useLedgerHydrated: () => true, useLedgerStore: Object.assign(select => select(ledger), { getState: () => ledger }) };
@@ -105,6 +124,7 @@ beforeEach(() => {
   for (const method of ['addAsset', 'updateAsset', 'deleteAsset', 'addAssetEntry', 'updateAssetEntry', 'deleteAssetEntry']) {
     finance[method] = (...args) => calls.push([method, ...args]);
   }
+  finance.deleteAsset = id => { calls.push(['deleteAsset', id]); finance.assets = finance.assets.filter(asset => asset.id !== id); };
   currency = { baseCurrency: 'EGP', rates: { EGP: 1 }, verifiedCurrencies: ['EGP'],
     metals: { gold24PerGram: 7002.58, silverPerGram: 6127.2575 },
     metalSources: { gold24PerGram: 'manual', silverPerGram: 'manual' } };
@@ -233,6 +253,31 @@ test('Accounts reference uses the shared controls and retains exact record callb
 
 const { RatesModal } = require('../src/features/finance/components/RatesModal.tsx');
 const { AssetEntriesModal: RealEntries } = require('../src/features/finance/components/AssetEntriesModal.tsx');
+const { AddAccountModal: RealAddAccountModal } = require('../src/features/finance/components/AddAccountModal.tsx');
+// The real account form is exercised independently of the parent loan tree.
+// It retains draft edits within one session, and never resurrects an abandoned
+// opening date, confirmation, or amount when opening the next form.
+test('account form preserves its own draft and resets it on close/reopen without saving', () => {
+  const props = { visible: true, initialType: 'Bank', onClose: () => calls.push('close'), onSave: value => calls.push(['save', value]) };
+  const draw = p => { render(RealAddAccountModal, p); render(RealAddAccountModal, p); };
+  const openingDate = () => nodes('DateField').find(n => n.props.label === 'Opening date');
+  const amount = () => nodes('TextInput').find(n => n.props.keyboardType === 'decimal-pad');
+  const checkbox = () => nodes('TouchableOpacity').find(n => n.props.accessibilityRole === 'checkbox');
+  draw(props);
+  nodes('AppInput').find(n => n.props.placeholder?.startsWith('e.g. CIB')).props.onChangeText('Draft account');
+  openingDate().props.onChange('2026-11-01');
+  amount().props.onChangeText('12.34');
+  draw(props); checkbox().props.onPress(); draw(props);
+  assert.equal(openingDate().props.value, '2026-11-01');
+  assert.equal(checkbox().props.accessibilityState.checked, true);
+  assert.equal(amount().props.value, '12.34');
+  draw({ ...props, visible: false }); draw(props);
+  assert.equal(openingDate().props.value, '');
+  assert.equal(checkbox().props.accessibilityState.checked, false);
+  assert.equal(amount().props.value, '');
+  assert.equal(nodes('AppInput').find(n => n.props.placeholder?.startsWith('e.g. CIB')).props.value, '');
+  assert.deepEqual(calls, []);
+});
 const { default: LoansScreen } = require('../src/app/finance/loans.tsx');
 for (const view of [{ width: 390, fontScale: 1, direction: 'row' }, { width: 320, fontScale: 1, direction: 'column' }, { width: 390, fontScale: 1.6, direction: 'column' }]) {
   test('New loan keeps fields and Save/Cancel in one sheet at ' + view.width + ' / ' + view.fontScale, () => {
@@ -288,10 +333,12 @@ for (const category of ['gold', 'silver', 'foreign_currency']) test(category + '
   const asset = { ...gold, category, currencyCode: 'USD', entries: [{ id: 'e', amount: 10, date: '2026-11-01', note: 'Original note' }] };
   const props = { visible: true, asset, onClose: () => calls.push('close'), onSave: (...args) => calls.push(args), onDelete: (...args) => calls.push(args) };
   render(RealEntries, props); flushEffects(); render(RealEntries, props);
-  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Edit entry dated 2026-11-01').props.onPress(); render(RealEntries, props);
-  assert.deepEqual(nodes('TextInput').map(n => n.props.value), ['10', '2026-11-01', 'Original note']);
+  nodes('Pressable').find(n => /^Edit Entry dated\s+2026-11-01$/.test(n.props.accessibilityLabel ?? '')).props.onPress(); render(RealEntries, props);
+  assert.deepEqual(nodes('TextInput').map(n => n.props.value), ['10', 'Original note']);
+  assert.equal(nodes('DateField').find(n => n.props.label === 'Date').props.value, '2026-11-01');
+  assert.equal(nodes('DateField').find(n => n.props.label === 'Date').props.pickerOnly, true);
   nodes('AppButton').find(n => n.props.title === 'Cancel').props.onPress(); render(RealEntries, props);
-  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Delete entry dated 2026-11-01').props.onPress();
+  nodes('Pressable').find(n => /^Delete Entry dated\s+2026-11-01$/.test(n.props.accessibilityLabel ?? '')).props.onPress();
   render(RealEntries, props);
   nodes('AppButton').find(n => n.props.title === 'Cancel').props.onPress(); render(RealEntries, props);
   assert.equal(nodes('AppButton').some(n => n.props.title === 'Delete'), false); assert.deepEqual(calls, []); assert.equal(asset.entries.length, 1);
@@ -301,14 +348,19 @@ test('loan body opens exact read-only details; back and settlement Cancel never 
   const before = structuredClone(finance.loans);
   render(LoansScreen);
   nodes('Pressable').find(n => n.props.accessibilityLabel === 'Details for My Loan').props.onPress(); render(LoansScreen);
-  assert.ok(texts().includes('Remaining principal')); assert.ok(texts().includes('90,000.00 EGP'));
+  assert.ok(texts().includes('Remaining principal')); assert.ok(texts().includes('90,000.00 🇪🇬 EGP'));
   const modal = nodes('Modal').find(n => n.props.visible && nodes('AppText', n).some(t => t.props.children === 'My Loan'));
   assert.ok(modal); modal.props.onRequestClose(); render(LoansScreen);
+  assert.equal(nodes('AppButton').some(n => n.props.title === 'Record payment'), false);
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'Details for My Loan').props.onPress(); render(LoansScreen);
+  nodes('Pressable').find(n => n.props.accessibilityLabel === 'More loan actions').props.onPress(); render(LoansScreen);
   nodes('AppButton').find(n => n.props.title === 'Early settlement').props.onPress(); render(LoansScreen);
   assert.ok(texts().some(t => t.includes('not a lender settlement quote')));
-  const paymentModal = nodes('Modal').find(n => n.props.visible && nodes('AppText', n).some(t => t.props.children === 'Early settlement'));
+  const paymentModal = nodes('FormModal').find(n => n.props.visible && n.props.title === 'Early settlement');
+  assert.ok(paymentModal);
   assert.ok(nodes('TextInput', paymentModal).some(n => n.props.value === '108000'));
-  nodes('Modal').find(n => n.props.visible && nodes('AppText', n).some(t => t.props.children === 'Early settlement')).props.onRequestClose();
+  paymentModal.props.onClose(); render(LoansScreen);
+  assert.equal(nodes('FormModal').some(n => n.props.visible && n.props.title === 'Early settlement'), false);
   assert.deepEqual(finance.loans, before); assert.deepEqual(calls, []);
 });
 test('account details show actual balances and ordered transactions/transfers without mutation; privacy masks amounts', () => {
@@ -422,17 +474,23 @@ for (const direction of ['receivable', 'payable']) {
       const { debt, payment, before } = prepareDebtUi(direction);
       debtControl('Edit payment dated 03/11/2026', openControls()).props.onPress();
       render(DebtsScreen); render(DebtsScreen);
-      const editor = visibleDebtModal('Edit payment');
+      const editorTitle = direction === 'receivable' ? 'Edit collection' : 'Edit payment';
+      const editor = nodes('FormModal').find(n => n.props.visible && n.props.title === editorTitle);
+      assert.ok(editor, `Expected visible form: ${editorTitle}`);
       const inputs = nodes('TextInput', editor).map(n => n.props.value);
-      for (const value of ['25', '2026-11-03', 'Original payment']) assert.ok(inputs.includes(value), value);
+      for (const value of ['25', 'Original payment']) assert.ok(inputs.includes(value), value);
+      const dateField = nodes('DateField', editor).find(n => n.props.label === (direction === 'receivable' ? 'Collection date' : 'Payment date'));
+      assert.ok(dateField);
+      assert.equal(dateField.props.value, '2026-11-03');
+      assert.equal(dateField.props.pickerOnly, true);
       if (location === 'details') assert.equal(nodes('Modal').some(n => n.props.visible
         && nodes('Pressable', n).some(p => p.props.accessibilityLabel === 'Back to list')), false);
       assert.deepEqual(calls, []);
-      const save = nodes('Pressable', editor).find(n => nodes('AppText', n).some(t => t.props.children === 'Save changes'));
+      const save = nodes('AppButton', editor).find(n => n.props.title === 'Save changes');
       assert.ok(save); save.props.onPress(); render(DebtsScreen);
       assert.deepEqual(paymentCalls, [['editLinkedPayment', { entityType: 'debt', entityId: debt.id, paymentId: payment.id },
         { amount: 25, date: '2026-11-03', note: 'Original payment' }]]);
-      assert.equal(nodes('Modal').some(n => n.props.visible && nodes('AppText', n).some(t => t.props.children === 'Edit payment')), false);
+      assert.equal(nodes('FormModal').some(n => n.props.visible && n.props.title === editorTitle), false);
       assert.deepEqual(finance.debts, before);
     });
 
@@ -521,8 +579,8 @@ test('Finance cards offer one Debts shortcut and distinguish Total Balance, Net 
   assert.ok(texts().some(t => t.includes('remaining received loan principal')));
   nodes('Pressable').find(n => n.props.accessibilityLabel === 'Open Debts').props.onPress(); assert.deepEqual(calls, ['debts']);
   render(TotalCard, { ...props, amountsVisible: false });
-  assert.ok(texts().includes('••••••'));
-  assert.ok(texts().includes('Loan future contractual payments: ••••••'));
+  assert.equal(texts().includes('••••••'), false);
+  assert.equal(texts().some(t => t.startsWith('Loan future contractual payments:')), false);
   render(FinanceNetworks, { onPress: key => calls.push(key) });
   assert.equal(nodes('Pressable').filter(n => n.props.accessibilityLabel === 'Open Debts').length, 1);
 });
@@ -669,13 +727,14 @@ test('metal trailing zeros trim only in display, deliberate clear and invalid ed
 });
 
 const { TransferModal: RealTransferModal } = require('../src/features/finance/components/TransferModal.tsx');
-const transferFixture = { id: 'transfer', type: 'internal', fromAccountId: 'usd', toAccountId: 'egp',
+const transferFixture = { id: 'transfer', updatedAt: '2026-11-04T00:00:00Z', type: 'internal', fromAccountId: 'usd', toAccountId: 'egp',
   fromAmount: 10, toAmount: 550, amount: 10, currencyCode: 'USD', fromCurrencyCode: 'USD', toCurrencyCode: 'EGP', exchangeRate: 55, date: '2026-11-04', note: 'Keep note' };
 function prepareTransfer() {
   ledger.accounts = [{ id: 'usd', name: 'USD bank', currencyCode: 'USD', type: 'bank' }, { id: 'egp', name: 'EGP bank', currencyCode: 'EGP', type: 'bank' }, { id: 'card', name: 'USD card', currencyCode: 'USD', type: 'credit_card' }];
+  ledger.transfers = [structuredClone(transferFixture)];
   ledger.updateTransfer = (id, values) => { calls.push(['update', id, values]); return true; };
   ledger.addTransfer = values => { calls.push(['add', values]); return 'new'; };
-  currency.rates = { USD: 55, EGP: 1 }; dimensions = { width: 390, height: 844, fontScale: 1 };
+  currency.rates = { USD: 55, EGP: 1 }; currency.verifiedCurrencies = ['USD', 'EGP']; currency.rateSources = { USD: 'manual', EGP: 'live' }; dimensions = { width: 390, height: 844, fontScale: 1 };
   return { visible: true, transfer: transferFixture, onClose: () => calls.push('close') };
 }
 test('transfer account dropdowns are adjacent with amounts before date/note, and edit preserves the original payload', () => {
@@ -737,11 +796,48 @@ test('transfer edit keeps a saved custom rate through effects, live rate refresh
   assert.equal(nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate').props.value, '54.321123');
   settleTransfer({ ...props, visible: false });
   const second = { ...props, transfer: { ...transferFixture, id: 'second', fromAccountId: 'egp', toAccountId: 'usd', fromAmount: 550, toAmount: 11, fromCurrencyCode: 'EGP', toCurrencyCode: 'USD', exchangeRate: 0.02 } };
+  ledger.transfers.push(structuredClone(second.transfer));
   settleTransfer(second);
   assert.equal(nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate').props.value, '0.02');
   nodes('AppButton').find(n => n.props.title === 'Save changes').props.onPress();
   assert.equal(calls[0][1], 'second'); assert.equal(calls[0][2].fromAccountId, 'egp'); assert.equal(calls[0][2].toAccountId, 'usd');
   assert.equal(calls[0][2].toAmount, 11);
+});
+test('new cross-currency transfer never prefills an unverified placeholder or one; manual entry remains usable', () => {
+  const props = { ...prepareTransfer(), transfer: null };
+  currency.verifiedCurrencies = ['EGP']; currency.rateSources = { USD: 'default', EGP: 'live' };
+  settleTransfer(props);
+  const rate = () => nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate');
+  assert.equal(rate().props.value, '');
+  assert.match(rate().props.accessibilityHint, /No confirmed suggested rate/);
+  nodes('AppInput').find(n => n.props.accessibilityLabel === 'Amount to transfer').props.onChangeText('10');
+  settleTransfer(props);
+  nodes('AppButton').find(n => n.props.title === 'Save transfer').props.onPress();
+  assert.deepEqual(calls, []);
+  rate().props.onChangeText('54.25'); settleTransfer(props);
+  currency.verifiedCurrencies = ['USD', 'EGP']; currency.rateSources = { USD: 'live', EGP: 'live' }; currency.rates = { USD: 58, EGP: 1 };
+  settleTransfer(props);
+  assert.equal(rate().props.value, '54.25');
+  nodes('AppButton').find(n => n.props.title === 'Save transfer').props.onPress();
+  assert.equal(calls[0][0], 'add'); assert.equal(calls[0][1].exchangeRate, 54.25); assert.equal(calls[0][1].toAmount, 542.5);
+});
+for (const field of ['fromAccountId', 'toAccountId']) test('editing a transfer with an archived '+field+' does not silently retarget it', () => {
+  const props = prepareTransfer();
+  const affected = props.transfer[field];
+  ledger.accounts = [...ledger.accounts, { id: 'other', name: 'Other bank', type: 'bank', currencyCode: 'USD' }];
+  settleTransfer(props);
+  ledger.accounts = ledger.accounts.map(a => a.id === affected ? {...a, archived: true} : a);
+  settleTransfer(props);
+  assert.equal(nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate').props.value, '');
+  nodes('AppButton').find(n => n.props.title === 'Save changes').props.onPress();
+  assert.deepEqual(calls, []);
+});
+test('transfer closing and reopening discards an unsaved rate and restores the saved rate', () => {
+  const props = prepareTransfer(); settleTransfer(props);
+  const rate = () => nodes('AppInput').find(n => n.props.accessibilityLabel === 'Rate');
+  rate().props.onChangeText('63'); settleTransfer(props); assert.equal(rate().props.value, '63');
+  settleTransfer({...props, visible:false}); settleTransfer(props);
+  assert.equal(rate().props.value, '55'); assert.deepEqual(calls, []);
 });
 test('credit-card transfer mode keeps matching-account validation and a fixed rate of one', () => {
   const props = prepareTransfer(); props.transfer = { ...transferFixture, type: 'credit_card_payment', toAccountId: 'card', toCurrencyCode: 'USD', exchangeRate: 1, toAmount: 10 };
@@ -769,7 +865,7 @@ for (const [mode, colors] of [['light', lightColors], ['dark', darkColors]]) {
     const card = style(nodes('Card')[0].props.style);
     assert.equal(card.backgroundColor, colors.finance.account.surface); assert.equal(card.borderColor, colors.finance.account.border);
     const body = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Details for Household bank');
-    for (const value of ['Household bank', 'Bank · EGP', '1,234.56 EGP']) assert.ok(nodes('AppText', body).some(n => n.props.children === value));
+    for (const value of ['Household bank', 'Bank · 🇪🇬 EGP', '1,234.56 EGP']) assert.ok(nodes('AppText', body).some(n => n.props.children === value));
     assert.equal(nodes('Pressable', body).length, 1);
     body.props.onPress(); nodes('Pressable').find(n => n.props.accessibilityLabel === 'Edit Household bank').props.onPress();
     assert.deepEqual(calls, ['details', 'edit']);
@@ -781,7 +877,7 @@ test('asset color variants change surfaces, not the approved content geometry or
   for (const colors of [lightColors, darkColors]) {
     theme.colors = colors; render(AssetRow, rowProps(gold));
     const card = style(nodes('Card')[0].props.style);
-    assert.equal(card.backgroundColor, colors.finance.asset.surface); assert.equal(card.borderColor, colors.finance.asset.border);
+    assert.equal(card.backgroundColor, colors.finance.account.surface); assert.equal(card.borderColor, colors.finance.account.border);
     const body = nodes('Pressable').find(n => n.props.accessibilityLabel.startsWith('Movements for'));
     assert.ok(nodes('AppText', body).some(n => n.props.children === '≈ 12,254.52 EGP'));
     assert.equal(nodes('Pressable', body).length, 1);
@@ -920,7 +1016,7 @@ test('Net Worth label and value are bolder while the one global eye, formula and
   assert.ok(texts().some(t => t.includes('Future contractual installments')));
   render(TotalCard, { ...props, amountsVisible: false });
   assert.equal(texts().some(t => t.includes('1,200.00') || t.includes('1,334.00') || t.includes('200.00 EGP')), false);
-  assert.ok(texts().includes('Loan future contractual payments: ••••••'));
+  assert.equal(texts().some(t => t.startsWith('Loan future contractual payments:')), false);
 });
 for (const view of [{ width: 390, fontScale: 1, direction: 'row' }, { width: 320, fontScale: 1, direction: 'column' }, { width: 390, fontScale: 1.6, direction: 'column' }]) {
   test('three transfer fields render in ' + view.direction + ' at ' + view.width + ' / ' + view.fontScale, () => {
@@ -956,14 +1052,18 @@ test('incomplete transfer selection keeps the amount row coherent without a made
   assert.deepEqual(calls, []);
 });
 
-test('Date and Note remain the next fields after the transfer row, with their original edit values', () => {
+test('Settlement fields precede Date and Note, with original edit values', () => {
   const props = prepareTransfer(); settleTransfer(props);
   const children = nodes('FormModal')[0].props.children.props.children;
   const rowIndex = children.findIndex(n => n?.props?.testID === 'transfer-amounts-row');
-  assert.ok(rowIndex >= 0); assert.equal(children[rowIndex + 1].type, 'DateField');
-  assert.equal(children[rowIndex + 1].props.value, '2026-11-04');
-  assert.equal(children[rowIndex + 2].type, 'AppInput'); assert.equal(children[rowIndex + 2].props.label, 'Note (optional)');
-  assert.equal(children[rowIndex + 2].props.value, 'Keep note');
+  const dateIndex = children.findIndex(n => n?.type === 'DateField');
+  assert.ok(rowIndex >= 0 && dateIndex > rowIndex + 1);
+  const settlement = nodes('View').find(n => n.props.testID === 'transfer-settlement-row');
+  assert.ok(settlement);
+  assert.ok(nodes('AppInput', settlement).some(n => n.props.accessibilityLabel === 'Additional transfer fee'));
+  assert.equal(children[dateIndex].props.value, '2026-11-04');
+  assert.equal(children[dateIndex + 1].props.label, 'Note (optional)');
+  assert.equal(children[dateIndex + 1].props.value, 'Keep note');
 });
 test('manual Rate entry remains numeric-only and submits its full precision through the unchanged transfer handler', () => {
   const props = prepareTransfer(); settleTransfer(props);
@@ -1255,4 +1355,19 @@ test('all eight Home shortcuts preserve existing destinations and Transfers open
     if (destination) assert.deepEqual(calls, [{ push: destination }]);
     else { assert.deepEqual(calls, []); assert.ok(nodes('TransferModal').some(n => n.props.visible)); }
   }
+});
+
+test('installment dashboard card reveals only the monthly scheduled figure and hides it with the eye', () => {
+  const props = { ...compactSummaryProps(), scheduledThisMonth: 123.45, amountsVisible: true };
+  render(TotalCard, props);
+  const card = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Open Installments');
+  assert.ok(card);
+  assert.ok(nodes('AppText', card).some(n => n.props.children === '123.45 EGP'));
+  assert.equal(card.props.accessibilityHint, 'Scheduled this month');
+  assert.equal(nodes('AppText', card).some(n => n.props.children === 'Scheduled this month'), false);
+  render(TotalCard, { ...props, amountsVisible: false });
+  assert.ok(!texts().some(value => value.includes('123.45') || value.includes('Scheduled this month')));
+  render(TotalCard, { ...props, scheduledThisMonth: null });
+  const unavailable = nodes('Pressable').find(n => n.props.accessibilityLabel === 'Open Installments');
+  assert.ok(nodes('AppText', unavailable).some(n => n.props.children === 'Unavailable'));
 });

@@ -95,8 +95,8 @@ export default function FinanceReportsScreen() {
             style={{ width: 45, height: 45, alignItems: 'center', justifyContent: 'center' }}>
             <MaterialCommunityIcons name="arrow-left" size={27} color="#FFFFFF" />
           </Pressable>
-          <AppText variant="h1" numberOfLines={2} style={{ color: '#FFFFFF', textAlign: 'center', fontSize: narrow ? 17 : 20, flex: 1 }}>
-            {t('Tomorrow Finance Report', 'التقارير المالية')}
+          <AppText variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68} style={{ color: '#FFFFFF', textAlign: 'center', fontSize: narrow ? 15 : 18, flex: 1, fontWeight: '700' }}>
+            Tomorrow Finance Report
           </AppText>
           <View style={{ width: 45, alignItems: 'center' }}>
             <MaterialCommunityIcons name="file-chart-outline" size={25} color="#CBD5E1" />
@@ -137,10 +137,10 @@ export default function FinanceReportsScreen() {
                   accessibilityRole="button" accessibilityLabel={t(`Open ${item.label} report`, `فتح تقرير ${reportLabel(item.label)}`)}
                   onPress={() => navigate(item.label)}
                   style={{ backgroundColor: '#FFFFFF', borderWidth: 1.3, borderColor: '#B68C42', borderRadius: 14,
-                    minHeight: cardHeight, marginTop: 9, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                    height: cardHeight, marginTop: 9, paddingHorizontal: 5, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                   <ReportIcon name={item.icon} size={compact ? 42 : 47}
                     badge={item.label === 'Debts Payable' ? 'minus' : item.label === 'Debts Receivable' ? 'plus' : undefined} />
-                  <AppText style={{ color: NAVY, fontSize: 15, fontWeight: '700', textAlign: 'center' }}>
+                  <AppText numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.72} style={{ color: NAVY, fontSize: item.label.startsWith('Debts') ? 12 : 15, lineHeight: item.label.startsWith('Debts') ? 16 : 20, fontWeight: '700', textAlign: 'center' }}>
                     {reportLabel(item.label)}
                   </AppText>
                 </Pressable>;

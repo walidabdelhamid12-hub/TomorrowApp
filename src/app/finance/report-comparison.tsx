@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -66,6 +67,7 @@ function Metric({ label, amount, currency, color }: { label: string; amount: num
 /** Read-only comparison preview. Export and statement are intentionally not wired in this stage. */
 export default function ComparisonReportScreen() {
   const router = useRouter();
+  const { t, language } = useAppLanguage();
   const currencyReady = useCurrencyHydrated();
   const baseCurrency = useCurrencyStore(state => state.baseCurrency);
   const rates = useCurrencyStore(state => state.rates);
@@ -108,10 +110,12 @@ export default function ComparisonReportScreen() {
         accounts: new Map(accounts.map(account => [account.id, account.name])),
         categories: new Map(categories.map(category => [category.id, category.name])),
       };
-      if (allAccounts) return buildConvertedComparisonExportTable(comparison, income, expenses, activeCurrency, fx, names);
-      return buildComparisonExportTable(comparison, income, expenses, activeCurrency, names);
+      const table = allAccounts ? buildConvertedComparisonExportTable(comparison, income, expenses, activeCurrency, fx, names) : buildComparisonExportTable(comparison, income, expenses, activeCurrency, names);
+      if (language !== 'ar') return table;
+      const labels: Record<string, string> = { Date: 'التاريخ', Type: 'النوع', Account: 'الحساب', Category: 'التصنيف', Description: 'الوصف', Amount: 'المبلغ', Currency: 'العملة', 'Original Amount': 'المبلغ الأصلي', 'Original Currency': 'العملة الأصلية', 'Converted Amount': 'المبلغ المحوّل', 'Display Currency': 'عملة العرض' };
+      return { ...table, title: 'مقارنة الدخل والمصروفات', notice: 'مقارنة موثقة للدخل والمصروفات بعد الاستردادات. التحويلات للعرض فقط ولا تُرحّل مبالغ مالية. العملة: ' + activeCurrency, columns: table.columns.map(label => labels[label] ?? label), rows: table.rows.map(row => row.map((cell, index) => index === 1 && cell === 'Income' ? 'دخل' : index === 1 && cell === 'Expenses' ? 'مصروفات' : cell)) };
     } catch { return null; }
-  }, [ready, currencyReady, comparison, selected, converted, context, period, filters, activeCurrency, fx, accounts, categories, allAccounts]);
+  }, [ready, currencyReady, comparison, selected, converted, context, period, filters, activeCurrency, fx, accounts, categories, allAccounts, language]);
   const statementRoute = () => router.push({
     pathname: '/finance/statement-comparison',
     params: {
@@ -123,40 +127,45 @@ export default function ComparisonReportScreen() {
   } as Href);
 
   return <View style={{ flex: 1 }}><Screen scroll contentContainerStyle={{ paddingBottom: 20 }}>
-    <View style={{ backgroundColor: NAVY, borderRadius: 12, padding: 12, marginBottom: 12 }}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()}
-        style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Ionicons name="arrow-back" color="white" size={22} />
-        <AppText variant="bodyStrong" style={{ color: 'white', fontSize: 17 }}>Tomorrow Finance</AppText>
-      </Pressable>
-      <AppText variant="bodyStrong" style={{ color: '#BFDBFE' }}>Income vs Expenses Comparison</AppText>
+    <View style={{ backgroundColor: NAVY, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 }}>
+      <View style={{ minHeight: 40, justifyContent: 'center', alignItems: 'center' }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("Back", "رجوع")} onPress={() => router.back()}
+          style={{ position: 'absolute', left: 0, top: 0, width: 40, height: 40, alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
+          <Ionicons name="arrow-back" color="white" size={22} />
+        </Pressable>
+        <AppText variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68}
+          style={{ color: 'white', fontSize: 16, fontWeight: '700', textAlign: 'center', marginHorizontal: 44 }}>
+          Tomorrow Finance Report
+        </AppText>
+      </View>
+      <AppText variant="bodyStrong" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={{ color: '#BFDBFE', alignSelf: 'stretch', textAlign: 'center', writingDirection: language === 'ar' ? 'rtl' : 'ltr', fontSize: 15, marginTop: 2 }}>{t("Income vs Expenses Comparison", "مقارنة الدخل والمصروفات")}</AppText>
     </View>
     <ReportDashboardDates period={period} onChange={setPeriod} />
     <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-      <ReportPicker label="Account" value={accountId} onSelect={setAccountId} options={[{ id: '', label: 'All accounts' }, ...accounts.map(a => ({ id: a.id, label: `${a.name} ${currencyLabel(a.currencyCode)}` }))]} />
-      <ReportPicker label="Category" value={categoryId} onSelect={setCategoryId} options={[{ id: '', label: 'All categories' }, ...categories.map(c => ({ id: c.id, label: c.name, icon: (foodIcon(c.name) ?? c.icon) as keyof typeof Ionicons.glyphMap, color: c.color }))]} />
+      <ReportPicker label={t("Account", "الحساب")} value={accountId} onSelect={setAccountId} options={[{ id: '', label: t('All accounts', 'كل الحسابات') }, ...accounts.map(a => ({ id: a.id, label: `${a.name} ${currencyLabel(a.currencyCode)}` }))]} />
+      <ReportPicker label={t("Category", "التصنيف")} value={categoryId} onSelect={setCategoryId} options={[{ id: '', label: t('All categories', 'كل التصنيفات') }, ...categories.map(c => ({ id: c.id, label: c.name, icon: (foodIcon(c.name) ?? c.icon) as keyof typeof Ionicons.glyphMap, color: c.color }))]} />
     </View>
     {!ready || !currencyReady || !comparison ? <ActivityIndicator color={NAVY} /> : <>
-      {!comparison.verified && <AppText accessibilityRole="alert" style={{ color: RED, marginBottom: 8 }}>Incomplete data: {comparison.unknown.length} unverified transaction(s). Values are known subtotals only.</AppText>}
+      {!comparison.verified && <AppText accessibilityRole="alert" style={{ color: RED, marginBottom: 8 }}>{t("Incomplete data:", "بيانات غير مكتملة:")} {comparison.unknown.length} {t("unverified transaction(s). Values are known subtotals only.", "معاملة غير موثقة. القيم المعروضة إجماليات فرعية مؤكدة فقط.")}</AppText>}
       {!converted && <AppText accessibilityRole="alert" style={{ color: RED, marginBottom: 8 }}>
-        Comparison totals unavailable: incomplete transactions or missing verified exchange rates. No estimated cross-currency total is shown.
+        {t("Comparison totals unavailable: incomplete transactions or missing verified exchange rates. No estimated cross-currency total is shown.", "إجماليات المقارنة غير متاحة بسبب معاملات غير مكتملة أو أسعار صرف غير موثقة. لن نعرض إجماليًا تقديريًا عبر العملات.")}
       </AppText>}
       <View style={{ flexDirection: 'row', gap: 7, marginBottom: 12 }}>
-        <Metric label="Total Income" amount={selected ? selected.income : null} currency={activeCurrency} color={GREEN} />
-        <Metric label="Total Expenses" amount={selected ? selected.expenses : null} currency={activeCurrency} color={RED} />
-        <Metric label="Net Difference" amount={selected ? selected.netDifference : null} currency={activeCurrency} color={NAVY} />
+        <Metric label={t("Total Income", "إجمالي الدخل")} amount={selected ? selected.income : null} currency={activeCurrency} color={GREEN} />
+        <Metric label={t("Total Expenses", "إجمالي المصروفات")} amount={selected ? selected.expenses : null} currency={activeCurrency} color={RED} />
+        <Metric label={t("Net Difference", "صافي الفرق")} amount={selected ? selected.netDifference : null} currency={activeCurrency} color={NAVY} />
       </View>
       <View style={{ padding: 12, backgroundColor: 'white', borderColor: '#DEE7F0', borderWidth: 1, borderRadius: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <AppText variant="bodyStrong" style={{ flex: 1, color: NAVY }}>Comparison Analysis</AppText>
+          <AppText variant="bodyStrong" style={{ flex: 1, color: NAVY }}>{t("Comparison Analysis", "تحليل المقارنة")}</AppText>
         </View>
         <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
-          {(['vertical', 'horizontal', 'trend'] as const).map(value => <Pressable key={value} accessibilityRole="button" accessibilityLabel={`${value} analysis`} onPress={() => setMode(value)}
+          {(['vertical', 'horizontal', 'trend'] as const).map(value => <Pressable key={value} accessibilityRole="button" accessibilityLabel={t(`${value} analysis`, value === 'vertical' ? 'تحليل عمودي' : value === 'horizontal' ? 'تحليل أفقي' : 'تحليل الاتجاه')} onPress={() => setMode(value)}
             style={{ flex: 1, paddingVertical: 9, alignItems: 'center', borderRadius: 8, backgroundColor: mode === value ? NAVY : '#E8EEF5' }}>
-            <AppText variant="caption" style={{ color: mode === value ? 'white' : NAVY, fontWeight: '700' }}>{value[0].toUpperCase() + value.slice(1)}</AppText>
+            <AppText variant="caption" style={{ color: mode === value ? 'white' : NAVY, fontWeight: '700' }}>{value === 'vertical' ? t('Vertical', 'عمودي') : value === 'horizontal' ? t('Horizontal', 'أفقي') : t('Trend', 'الاتجاه')}</AppText>
           </Pressable>)}
         </View>
-        {!converted ? <AppText accessibilityRole="alert" color="textSecondary">Chart unavailable until verified rates and transactions are available.</AppText> : mode === 'trend' ? (trend?.verified ? <TrendLines points={trend.points} max={trendMax} /> : <AppText accessibilityRole="alert" color="textSecondary">Trend unavailable: date buckets could not be reconciled to the exact report totals.</AppText>) :
+        {!converted ? <AppText accessibilityRole="alert" color="textSecondary">{t("Chart unavailable until verified rates and transactions are available.", "الرسم البياني غير متاح حتى تتوفر معاملات وأسعار صرف موثقة.")}</AppText> : mode === 'trend' ? (trend?.verified ? <TrendLines points={trend.points} max={trendMax} /> : <AppText accessibilityRole="alert" color="textSecondary">{t("Trend unavailable: date buckets could not be reconciled to the exact report totals.", "الاتجاه غير متاح لتعذر مطابقة الفترات مع إجماليات التقرير.")}</AppText>) :
           namedRows.length ? <ScrollView horizontal={mode === 'vertical'}>
             <View style={mode === 'vertical' ? { flexDirection: 'row', alignItems: 'flex-end', gap: 12, minHeight: 145 } : { gap: 10 }}>
               {converted && namedRows.map(item => <View key={`${item.kind}:${item.categoryId}`} style={mode === 'vertical' ? { width: 62, alignItems: 'center', gap: 5 } : { minWidth: 200, gap: 3 }}>
@@ -165,19 +174,19 @@ export default function ComparisonReportScreen() {
                 <AppText variant="caption" numberOfLines={2} style={{ fontSize: 10, textAlign: mode === 'vertical' ? 'center' : 'left' }}>{item.label}</AppText>
               </View>)}
             </View>
-          </ScrollView> : <AppText color="textSecondary">No categories for this selection.</AppText>}
-        <AppText variant="caption" style={{ marginTop: 10, color: NAVY }}>Green: Income   Red: Expenses</AppText>
+          </ScrollView> : <AppText color="textSecondary">{t("No categories for this selection.", "لا توجد تصنيفات لهذا الاختيار.")}</AppText>}
+        <AppText variant="caption" style={{ marginTop: 10, color: NAVY }}>{t("Green: Income   Red: Expenses", "الأخضر: الدخل   الأحمر: المصروفات")}</AppText>
       </View>
-      <View style={{ marginTop: 12 }}><AppText variant="bodyStrong" style={{ color: NAVY }}>Categories</AppText>
+      <View style={{ marginTop: 12 }}><AppText variant="bodyStrong" style={{ color: NAVY }}>{t("Categories", "التصنيفات")}</AppText>
         {converted && namedRows.map(item => <View key={`${item.kind}:${item.categoryId}`} style={{ flexDirection: 'row', paddingVertical: 8, gap: 8, borderBottomWidth: 1, borderBottomColor: '#E8EEF5' }}>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>{item.label === 'Food' && <Ionicons name="restaurant-outline" size={16} color={NAVY} />}<AppText>{item.label}</AppText></View><AppText style={{ color: item.kind === 'income' ? GREEN : RED }}>{formatAmount(item.amount, activeCurrency)}</AppText>
         </View>)}
       </View>
       <View style={{ marginTop: 12 }}>
         {exportTable ? <ComparisonExportActions table={exportTable} statement={statementRoute} /> : <>
-          <Pressable accessibilityRole="button" accessibilityLabel="View Statement" onPress={statementRoute}
+          <Pressable accessibilityRole="button" accessibilityLabel={t("View Statement", "عرض كشف الحساب")} onPress={statementRoute}
             style={{ minHeight: 46, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#DCE5EF', borderRadius: 9, backgroundColor: 'white' }}>
-            <AppText variant="bodyStrong" style={{ color: NAVY }}>View Statement</AppText>
+            <AppText variant="bodyStrong" style={{ color: NAVY }}>{t("View Statement", "عرض كشف الحساب")}</AppText>
           </Pressable>
           <AppText variant="caption" color="textSecondary" style={{ marginTop: 6 }}>
             PDF, Excel and Share are unavailable until transactions, exchange rates and names are verified.

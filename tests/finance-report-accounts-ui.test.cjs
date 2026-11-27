@@ -20,6 +20,7 @@ const hooks = { ...React, useEffect: () => {}, useMemo: fn => fn(), useState: in
 } };
 Module._load = function(id, parent, main) {
   if (id === 'react') return hooks;
+  if (id === '@/localization/LanguageProvider') return { useAppLanguage: () => ({ language: 'en', isRTL: false, setLanguage: () => {}, t: (english) => english }) };
   if (id === '@react-native-community/datetimepicker') return { __esModule: true, default: 'DateTimePicker' };
   if (id.endsWith('/ReportTableActions')) return { ReportTableActions: props => React.createElement('ReportTableActions', props) };
   if (id === 'react-native') return { useWindowDimensions: () => ({ width: 390, height: 844, fontScale: 1 }), Platform: { OS: 'android' }, Modal: 'Modal', ScrollView: 'ScrollView', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator' };
@@ -90,7 +91,7 @@ function text(node) {
 }
 const allText = () => nodes('AppText').map(text).join('\n');
 const press = label => {
-  const node = nodes('Pressable').find(item => item.props.accessibilityLabel === label);
+  const node = nodes('Pressable').find(item => typeof item.props.accessibilityLabel === 'string' && item.props.accessibilityLabel.toLowerCase() === label.toLowerCase());
   assert.ok(node, label); assert.ok(!node.props.disabled, label + ' enabled'); node.props.onPress();
 };
 const account = (extra = {}) => ({ id: 'bank', name: 'Bank', currencyCode: 'EGP', type: 'bank',

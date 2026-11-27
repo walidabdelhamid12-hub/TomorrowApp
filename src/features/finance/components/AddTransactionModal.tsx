@@ -1,4 +1,8 @@
+import { FinanceSubmissionReceipt } from './FinanceSubmissionReceipt';
+import { formPayload, matchesUniqueRevision, submitFinanceForm } from './explicitFinanceForm';
+import { afterFinanceSave } from '@/features/finance/components/acknowledgedFinanceHandler';
 import { FinanceModalHeader } from './FinanceModalHeader';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { FinanceDateField as DateField } from '@/features/finance/components/FinanceDateField';
 import { FinanceInput as AppInput } from '@/features/finance/components/FinanceInput';
 import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
@@ -25,9 +29,8 @@ import { HistoricalFxField } from '@/features/finance/components/HistoricalFxFie
 import { DirectHistoricalFxField } from '@/features/finance/components/DirectHistoricalFxField';
 import { getHistoricalRate, createManualHistoricalRate } from '@/services/historicalRates';
 import { isValidHistoricalFx } from '@/features/finance/utils/historicalFx';
-import type { HistoricalFxSnapshot, DirectHistoricalFxSnapshot } from '@/features/finance/types/ledger';
 import { ScanDocumentButton } from '@/features/finance/components/ScanDocumentButton';
-import { getCurrencyLabel } from '@/features/finance/constants/currencies';
+import { getCurrencyLabel, getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import type { ScanResult } from '@/features/finance/scanner/types';
 import { useLedgerStore } from '@/features/finance/store/useLedgerStore';
 import { useFinanceStore } from '@/features/finance/store/useFinanceStore';
@@ -35,6 +38,10 @@ import { isProtectedTransaction } from '@/features/finance/utils/paymentTransact
 import type {
   Category,
   NewCategoryInput,
+  NewTransactionInput,
+  TransactionPatch,
+  HistoricalFxSnapshot,
+  DirectHistoricalFxSnapshot,
   Transaction,
   TransactionType,
 } from '@/features/finance/types/ledger';
@@ -43,7 +50,6 @@ import { calculateCrossCurrency, calculateDirectHistoricalRate } from '@/feature
 import { formatMoney } from '@/features/finance/utils/money';
 import { resolveAmountExpression } from '@/features/finance/utils/amountExpression';
 import { evaluateExpression } from '@/features/finance/utils/calculator';
-import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { moduleColors, useTheme } from '@/theme';
 import { isValidISODate } from '@/utils/input';
 import { shouldStackFinanceFields } from '../utils/formLayout';
@@ -106,11 +112,16 @@ export function AddTransactionModal({
   visible,
   onClose,
   transaction,
+  fixedKind,
+  initialRefund = false,
 }: AddTransactionModalProps) {
   const { colors, spacing, radius } = useTheme();
+  const { t } = useAppLanguage();
   const { width, fontScale } = useWindowDimensions();
   const stackFields = shouldStackFinanceFields(width, fontScale);
   const fieldColumn = { flex: stackFields ? 0 : 1, minWidth: 0, gap: 4 };
+  const stackRefundFields = stackFields || width / fontScale < 460;
+  const refundFieldColumn = { flex: stackRefundFields ? 0 : 1, minWidth: 0, gap: 4 };
 
   const accounts = useLedgerStore((s) => s.accounts);
   const categories = useLedgerStore((s) => s.categories);
@@ -121,6 +132,7 @@ export function AddTransactionModal({
   const updateTransaction = useLedgerStore((s) => s.updateTransaction);
   const addCategory = useLedgerStore((s) => s.addCategory);
   const updateCategory = useLedgerStore((s) => s.updateCategory);
+  const archiveCategory = useLedgerStore((s) => s.archiveCategory);
   const deleteCategory = useLedgerStore((s) => s.deleteCategory);
 
   const [type, setType] = useState<TransactionType>('expense');
@@ -170,10 +182,6 @@ export function AddTransactionModal({
   const [categoryFormVisible, setCategoryFormVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
-  const [pendingDeleteCategory, setPendingDeleteCategory] =
-    useState<Category | null>(null);
-  const [replacementCategoryId, setReplacementCategoryId] = useState('');
-
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryIcon, setNewCategoryIcon] = useState<string>(
     ICON_OPTIONS[0],
@@ -182,49 +190,52 @@ export function AddTransactionModal({
 
   const isEditingRefund = transaction?.entryType === 'refund';
 
-  useEffect(() => {
+  // Initialize a draft only when its modal session changes. A render-phase
+  // guarded update avoids committing the previous transaction's draft.
+  const [loadedTransactionDraft, setLoadedTransactionDraft] = useState<{
+    visible: boolean; transaction: Transaction | null | undefined;
+  } | null>(null);
+  if (!loadedTransactionDraft || loadedTransactionDraft.visible !== visible || loadedTransactionDraft.transaction !== transaction) {
+    setLoadedTransactionDraft({ visible, transaction });
     if (!visible) {
       setFxReadyFor(null);
-      return;
-    }
-
-    setError(undefined);
-    setCategoryManagerVisible(false);
-    setTypePickerOpen(false);
-    setCategoryPickerOpen(false);
-    setAttachPickerOpen(false);
-    setScanSource(null);
-    setConfirmUnusedDeleteCategory(null);
-    setCategoryFormVisible(false);
-    setEditingCategory(null);
-    setPendingDeleteCategory(null);
-    setReplacementCategoryId('');
-
-    if (transaction) {
-      setType(transaction.type);
-      setEntryMode(transaction.entryType === 'refund' ? 'refund' : 'normal');
-      setAmount(String(transaction.originalAmount ?? transaction.amount));
-      setTransactionCurrency(transaction.originalCurrencyCode ?? transaction.currencyCode);
-      setActualAccountDebit(transaction.originalCurrencyCode ? String(transaction.amount) : '');
-      setAccountId(transaction.accountId);
-      setCategoryId(transaction.categoryId);
-      setOriginalTransactionId(transaction.relatedTransactionId ?? '');
-      setDate(transaction.date);
-      setNote(transaction.note ?? '');
     } else {
-      setType('expense');
-      setEntryMode('normal');
-      setAmount('');
-      setTransactionCurrency('');
-      setActualAccountDebit('');
-      setAccountId('');
-      setCategoryId('');
-      setOriginalTransactionId('');
-      setDate(todayISO());
-      setNote('');
+      setError(undefined);
+      setCategoryManagerVisible(false);
+      setTypePickerOpen(false);
+      setCategoryPickerOpen(false);
+      setAttachPickerOpen(false);
+      setScanSource(null);
+      setConfirmUnusedDeleteCategory(null);
+      setCategoryFormVisible(false);
+      setEditingCategory(null);
+
+      if (transaction) {
+        setType(transaction.type);
+        setEntryMode(transaction.entryType === 'refund' ? 'refund' : 'normal');
+        setAmount(String(transaction.originalAmount ?? transaction.amount));
+        setTransactionCurrency(transaction.originalCurrencyCode ?? transaction.currencyCode);
+        setActualAccountDebit(transaction.originalCurrencyCode ? String(transaction.amount) : '');
+        setAccountId(transaction.accountId);
+        setCategoryId(transaction.categoryId);
+        setOriginalTransactionId(transaction.relatedTransactionId ?? '');
+        setDate(transaction.date);
+        setNote(transaction.note ?? '');
+      } else {
+        setType(fixedKind ?? 'expense');
+        setEntryMode(initialRefund && fixedKind === 'expense' ? 'refund' : 'normal');
+        setAmount('');
+        setTransactionCurrency('');
+        setActualAccountDebit('');
+        setAccountId('');
+        setCategoryId('');
+        setOriginalTransactionId('');
+        setDate(todayISO());
+        setNote('');
+      }
+      setFxReadyFor(transaction?.id ?? 'new');
     }
-    setFxReadyFor(transaction?.id ?? 'new');
-  }, [visible, transaction]);
+  }
 
   const selectableAccounts = useMemo(
     () =>
@@ -235,8 +246,8 @@ export function AddTransactionModal({
   );
 
   const kindCategories = useMemo(
-    () => categories.filter((category) => category.kind === type),
-    [categories, type],
+    () => categories.filter((category) => category.kind === type && (!category.archived || category.id === transaction?.categoryId)),
+    [categories, type, transaction?.categoryId],
   );
 
   const refundableTransactions = useMemo(() => {
@@ -249,18 +260,19 @@ export function AddTransactionModal({
           item.id !== transaction?.id,
       )
       .map((item) => {
+        const currency = item.originalCurrencyCode ?? item.currencyCode;
+        const related = transactions.filter(refund => refund.entryType === 'refund'
+          && refund.relatedTransactionId === item.id);
+        const ambiguous = !!item.originalCurrencyCode
+          && related.some(refund => refund.originalCurrencyCode !== currency);
         const refundedAmount = roundMoney(
-          transactions
-            .filter(
-              (refund) =>
-                refund.entryType === 'refund' &&
-                refund.relatedTransactionId === item.id,
-            )
-            .reduce((total, refund) => total + refund.amount, 0),
+          related.reduce((total, refund) => total + (refund.originalAmount ?? refund.amount), 0),
+          getCurrencyDecimals(currency),
         );
 
-        const remainingAmount = roundMoney(
-          Math.max(0, item.amount - refundedAmount),
+        const remainingAmount = ambiguous ? 0 : roundMoney(
+          Math.max(0, (item.originalAmount ?? item.amount) - refundedAmount),
+          getCurrencyDecimals(currency),
         );
 
         return {
@@ -313,7 +325,7 @@ export function AddTransactionModal({
     : activeAccount?.currencyCode;
   const fxKey = `${fxCurrency ?? ''}|${date}`;
   const amountCurrencyCode = entryMode === 'refund'
-    ? selectedOriginal?.transaction.currencyCode
+    ? (selectedOriginal?.transaction.originalCurrencyCode ?? selectedOriginal?.transaction.currencyCode)
     : transactionCurrency || activeAccount?.currencyCode;
   const crossCurrencySelected = entryMode !== 'refund' &&
     !!activeAccount && !!amountCurrencyCode &&
@@ -357,71 +369,60 @@ export function AddTransactionModal({
       ? createManualHistoricalRate(originalFxCurrency, date, originalManualValue)
       : null;
 
-  useEffect(() => {
-    setDirectFxManualMode(false);
-    setDirectFxManualRate('');
-    setDirectFxManualKey(null);
-    if (visible && transaction?.directHistoricalFx &&
-        transaction.date === date &&
-        transaction.directHistoricalFx.accountCurrencyCode === activeAccount?.currencyCode &&
-        transaction.directHistoricalFx.transactionCurrencyCode === amountCurrencyCode &&
-        transaction.directHistoricalFx.source === 'manual') {
-      setDirectFxManualMode(true);
-      setDirectFxManualRate(String(transaction.directHistoricalFx.rate));
-      setDirectFxManualKey(directFxKey);
-    }
-  }, [visible, transaction, directFxKey]);
+  const directDraftContext = { visible, transaction, directFxKey };
+  const [loadedDirectDraft, setLoadedDirectDraft] = useState<typeof directDraftContext | null>(null);
+  if (!loadedDirectDraft || loadedDirectDraft.visible !== visible || loadedDirectDraft.transaction !== transaction || loadedDirectDraft.directFxKey !== directFxKey) {
+    setLoadedDirectDraft(directDraftContext);
+    const existing = transaction?.directHistoricalFx;
+    const matches = visible && existing && transaction?.date === date &&
+      existing.accountCurrencyCode === activeAccount?.currencyCode &&
+      existing.transactionCurrencyCode === amountCurrencyCode && existing.source === 'manual';
+    setDirectFxManualMode(Boolean(matches));
+    setDirectFxManualRate(matches && existing ? String(existing.rate) : '');
+    setDirectFxManualKey(matches ? directFxKey : null);
+  }
 
   const selectedOriginalFx =
     originalFxManualMode
       ? (originalManualResult?.ok ? originalManualResult.snapshot : undefined)
       : originalFxSnapshot;
 
-  useEffect(() => {
-    if (!visible || !fxInitializationMatches || !originalFxCurrency ||
-        !isValidISODate(date)) {
-      originalFxRequestId.current += 1;
-      setOriginalFxRecord(null);
-      setOriginalFxLoading(false);
-      return;
-    }
-
-    const requestId = ++originalFxRequestId.current;
-    setOriginalFxRecord(null);
-    setOriginalFxError(undefined);
-    setOriginalFxManualMode(false);
-    setOriginalFxManualRate('');
-    setOriginalFxManualRateKey(null);
-    setOriginalFxLoading(false);
-
+  // Reset a request's draft at the render boundary; asynchronous effects
+  // only fetch evidence. Keys and cleanup keep stale results out of new drafts.
+  const originalRequestContext = { visible, fxInitializationMatches, originalFxKey, transaction };
+  const [loadedOriginalRequest, setLoadedOriginalRequest] = useState<typeof originalRequestContext | null>(null);
+  if (!loadedOriginalRequest || loadedOriginalRequest.visible !== originalRequestContext.visible ||
+      loadedOriginalRequest.fxInitializationMatches !== originalRequestContext.fxInitializationMatches ||
+      loadedOriginalRequest.originalFxKey !== originalRequestContext.originalFxKey ||
+      loadedOriginalRequest.transaction !== originalRequestContext.transaction) {
+    setLoadedOriginalRequest(originalRequestContext);
+    const valid = visible && fxInitializationMatches && !!originalFxCurrency && isValidISODate(date);
     const existing = transaction?.accountFxSnapshot;
-    if (transaction?.date === date &&
-        transaction.originalCurrencyCode === originalFxCurrency &&
-        existing &&
-        isValidHistoricalFx(existing, originalFxCurrency, date)) {
-      setOriginalFxRecord({ key: originalFxKey, snapshot: existing });
-      if (existing.source === 'manual') {
-        setOriginalFxManualMode(true);
-        setOriginalFxManualRate(String(existing.rate));
-        setOriginalFxManualRateKey(originalFxKey);
-      }
-      return;
-    }
-
-    setOriginalFxLoading(true);
+    const saved = valid && originalFxCurrency && transaction?.date === date &&
+      transaction.originalCurrencyCode === originalFxCurrency && existing &&
+      isValidHistoricalFx(existing, originalFxCurrency, date) ? existing : undefined;
+    setOriginalFxRecord(saved ? { key: originalFxKey, snapshot: saved } : null);
+    setOriginalFxError(undefined);
+    setOriginalFxManualMode(saved?.source === 'manual');
+    setOriginalFxManualRate(saved?.source === 'manual' ? String(saved.rate) : '');
+    setOriginalFxManualRateKey(saved?.source === 'manual' ? originalFxKey : null);
+    setOriginalFxLoading(valid && !saved);
+  }
+  useEffect(() => {
+    const requestId = ++originalFxRequestId.current;
+    if (!visible || !fxInitializationMatches || !originalFxCurrency || !isValidISODate(date)) return;
+    const existing = transaction?.accountFxSnapshot;
+    if (transaction?.date === date && transaction.originalCurrencyCode === originalFxCurrency &&
+        existing && isValidHistoricalFx(existing, originalFxCurrency, date)) return;
     void getHistoricalRate(originalFxCurrency, date).then((result) => {
       if (originalFxRequestId.current !== requestId) return;
       setOriginalFxLoading(false);
-      if (result.ok &&
-          isValidHistoricalFx(result.snapshot, originalFxCurrency, date)) {
+      if (result.ok && isValidHistoricalFx(result.snapshot, originalFxCurrency, date)) {
         setOriginalFxRecord({ key: originalFxKey, snapshot: result.snapshot });
       } else {
-        setOriginalFxError(result.ok
-          ? 'Original currency historical rate is invalid.'
-          : result.reason);
+        setOriginalFxError(result.ok ? 'Original currency historical rate is invalid.' : result.reason);
       }
     });
-
     return () => { originalFxRequestId.current += 1; };
   }, [visible, fxInitializationMatches, originalFxKey, originalFxCurrency, date, transaction]);
   const selectedFx =
@@ -429,58 +430,43 @@ export function AddTransactionModal({
       ? (manualFxResult?.ok ? manualFxResult.snapshot : undefined)
       : fxSnapshot;
 
-  useEffect(() => {
-    if (!visible || !fxInitializationMatches) {
-      fxRequestId.current += 1;
-      return;
-    }
-
-    const requestId = ++fxRequestId.current;
-    setFxRecord(null);
-    setFxError(undefined);
-    setFxManualMode(false);
-    setFxManualRate('');
-    setFxManualRateKey(null);
-    setFxLoading(false);
-
-    if (!fxCurrency || !isValidISODate(date) || isEditingRefund) return;
-
+  const accountRequestContext = { visible, fxInitializationMatches, fxKey, transaction, isEditingRefund };
+  const [loadedAccountRequest, setLoadedAccountRequest] = useState<typeof accountRequestContext | null>(null);
+  if (!loadedAccountRequest || loadedAccountRequest.visible !== accountRequestContext.visible ||
+      loadedAccountRequest.fxInitializationMatches !== accountRequestContext.fxInitializationMatches ||
+      loadedAccountRequest.fxKey !== accountRequestContext.fxKey ||
+      loadedAccountRequest.transaction !== accountRequestContext.transaction ||
+      loadedAccountRequest.isEditingRefund !== accountRequestContext.isEditingRefund) {
+    setLoadedAccountRequest(accountRequestContext);
+    const valid = visible && fxInitializationMatches && !!fxCurrency && isValidISODate(date) && !isEditingRefund;
     const existing = transaction?.historicalFx;
-    if (
-      transaction?.date === date &&
-      transaction.currencyCode === fxCurrency &&
-      existing &&
-      isValidHistoricalFx(existing, fxCurrency, date)
-    ) {
-      setFxRecord({ key: fxKey, snapshot: existing });
-      if (existing.source === 'manual') {
-        setFxManualMode(true);
-        setFxManualRate(String(existing.rate));
-        setFxManualRateKey(fxKey);
-      }
-      return;
-    }
-
-    setFxLoading(true);
+    const saved = valid && fxCurrency && transaction?.date === date && transaction.currencyCode === fxCurrency &&
+      existing && isValidHistoricalFx(existing, fxCurrency, date) ? existing : undefined;
+    setFxRecord(saved ? { key: fxKey, snapshot: saved } : null);
+    setFxError(undefined);
+    setFxManualMode(saved?.source === 'manual');
+    setFxManualRate(saved?.source === 'manual' ? String(saved.rate) : '');
+    setFxManualRateKey(saved?.source === 'manual' ? fxKey : null);
+    setFxLoading(valid && !saved);
+  }
+  useEffect(() => {
+    const requestId = ++fxRequestId.current;
+    if (!visible || !fxInitializationMatches || !fxCurrency || !isValidISODate(date) || isEditingRefund) return;
+    const existing = transaction?.historicalFx;
+    if (transaction?.date === date && transaction.currencyCode === fxCurrency && existing &&
+        isValidHistoricalFx(existing, fxCurrency, date)) return;
     void getHistoricalRate(fxCurrency, date).then((result) => {
       if (fxRequestId.current !== requestId) return;
       setFxLoading(false);
-      if (
-        result.ok &&
-        isValidHistoricalFx(result.snapshot, fxCurrency, date)
-      ) {
+      if (result.ok && isValidHistoricalFx(result.snapshot, fxCurrency, date)) {
         setFxRecord({ key: fxKey, snapshot: result.snapshot });
         setFxError(undefined);
       } else {
         setFxRecord(null);
-        setFxError(result.ok
-          ? 'Historical rate does not match the selected date or currency.'
-          : result.reason);
+        setFxError(result.ok ? 'Historical rate does not match the selected date or currency.' : result.reason);
       }
     });
-    return () => {
-      fxRequestId.current += 1;
-    };
+    return () => { fxRequestId.current += 1; };
   }, [visible, fxInitializationMatches, fxKey, fxCurrency, date, transaction, isEditingRefund]);
 
   const fetchFx = () => {
@@ -556,8 +542,8 @@ export function AddTransactionModal({
     (!actualAccountDebit.trim() || actualDebitValue !== null)
     ? (actualAccountDebit.trim() ? actualDebitValue : manualEstimatedAmount)
     : null;
-  const manualEffectiveRate = manualAccountAmount !== null && originalValue !== null && manualAccountAmount > 0
-    ? originalValue / manualAccountAmount : null;
+  const manualEffectiveRate = manualAccountAmount !== null && originalValue !== null && originalValue > 0 && manualAccountAmount > 0
+    ? manualAccountAmount / originalValue : null;
   const crossCurrencyPreview =
     crossCurrencySelected &&
     activeAccount &&
@@ -581,18 +567,6 @@ export function AddTransactionModal({
       : null;
   const estimatedAccountAmount = manualDirectSelected ? manualEstimatedAmount : crossCurrencyPreview?.estimatedAccountAmount;
   const amountToRecord = manualDirectSelected ? manualAccountAmount : crossCurrencyPreview?.accountAmount;
-
-  const replacementCategories = useMemo(
-    () =>
-      pendingDeleteCategory
-        ? categories.filter(
-            (category) =>
-              category.kind === pendingDeleteCategory.kind &&
-              category.id !== pendingDeleteCategory.id,
-          )
-        : [],
-    [categories, pendingDeleteCategory],
-  );
 
   const openCategoryManager = () => {
     setSelectedManagerCategoryId(activeCategoryId);
@@ -626,7 +600,7 @@ export function AddTransactionModal({
     const cleanName = newCategoryName.trim();
 
     if (!cleanName) {
-      Alert.alert('Missing name', 'Please enter a category name.');
+      afterFinanceSave(() => Alert.alert(t('Missing name', 'الاسم مطلوب'), t('Please enter a category name.', 'يرجى إدخال اسم التصنيف.')));
       return;
     }
 
@@ -638,33 +612,29 @@ export function AddTransactionModal({
     );
 
     if (duplicate) {
-      Alert.alert(
-        'Category already exists',
-        'A category with this name already exists.',
-      );
+      afterFinanceSave(() => Alert.alert(
+        t('Category already exists', 'التصنيف موجود بالفعل'),
+        t('A category with this name already exists.', 'يوجد تصنيف بنفس الاسم.'),
+      ));
       return;
     }
 
-    if (editingCategory) {
-      updateCategory(editingCategory.id, {
-        name: cleanName,
-        icon: newCategoryIcon,
-        color: newCategoryColor,
-      });
-    } else {
-      const input: NewCategoryInput = {
-        name: cleanName,
-        kind: type,
-        icon: newCategoryIcon,
-        color: newCategoryColor,
-      };
+    const targetId = editingCategory?.id ?? null;
+    const input: NewCategoryInput = { name: cleanName, kind: type, icon: newCategoryIcon, color: newCategoryColor };
+    const patch = { name: input.name, icon: input.icon, color: input.color };
+    return submitFinanceForm("src/features/finance/components/AddTransactionModal.tsx:627",
+      formPayload(targetId ? 'category.edit' : 'category.create', targetId, targetId ? patch : input),
+      () => {
+        if (!targetId) return addCategory(input) || null;
+        const matches = useLedgerStore.getState().categories.filter(item => item.id === targetId);
+        if (matches.length !== 1) return false;
+        updateCategory(targetId, patch);
+        const after = useLedgerStore.getState().categories.find(item => item.id === targetId);
+        return !!after && after.name === patch.name && after.icon === patch.icon && after.color === patch.color;
+      },
+      result => { if (typeof result === 'string') setCategoryId(result); closeCategoryForm(); setError(undefined); },
+      () => setError(t('Could not save category.', 'تعذر حفظ التصنيف.')));
 
-      const id = addCategory(input);
-      setCategoryId(id);
-    }
-
-    closeCategoryForm();
-    setError(undefined);
   };
 
   const requestDeleteCategory = (category: Category) => {
@@ -673,38 +643,21 @@ export function AddTransactionModal({
     );
 
     if (isUsed) {
-      setPendingDeleteCategory(category);
-      setReplacementCategoryId('');
+      Alert.alert(t('Archive category?', 'أرشفة التصنيف؟'),
+        t('Existing transactions will keep this category.', 'ستحتفظ المعاملات السابقة بهذا التصنيف.'), [
+          { text: t('Cancel', 'إلغاء'), style: 'cancel' },
+          { text: t('Archive', 'أرشفة'), onPress: () => {
+            return submitFinanceForm("src/features/finance/components/AddTransactionModal.tsx:686",
+              formPayload('category.archive', category.id, { archived: true }),
+              () => archiveCategory(category.id),
+              () => { if (categoryId === category.id && transaction?.categoryId !== category.id) setCategoryId(''); },
+              () => setError(t('Could not archive category.', 'تعذرت أرشفة التصنيف.')));
+          } },
+        ]);
       return;
     }
 
     setConfirmUnusedDeleteCategory(category);
-  };
-
-  const confirmDeleteWithReplacement = () => {
-    if (!pendingDeleteCategory || !replacementCategoryId) {
-      return;
-    }
-
-    const deleted = deleteCategory(
-      pendingDeleteCategory.id,
-      replacementCategoryId,
-    );
-
-    if (!deleted) {
-      Alert.alert(
-        'Could not delete category',
-        'The replacement category is invalid. Please try again.',
-      );
-      return;
-    }
-
-    if (categoryId === pendingDeleteCategory.id) {
-      setCategoryId(replacementCategoryId);
-    }
-
-    setPendingDeleteCategory(null);
-    setReplacementCategoryId('');
   };
 
   const handleEntryModeChange = (value: string) => {
@@ -741,78 +694,116 @@ export function AddTransactionModal({
     setError(undefined);
   };
 
+  const [refundCredit, setRefundCredit] = useState('');
+  const [refundRate, setRefundRate] = useState('');
+  // The draft belongs to exactly one visible refund context. A context change
+  // clears both fields before a render can expose another purchase's credit/rate.
+  const refundContext = visible && entryMode === 'refund' && selectedOriginal
+    ? JSON.stringify([transaction?.id ?? null, selectedOriginal.transaction.id,
+        originalAccount?.id, originalAccount?.currencyCode,
+        selectedOriginal.transaction.originalCurrencyCode, date])
+    : null;
+  const [loadedRefundContext, setLoadedRefundContext] = useState<string | null>(null);
+  if (loadedRefundContext !== refundContext) {
+    setLoadedRefundContext(refundContext);
+    setRefundCredit('');
+    setRefundRate('');
+  }
+
   const submit = () => {
     const current = transaction &&
       useLedgerStore.getState().transactions.find(t => t.id === transaction.id);
 
+    if (transaction && !current) {
+      setError(t('Transaction no longer exists.', 'المعاملة لم تعد موجودة.'));
+      return;
+    }
     if (current && isProtectedTransaction(current, useFinanceStore.getState())) {
-      setError('This transaction belongs to a loan or debt. Manage its payment from Loans or Debts.');
+      afterFinanceSave(() => setError(t('This transaction belongs to a loan or debt. Manage its payment from Loans or Debts.', 'هذه المعاملة مرتبطة بقرض أو دين. أدِر سدادها من القروض أو الديون.')));
       return;
     }
 
     const amountCurrency = entryMode === 'refund'
-      ? selectedOriginal?.transaction.currencyCode
+      ? (selectedOriginal?.transaction.originalCurrencyCode ?? selectedOriginal?.transaction.currencyCode)
       : amountCurrencyCode;
 
     if (!amountCurrency) {
-      setError('Select a valid account and currency.');
+      afterFinanceSave(() => setError(t('Select a valid account and currency.', 'اختر حسابًا وعملة صالحين.')));
       return;
     }
 
     const value = resolveAmountExpression(amount, amountCurrency);
 
     if (value === null) {
-      setError(`Enter a valid positive amount. ${amountCurrency} allows up to ${getCurrencyDecimals(amountCurrency)} decimal places.`);
+      afterFinanceSave(() => setError(`Enter a valid positive amount. ${amountCurrency} allows up to ${getCurrencyDecimals(amountCurrency)} decimal places.`));
       return;
     }
 
     if (!isValidISODate(date)) {
-      setError('Date must be a real date in the format YYYY-MM-DD.');
+      afterFinanceSave(() => setError(t('Date must be a real date in the format YYYY-MM-DD.', 'يجب إدخال تاريخ صحيح بالصيغة YYYY-MM-DD.')));
       return;
     }
 
     if (entryMode === 'refund') {
       if (!selectedOriginal || !originalAccount || !originalCategory) {
-        setError('Choose an original purchase to refund.');
+        afterFinanceSave(() => setError(t('Choose an original purchase to refund.', 'اختر عملية الشراء الأصلية للاسترداد.')));
         return;
       }
 
       if (value > selectedOriginal.remainingAmount) {
         setError(
-          `The remaining refundable amount is ${formatMoney(selectedOriginal.remainingAmount, selectedOriginal.transaction.currencyCode)}.`,
+          `The remaining refundable amount is ${formatMoney(selectedOriginal.remainingAmount, selectedOriginal.transaction.originalCurrencyCode ?? selectedOriginal.transaction.currencyCode)}.`,
         );
         return;
       }
 
-      const id = addTransaction({
+      const original = selectedOriginal.transaction;
+      const credit = original.originalCurrencyCode
+        ? resolveAmountExpression(refundCredit, originalAccount.currencyCode) : value;
+      const rate = resolveHistoricalRateExpression(refundRate);
+      if (credit === null || (original.originalCurrencyCode && (rate === null || rate <= 0))) {
+        setError(t('Enter the actual bank credit and historical exchange rate.', 'أدخل المبلغ الفعلي المضاف إلى الحساب وسعر الصرف التاريخي.'));
+        return;
+      }
+      const refundFx = original.originalCurrencyCode && rate !== null ? {
+        originalAmount: value,
+        originalCurrencyCode: original.originalCurrencyCode,
+        accountFxRate: credit / value,
+        directHistoricalFx: {
+          source: 'manual' as const,
+          accountCurrencyCode: originalAccount.currencyCode,
+          transactionCurrencyCode: original.originalCurrencyCode,
+          rateDate: date,
+          rate,
+        },
+      } : {};
+      const input: NewTransactionInput = {
         type: 'expense',
         entryType: 'refund',
         relatedTransactionId: selectedOriginal.transaction.id,
-        historicalFx: selectedFx,
-        amount: value,
+        historicalFx: original.originalCurrencyCode ? undefined : selectedFx,
+        amount: credit,
+        ...refundFx,
         accountId: selectedOriginal.transaction.accountId,
         categoryId: selectedOriginal.transaction.categoryId,
         date,
         note: note.trim() || undefined,
-      });
+      };
+      return submitFinanceForm("src/features/finance/components/AddTransactionModal.tsx:746",
+        formPayload('refund.create', selectedOriginal.transaction.id, input),
+        operationId => addTransaction(input, operationId),
+        () => onClose(), () => setError(t('Could not add the refund. Please check the refundable amount.', 'تعذر إضافة الاسترداد. تحقق من المبلغ القابل للاسترداد.')));
 
-      if (id === null) {
-        setError('Could not add the refund. Please check the refundable amount.');
-        return;
-      }
-
-      onClose();
-      return;
     }
 
 
     if (!activeAccount) {
-      setError('Create an account first.');
+      afterFinanceSave(() => setError(t('Create an account first.', 'أنشئ حسابًا أولًا.')));
       return;
     }
 
     if (!activeCategoryId) {
-      setError('Choose a category.');
+      afterFinanceSave(() => setError(t('Choose a category.', 'اختر تصنيفًا.')));
       return;
     }
 
@@ -834,19 +825,11 @@ export function AddTransactionModal({
       );
 
     if (financialUnchanged && current) {
-      const ok = updateTransaction(current.id, {
-        type,
-        categoryId: activeCategoryId,
-        note: note.trim(),
-      });
-
-      if (!ok) {
-        setError('Could not save the changes.');
-        return;
-      }
-
-      onClose();
-      return;
+      const patch = { type, categoryId: activeCategoryId, note: note.trim() };
+      return submitFinanceForm("src/features/finance/components/AddTransactionModal.tsx:746",
+        formPayload('transaction.edit', current.id, patch, { expectedUpdatedAt: transaction!.updatedAt }),
+        () => matchesUniqueRevision(useLedgerStore.getState().transactions, current.id, transaction!.updatedAt) && updateTransaction(current.id, patch),
+        () => onClose(), () => setError(t('Could not save the changes.', 'تعذر حفظ التغييرات.')));
     }
 
     const legacyUnchanged = !!current &&
@@ -862,7 +845,7 @@ export function AddTransactionModal({
           selectedFx, activeAccount.currencyCode, date
         ))
     ) {
-      setError('A valid account-currency historical rate is required.');
+      afterFinanceSave(() => setError(t('A valid account-currency historical rate is required.', 'يلزم سعر صرف تاريخي صالح لعملة الحساب.')));
       return;
     }
 
@@ -873,7 +856,7 @@ export function AddTransactionModal({
       !isValidHistoricalFx(selectedOriginalFx, amountCurrency, date) ||
       !crossCurrencyPreview
     )) {
-      setError('A valid original-currency rate and account amount are required.');
+      afterFinanceSave(() => setError(t('A valid original-currency rate and account amount are required.', 'يلزم سعر صرف صالح للعملة الأصلية ومبلغ الحساب.')));
       return;
     }
 
@@ -882,7 +865,7 @@ export function AddTransactionModal({
       manualAccountAmount === null || manualAccountAmount <= 0 ||
       manualEffectiveRate === null
     )) {
-      setError('Enter a valid manual rate and account amount.');
+      afterFinanceSave(() => setError('Enter a valid manual rate and account amount.'));
       return;
     }
 
@@ -901,7 +884,7 @@ export function AddTransactionModal({
       : {};
 
     if (current) {
-      const ok = updateTransaction(current.id, {
+      const patch: TransactionPatch = {
         type,
         historicalFx: manualDirectSelected ? undefined : selectedFx,
         directHistoricalFx,
@@ -917,14 +900,13 @@ export function AddTransactionModal({
           accountFxRate: undefined,
           accountFxSnapshot: undefined,
         } : {}),
-      });
-
-      if (!ok) {
-        setError('Could not save the changes.');
-        return;
-      }
+      };
+      return submitFinanceForm("src/features/finance/components/AddTransactionModal.tsx:746",
+        formPayload('transaction.edit', current.id, patch, { expectedUpdatedAt: transaction!.updatedAt }),
+        () => matchesUniqueRevision(useLedgerStore.getState().transactions, current.id, transaction!.updatedAt) && updateTransaction(current.id, patch),
+        () => onClose(), () => setError(t('Could not save the changes.', 'تعذر حفظ التغييرات.')));
     } else {
-      const id = addTransaction({
+      const input: NewTransactionInput = {
         type,
         historicalFx: manualDirectSelected ? undefined : selectedFx,
         directHistoricalFx,
@@ -934,58 +916,66 @@ export function AddTransactionModal({
         date,
         note: note.trim() || undefined,
         ...crossFields,
-      });
-
-      if (id === null) {
-        setError('Could not add the transaction.');
-        return;
-      }
+      };
+      return submitFinanceForm("src/features/finance/components/AddTransactionModal.tsx:746",
+        formPayload('transaction.create', null, input),
+        operationId => addTransaction(input, operationId),
+        () => onClose(), () => setError(t('Could not add the transaction.', 'تعذرت إضافة المعاملة.')));
     }
 
-    onClose();
   };
 
+  const requestClose = () => {
+    Alert.alert(t('Close without saving?', 'إغلاق دون حفظ؟'), t('Unsaved form changes will be discarded.', 'سيتم تجاهل تغييرات النموذج غير المحفوظة.'), [
+      { text: t('Continue editing', 'متابعة التعديل'), style: 'cancel' },
+      { text: t('Discard', 'تجاهل'), style: 'destructive', onPress: onClose },
+    ]);
+  };
   return (
     <>
       <FormModal
         visible={visible}
         title={
           isEditingRefund
-            ? 'Refund details'
+            ? t('Refund details', 'تفاصيل الاسترداد')
             : transaction
-              ? 'Edit transaction'
-              : 'Add transaction'
+              ? transaction.type === 'income' ? t('Edit Income Transaction', 'تعديل معاملة دخل') : t('Edit Expense Transaction', 'تعديل معاملة مصروف')
+              : initialRefund ? t('Add Refund', 'إضافة استرداد')
+              : fixedKind === 'income' ? t('Add Income Transaction', 'إضافة معاملة دخل')
+              : fixedKind === 'expense' ? t('Add Expense Transaction', 'إضافة معاملة مصروف')
+              : t('Add transaction', 'إضافة معاملة')
         }
-        onClose={onClose}
+        onClose={requestClose}
+        onBack={requestClose}
+        compactTitle
       >
+        <FinanceSubmissionReceipt scope="src/features/finance/components/AddTransactionModal.tsx:746" onCommitted={() => onClose()} />
         {isEditingRefund ? (
           <AppText color="textSecondary">
-            Refund records cannot be edited here. Remove the refund and add it
-            again with the correct details.
+            {t('Refund records cannot be edited here. Remove the refund and add it again with the correct details.', 'لا يمكن تعديل الاسترداد هنا. احذف الاسترداد وأضفه مرة أخرى بالبيانات الصحيحة.')}
           </AppText>
         ) : entryMode === 'normal' && selectableAccounts.length === 0 ? (
           <AppText color="textSecondary">
-            You need at least one account before adding a transaction. Close this
-            and tap "Account" first.
+            {t('You need at least one account before adding a transaction. Close this and tap \"Account\" first.', 'تحتاج إلى حساب واحد على الأقل قبل إضافة معاملة. أغلق هذه النافذة وأضف حسابًا أولًا.')}
           </AppText>
         ) : (
           <>
                          <View style={{ flexDirection: stackFields ? 'column' : 'row', gap: 10 }}>
-               <View style={fieldColumn}>
-                 <AppText variant="label" color="textSecondary">TYPE</AppText>
-                 <Pressable accessibilityRole="button" accessibilityLabel="Transaction type" onPress={() => !transaction && setTypePickerOpen(true)}
+               {!fixedKind && !transaction && <View style={fieldColumn}>
+                 <AppText variant="label" color="textSecondary">{t('TYPE', 'النوع')}</AppText>
+                 <Pressable accessibilityRole="button" accessibilityLabel={t('Transaction type', 'نوع المعاملة')} onPress={() => !transaction && setTypePickerOpen(true)}
                    style={[styles.dropdownButton, { borderColor: '#D6B777', backgroundColor: '#FFFFFF' }]}>
                    <Ionicons name={entryMode === 'refund' ? 'return-down-back-outline' : type === 'income' ? 'arrow-up-circle-outline' : 'arrow-down-circle-outline'} size={19} color={entryMode === 'refund' ? '#3B82F6' : type === 'income' ? '#10B981' : '#EF4444'} />
-                   <AppText style={{ flex: 1 }}>{entryMode === 'refund' ? 'Refund' : type === 'income' ? 'Income' : 'Expense'}</AppText>
+                   <AppText style={{ flex: 1 }}>{entryMode === 'refund' ? t('Refund', 'استرداد') : type === 'income' ? t('Income', 'دخل') : t('Expense', 'مصروف')}</AppText>
                    <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
                  </Pressable>
-               </View>
+               </View>}
                <View style={fieldColumn}>
-                 <AppText variant="label" color="textSecondary">ATTACH (OPTIONAL)</AppText>
-                 <Pressable accessibilityRole="button" accessibilityLabel="Scan from camera, gallery or PDF" onPress={() => setAttachPickerOpen(true)}
+                 <AppText variant="label" color="textSecondary">{t('ATTACH (OPTIONAL)', 'إرفاق (اختياري)')}</AppText>
+                 <Pressable accessibilityRole="button" accessibilityLabel={t('Scan from camera, gallery or PDF', 'المسح بالكاميرا أو المعرض أو PDF')} onPress={() => setAttachPickerOpen(true)}
                    style={[styles.dropdownButton, { borderColor: '#D6B777', backgroundColor: '#FFFFFF' }]}>
                    <Ionicons name="attach-outline" size={19} color={colors.textSecondary} />
-                   <AppText style={{ flex: 1 }}>— None</AppText>
+                   <AppText style={{ flex: 1 }}>{t('— None', '— لا يوجد')}</AppText>
                    <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
                  </Pressable>
                </View>
@@ -993,21 +983,16 @@ export function AddTransactionModal({
              {scanSource ? <ScanDocumentButton onResult={applyScan} initialSource={scanSource} onFinished={() => setScanSource(null)} /> : null}
 {entryMode === 'refund' ? (
               <>
-                <AppText variant="caption" color="textSecondary">
-                  Select the original purchase. The refund will return to the
-                  same account and category automatically.
-                </AppText>
-
                 {refundableTransactions.length === 0 ? (
                   <AppText color="textSecondary">
-                    There are no purchases with a refundable balance.
+                    {t('There are no purchases with a refundable balance.', 'لا توجد مشتريات قابلة للاسترداد.')}
                   </AppText>
                 ) : (
                   <ChipSelect<string>
-                    label="ORIGINAL PURCHASE"
+                    label={t('ORIGINAL PURCHASE', 'عملية الشراء الأصلية')}
                     options={refundableTransactions.map((item) => ({
                       value: item.transaction.id,
-                      label: `${item.transaction.date} · ${item.transaction.note?.trim() || 'Purchase'} · ${formatMoney(item.remainingAmount, item.transaction.currencyCode)} ${getCurrencyLabel(item.transaction.currencyCode)}`,
+                      label: `${item.transaction.date} · ${item.transaction.note?.trim() || t('Purchase', 'شراء')} · ${formatMoney(item.transaction.originalAmount ?? item.transaction.amount, item.transaction.originalCurrencyCode ?? item.transaction.currencyCode)} ${getCurrencyLabel(item.transaction.originalCurrencyCode ?? item.transaction.currencyCode)}`,
                       color: moduleColors.finance,
                     }))}
                     value={originalTransactionId}
@@ -1020,46 +1005,48 @@ export function AddTransactionModal({
                 )}
 
                 {selectedOriginal ? (
-                  <AppText variant="caption" color="textSecondary">
-                    Original amount:{' '}
-                    {formatMoney(selectedOriginal.transaction.amount, selectedOriginal.transaction.currencyCode)}
-                    {' · '}Already refunded:{' '}
-                    {formatMoney(selectedOriginal.refundedAmount, selectedOriginal.transaction.currencyCode)}
-                    {' · '}Remaining:{' '}
-                    {formatMoney(selectedOriginal.remainingAmount, selectedOriginal.transaction.currencyCode)}
-                  </AppText>
+                  <View style={{ borderWidth: 1, borderColor: '#D6B777', borderRadius: 12, padding: 10, gap: 8 }}>
+                    {[
+                      [t('Original purchase', 'المصروف الأصلي'), selectedOriginal.transaction.originalAmount ?? selectedOriginal.transaction.amount, selectedOriginal.transaction.originalCurrencyCode ?? selectedOriginal.transaction.currencyCode],
+                      [t('Actual debit', 'الخصم الفعلي'), selectedOriginal.transaction.amount, selectedOriginal.transaction.currencyCode],
+                      [t('Already refunded', 'المسترد'), selectedOriginal.refundedAmount, selectedOriginal.transaction.originalCurrencyCode ?? selectedOriginal.transaction.currencyCode],
+                      [t('Remaining', 'المتبقي'), selectedOriginal.remainingAmount, selectedOriginal.transaction.originalCurrencyCode ?? selectedOriginal.transaction.currencyCode],
+                    ].map(([label, value, code], index) => <View key={index} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 5, borderRadius: 8, backgroundColor: index === 3 ? '#F1E8D6' : undefined }}>
+                      <AppText variant="caption" style={{ flex: 1 }}>{label}</AppText>
+                      <AppText style={{ fontWeight: '700', color: index === 3 ? '#1E293B' : colors.text }}>{formatMoney(Number(value), String(code))} {code}</AppText>
+                    </View>)}
+                  </View>
                 ) : null}
-
                 {selectedOriginal && originalAccount ? (
-                  <AppText color="textSecondary">
-                    Account: {originalAccount.name} ·{' '}
-                    {getCurrencyLabel(originalAccount.currencyCode)}
-                    {originalCategory ? ` · Category: ${originalCategory.name}` : ''}
-                  </AppText>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.border }}>
+                    <Ionicons name="layers-outline" size={19} color="#B59A5E" />
+                    <AppText style={{ flex: 1 }} variant="caption">{originalAccount.name} · {getCurrencyLabel(originalAccount.currencyCode)} · {originalCategory?.name ?? ''}</AppText>
+                  </View>
                 ) : null}
               </>
             ) : (
               <>
                                  <View style={{ flexDirection: stackFields ? 'column' : 'row', gap: 10 }}>
-                   <AccountDropdown label="ACCOUNT" options={selectableAccounts} value={activeAccountId}
+                   <AccountDropdown label={t('ACCOUNT', 'الحساب')} options={selectableAccounts} value={activeAccountId}
                      containerStyle={stackFields ? { flex: 0 } : undefined}
-                     onChange={setAccountId} emptyMessage="No accounts" />
+                     onChange={setAccountId} emptyMessage={t('No accounts', 'لا توجد حسابات')} />
                    <View style={fieldColumn}>
-                     <AppText variant="label" color="textSecondary">CATEGORY</AppText>
-                     <Pressable accessibilityRole="button" accessibilityLabel="Choose or manage category" onPress={() => setCategoryPickerOpen(true)}
+                     <AppText variant="label" color="textSecondary">{t('CATEGORY', 'التصنيف')}</AppText>
+                     <Pressable accessibilityRole="button" accessibilityLabel={t('Choose or manage category', 'اختيار أو إدارة التصنيف')} onPress={() => setCategoryPickerOpen(true)}
                        style={[styles.dropdownButton, { borderColor: '#D6B777', backgroundColor: '#FFFFFF' }]}>
                        {kindCategories.find(item => item.id === activeCategoryId) ? <Ionicons name={kindCategories.find(item => item.id === activeCategoryId)!.icon as keyof typeof Ionicons.glyphMap} size={19} color={kindCategories.find(item => item.id === activeCategoryId)!.color} /> : <Ionicons name="pricetag-outline" size={19} color={colors.textSecondary} />}
-                       <AppText style={{ flex: 1 }}>{kindCategories.find(item => item.id === activeCategoryId)?.name ?? 'Choose category'}</AppText>
+                       <AppText style={{ flex: 1 }}>{kindCategories.find(item => item.id === activeCategoryId)?.name ?? t('Choose category', 'اختر التصنيف')}</AppText>
                        <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
                      </Pressable>
                    </View>
                  </View>
 </>
             )}
+            <View style={{ flexDirection: entryMode === 'refund' && !stackRefundFields ? 'row' : 'column', gap: 10 }}>
             {entryMode === 'normal' && activeAccount ? (
               <View style={{ flexDirection: stackFields ? 'column' : 'row', alignItems: 'stretch', gap: 10 }}>
                 <AppInput
-              label="Amount"
+              label={t('Amount', 'المبلغ')}
               containerStyle={fieldColumn}
               fieldStyle={{ minHeight: 52, borderColor: '#D6B777', backgroundColor: '#FFFFFF' }}
               style={{ paddingVertical: 0 }}
@@ -1078,7 +1065,7 @@ export function AddTransactionModal({
                 if (result !== null) {
                   setAmount(String(result));
                 } else {
-                  setError('Invalid amount or calculation. Please correct it.');
+                  setError(t('Invalid amount or calculation. Please correct it.', 'المبلغ أو العملية الحسابية غير صالحين. يرجى التصحيح.'));
                 }
               }}
               onSubmitEditing={() => {
@@ -1091,15 +1078,15 @@ export function AddTransactionModal({
                 if (result !== null) {
                   setAmount(String(result));
                 } else {
-                  setError('Invalid amount or calculation. Please correct it.');
+                  setError(t('Invalid amount or calculation. Please correct it.', 'المبلغ أو العملية الحسابية غير صالحين. يرجى التصحيح.'));
                 }
               }}
               keyboardType="decimal-pad"
-              placeholder="0"
+              placeholder=""
             />
                 <CurrencyDropdown
                   containerStyle={stackFields ? { flex: 0 } : undefined}
-                  label="CURRENCY"
+                  label={t('CURRENCY', 'العملة')}
                   value={amountCurrencyCode ?? activeAccount.currencyCode}
                   onChange={(value) => {
                     setTransactionCurrency(value);
@@ -1109,7 +1096,8 @@ export function AddTransactionModal({
               </View>
             ) : (
               <AppInput
-              label="Amount"
+              containerStyle={entryMode === 'refund' ? refundFieldColumn : undefined}
+              label={t('Amount', 'المبلغ')}
               value={amount}
               onChangeText={(text) => {
                 setAmount(text);
@@ -1125,7 +1113,7 @@ export function AddTransactionModal({
                 if (result !== null) {
                   setAmount(String(result));
                 } else {
-                  setError('Invalid amount or calculation. Please correct it.');
+                  setError(t('Invalid amount or calculation. Please correct it.', 'المبلغ أو العملية الحسابية غير صالحين. يرجى التصحيح.'));
                 }
               }}
               onSubmitEditing={() => {
@@ -1138,11 +1126,11 @@ export function AddTransactionModal({
                 if (result !== null) {
                   setAmount(String(result));
                 } else {
-                  setError('Invalid amount or calculation. Please correct it.');
+                  setError(t('Invalid amount or calculation. Please correct it.', 'المبلغ أو العملية الحسابية غير صالحين. يرجى التصحيح.'));
                 }
               }}
               keyboardType="decimal-pad"
-              placeholder="0"
+              placeholder=""
               leftElement={
                 <AppText color="textSecondary">
                   {amountCurrencyCode
@@ -1153,9 +1141,10 @@ export function AddTransactionModal({
             />
             )}
 
-            <DateField value={date} onChange={setDate} />
+            <View style={entryMode === 'refund' ? refundFieldColumn : undefined}><DateField value={date} onChange={setDate} pickerOnly /></View>
+            </View>
 
-            {!isEditingRefund && fxCurrency && !crossCurrencySelected ? (
+            {!isEditingRefund && fxCurrency && !crossCurrencySelected && !(entryMode === 'refund' && selectedOriginal?.transaction.originalCurrencyCode) ? (
               <HistoricalFxField
                 currencyCode={fxCurrency}
                 transactionDate={date}
@@ -1174,8 +1163,23 @@ export function AddTransactionModal({
               />
             ) : null}
 
+            {entryMode === 'refund' && selectedOriginal?.transaction.originalCurrencyCode && originalAccount ? (
+              <View style={{ gap: 8 }}>
+                <AppText variant="caption" color="textSecondary" style={{ fontWeight: '700' }}>{t('Historical Exchange Rate', 'سعر الصرف التاريخي')}</AppText>
+                <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
+                  <View style={{ flex: 38, minWidth: 0, gap: 4 }}><AppText variant="caption" color={colors.finance.neutral.accent} align="center" style={{ fontWeight: '700' }}>FROM</AppText><View style={{ minHeight: 48, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#D6B777', backgroundColor: colors.surfaceAlt, borderRadius: 10 }}><AppText numberOfLines={1} adjustsFontSizeToFit style={{ fontWeight: '700' }}>{getCurrencyLabel(originalAccount.currencyCode)}</AppText></View></View>
+                  <View style={{ flex: 24, minWidth: 0, gap: 4 }}><AppText variant="caption" color={colors.finance.neutral.accent} align="center" style={{ fontWeight: '700' }}>RATE</AppText><AppInput accessibilityLabel={t('Historical exchange rate', 'سعر الصرف التاريخي')} keyboardType="decimal-pad" value={refundRate} onChangeText={setRefundRate} fieldStyle={{ minHeight: 48, paddingHorizontal: 5, borderColor: '#D6B777' }} style={{ paddingVertical: 0, textAlign: 'center', fontWeight: '700' }} /></View>
+                  <View style={{ flex: 38, minWidth: 0, gap: 4 }}><AppText variant="caption" color={colors.finance.neutral.accent} align="center" style={{ fontWeight: '700' }}>TO</AppText><View style={{ minHeight: 48, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.finance.balance.border, backgroundColor: colors.finance.balance.surface, borderRadius: 10 }}><AppText numberOfLines={1} adjustsFontSizeToFit style={{ fontWeight: '700' }}>{getCurrencyLabel(selectedOriginal.transaction.originalCurrencyCode)}</AppText></View></View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+                  <View style={{ flex: 1, minWidth: 0, gap: 4 }}><AppText align="center" style={{ fontWeight: '700' }}>{t('Actual', 'الفعلي')}</AppText><AppInput accessibilityLabel={t('Actual bank credit', 'المبلغ الفعلي المضاف للحساب')} keyboardType="decimal-pad" value={refundCredit} onChangeText={setRefundCredit} rightElement={<AppText variant="caption">{originalAccount.currencyCode}</AppText>} fieldStyle={{ minHeight: 44, paddingHorizontal: 5 }} style={{ paddingVertical: 0, fontWeight: '700' }} /></View>
+                  <View style={{ flex: 1, minWidth: 0, gap: 4 }}><AppText align="center" style={{ fontWeight: '700' }}>{t('Recorded', 'المسجل')}</AppText><View style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center' }}><AppText numberOfLines={1} adjustsFontSizeToFit style={{ fontWeight: '700' }}>{resolveAmountExpression(refundCredit, originalAccount.currencyCode) === null ? '—' : formatMoney(resolveAmountExpression(refundCredit, originalAccount.currencyCode)!, originalAccount.currencyCode)} {originalAccount.currencyCode}</AppText></View></View>
+                </View>
+              </View>
+            ) : null}
             {crossCurrencySelected && activeAccount && amountCurrencyCode ? (
               <DirectHistoricalFxField
+                compact
                 accountCurrencyCode={activeAccount.currencyCode}
                 transactionCurrencyCode={amountCurrencyCode}
                 rate={directHistoricalRate}
@@ -1257,44 +1261,28 @@ export function AddTransactionModal({
               />
             ) : null}
             {crossCurrencySelected && activeAccount ? (
-              <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
-                <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
-                  <AppText variant="caption" color="textSecondary">Estimated Amount</AppText>
-                  <AppText numberOfLines={1} adjustsFontSizeToFit>
-                    {estimatedAccountAmount != null ? formatMoney(estimatedAccountAmount, activeAccount.currencyCode) : '—'}
-                  </AppText>
-                  <AppText variant="caption" color="textSecondary">{activeAccount.currencyCode}</AppText>
+              <View style={{ flexDirection: stackFields ? 'column' : 'row', gap: 6, alignItems: 'stretch' }}>
+                <View style={{ flex: stackFields ? 0 : 1, minWidth: 0, gap: 5, alignItems: 'center' }}>
+                  <AppText variant="caption" style={{ fontWeight: '700' }}>{t('Estimated', 'التقديري')}</AppText>
+                  <View style={{ minHeight: 44, justifyContent: 'center' }}><AppText numberOfLines={1} adjustsFontSizeToFit style={{ fontWeight: '700' }}>{estimatedAccountAmount != null ? formatMoney(estimatedAccountAmount, activeAccount.currencyCode) : '—'} {activeAccount.currencyCode}</AppText></View>
                 </View>
-                <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
-                  <AppText variant="caption" color="textSecondary">Actual Amount</AppText>
-                  <AppInput
-                    containerStyle={{ minWidth: 0 }}
-                    fieldStyle={{ minHeight: 42, height: 42 }}
-                    style={{ paddingVertical: 0 }}
-                    value={actualAccountDebit}
-                    onChangeText={(value) => {
-                      setActualAccountDebit(value);
-                      setError(undefined);
-                    }}
-                    keyboardType="decimal-pad"
-                    placeholder="Optional"
-                  />
-                  <AppText variant="caption" color="textSecondary">{activeAccount.currencyCode}</AppText>
+                <View style={{ flex: stackFields ? 0 : 1, minWidth: 0, gap: 5 }}>
+                  <AppText variant="caption" align="center" style={{ fontWeight: '700' }}>{t('Actual', 'الفعلي')}</AppText>
+                  <AppInput containerStyle={{ minWidth: 0 }} fieldStyle={{ minHeight: 44, paddingHorizontal: 5 }} style={{ paddingVertical: 0, fontWeight: '700', fontSize: 14 }}
+                    value={actualAccountDebit} onChangeText={(value) => { setActualAccountDebit(value); setError(undefined); }} keyboardType="decimal-pad"
+                    accessibilityLabel={t('Actual amount', 'المبلغ الفعلي')} rightElement={<AppText variant="caption">{activeAccount.currencyCode}</AppText>} />
                 </View>
-                <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
-                  <AppText variant="caption" color="textSecondary">Amount to Record</AppText>
-                  <AppText numberOfLines={1} adjustsFontSizeToFit>
-                    {amountToRecord != null ? formatMoney(amountToRecord, activeAccount.currencyCode) : '—'}
-                  </AppText>
-                  <AppText variant="caption" color="textSecondary">{activeAccount.currencyCode}</AppText>
+                <View style={{ flex: stackFields ? 0 : 1, minWidth: 0, gap: 5, alignItems: 'center' }}>
+                  <AppText variant="caption" style={{ fontWeight: '700' }}>{t('Recorded', 'المسجل')}</AppText>
+                  <View style={{ minHeight: 44, justifyContent: 'center' }}><AppText numberOfLines={1} adjustsFontSizeToFit style={{ fontWeight: '700' }}>{amountToRecord != null ? formatMoney(amountToRecord, activeAccount.currencyCode) : '—'} {activeAccount.currencyCode}</AppText></View>
                 </View>
               </View>
             ) : null}
             <AppInput
-              label="Note (optional)"
+              label={t('Note (optional)', 'ملاحظة (اختياري)')}
               value={note}
               onChangeText={setNote}
-              placeholder="e.g. Fuel"
+              placeholder={t('e.g. Fuel', 'مثال: وقود')}
             />
 
             {error ? (
@@ -1306,10 +1294,10 @@ export function AddTransactionModal({
             <AppButton
               title={
                 entryMode === 'refund'
-                  ? 'Add refund'
+                  ? t('Add refund', 'إضافة استرداد')
                   : transaction
-                    ? 'Save changes'
-                    : 'Add transaction'
+                    ? t('Save changes', 'حفظ التغييرات')
+                    : t('Add transaction', 'إضافة معاملة')
               }
               accentColor={'#1E293B'}
               disabled={fxLoading && !isEditingRefund}
@@ -1343,7 +1331,7 @@ export function AddTransactionModal({
               },
             ]}
           >
-            <View style={{ marginHorizontal: -20, marginTop: -20 }}><FinanceModalHeader title="Edit Categories" onClose={() => setCategoryManagerVisible(false)} /></View>
+            <View style={{ marginHorizontal: -20, marginTop: -20 }}><FinanceModalHeader title={t('Edit Categories', 'تعديل التصنيفات')} onClose={() => setCategoryManagerVisible(false)} /></View>
             <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
@@ -1351,7 +1339,7 @@ export function AddTransactionModal({
             >
               {kindCategories.length === 0 ? (
                 <AppText color="textSecondary">
-                  No categories yet. Add your first category below.
+                  {t('No categories yet. Add your first category below.', 'لا توجد تصنيفات بعد. أضف أول تصنيف أدناه.')}
                 </AppText>
               ) : (
                 kindCategories.map((category) => {
@@ -1416,7 +1404,7 @@ export function AddTransactionModal({
               >
                 <Ionicons name="add" size={19} color={colors.onPrimary} />
                 <AppText color="onPrimary" variant="label">
-                  Add Category
+                  {t('Add Category', 'إضافة تصنيف')}
                 </AppText>
               </Pressable>
 
@@ -1427,7 +1415,7 @@ export function AddTransactionModal({
                   { backgroundColor: colors.surfaceAlt },
                 ]}
               >
-                <AppText>Done</AppText>
+                <AppText>{t('Done', 'تم')}</AppText>
               </Pressable>
             </View>
           </View>
@@ -1457,20 +1445,20 @@ export function AddTransactionModal({
               },
             ]}
           >
-            <View style={{ marginHorizontal: -20, marginTop: -20 }}><FinanceModalHeader title={editingCategory ? 'Edit Category' : 'Add Category'} onClose={closeCategoryForm} /></View>
+            <View style={{ marginHorizontal: -20, marginTop: -20 }}><FinanceModalHeader title={editingCategory ? t('Edit Category', 'تعديل التصنيف') : t('Add Category', 'إضافة تصنيف')} onClose={closeCategoryForm} /></View>
             <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.categoryModalScroll}
             >
               <AppText color="textSecondary" variant="label">
-                Category name
+                {t('Category name', 'اسم التصنيف')}
               </AppText>
 
               <TextInput
                 value={newCategoryName}
                 onChangeText={setNewCategoryName}
-                placeholder="Enter category name"
+                placeholder={t('Enter category name', 'أدخل اسم التصنيف')}
                 placeholderTextColor={colors.textDisabled}
                 maxLength={40}
                 style={[
@@ -1485,7 +1473,7 @@ export function AddTransactionModal({
               />
 
               <AppText color="textSecondary" variant="label">
-                Choose an icon
+                {t('Choose an icon', 'اختر أيقونة')}
               </AppText>
 
               <View style={styles.categoryIconGrid}>
@@ -1519,7 +1507,7 @@ export function AddTransactionModal({
               </View>
 
               <AppText color="textSecondary" variant="label">
-                Choose a color
+                {t('Choose a color', 'اختر لونًا')}
               </AppText>
 
               <View style={styles.categoryColorGrid}>
@@ -1549,7 +1537,7 @@ export function AddTransactionModal({
                     { backgroundColor: colors.surfaceAlt },
                   ]}
                 >
-                  <AppText>Cancel</AppText>
+                  <AppText>{t('Cancel', 'إلغاء')}</AppText>
                 </Pressable>
 
                 <Pressable
@@ -1560,7 +1548,7 @@ export function AddTransactionModal({
                   ]}
                 >
                   <AppText color="onPrimary" variant="label">
-                    {editingCategory ? 'Save Changes' : 'Save Category'}
+                    {editingCategory ? t('Save Changes', 'حفظ التغييرات') : t('Save Category', 'حفظ التصنيف')}
                   </AppText>
                 </Pressable>
               </View>
@@ -1569,15 +1557,15 @@ export function AddTransactionModal({
         </View>
       </Modal>
 
-      <FormModal visible={visible && typePickerOpen} title="TYPE" onClose={() => setTypePickerOpen(false)}>
+      <FormModal visible={visible && typePickerOpen} title={t('TYPE', 'النوع')} onClose={() => setTypePickerOpen(false)}>
         {(['expense', 'income', 'refund'] as const).map(option => (
           <Pressable key={option} onPress={() => { handleEntryModeChange(option); setTypePickerOpen(false); }} style={[styles.pickerRow, { borderColor: '#D6B777', flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
             <Ionicons name={option === 'expense' ? 'arrow-down-circle-outline' : option === 'income' ? 'arrow-up-circle-outline' : 'return-down-back-outline'} size={20} color={option === 'expense' ? '#EF4444' : option === 'income' ? '#10B981' : '#3B82F6'} />
-            <AppText>{option === 'expense' ? 'Expense' : option === 'income' ? 'Income' : 'Refund'}</AppText>
+            <AppText>{option === 'expense' ? t('Expense', 'مصروف') : option === 'income' ? t('Income', 'دخل') : t('Refund', 'استرداد')}</AppText>
           </Pressable>
         ))}
       </FormModal>
-      <FormModal visible={visible && categoryPickerOpen} title="CATEGORY" onClose={() => setCategoryPickerOpen(false)}>
+      <FormModal visible={visible && categoryPickerOpen} title={t('CATEGORY', 'التصنيف')} onClose={() => setCategoryPickerOpen(false)}>
         <ScrollView style={{ maxHeight: 340 }} keyboardShouldPersistTaps="handled">
           {kindCategories.map(category => (
             <Pressable key={category.id} onPress={() => { setCategoryId(category.id); setCategoryPickerOpen(false); }} style={[styles.pickerRow, { borderColor: '#D6B777', flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
@@ -1588,170 +1576,42 @@ export function AddTransactionModal({
           ))}
           <Pressable onPress={() => { setCategoryPickerOpen(false); openNewCategoryForm(); }} style={[styles.pickerRow, { borderColor: '#D6B777', flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
             <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-            <AppText color={colors.primary}>Add New Category</AppText>
+            <AppText color={colors.primary}>{t('Add New Category', 'إضافة تصنيف جديد')}</AppText>
           </Pressable>
           <Pressable onPress={() => { setCategoryPickerOpen(false); openCategoryManager(); }} style={[styles.pickerRow, { borderColor: '#D6B777', flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
             <Ionicons name="settings-outline" size={20} color={colors.primary} />
-            <AppText color={colors.primary}>Manage Categories</AppText>
+            <AppText color={colors.primary}>{t('Manage Categories', 'إدارة التصنيفات')}</AppText>
           </Pressable>
         </ScrollView>
       </FormModal>
-      <FormModal visible={visible && attachPickerOpen} title="ATTACH (OPTIONAL)" onClose={() => setAttachPickerOpen(false)}>
-        {([['camera', '📷 Camera'], ['gallery', '🖼 Gallery'], ['file', '📄 PDF']] as const).map(([source, label]) => (
+      <FormModal visible={visible && attachPickerOpen} title={t('ATTACH (OPTIONAL)', 'إرفاق (اختياري)')} onClose={() => setAttachPickerOpen(false)}>
+        {([['camera', t('📷 Camera', '📷 الكاميرا')], ['gallery', t('🖼 Gallery', '🖼 المعرض')], ['file', '📄 PDF']] as const).map(([source, label]) => (
           <Pressable key={source} onPress={() => { setAttachPickerOpen(false); setScanSource(source); }} style={[styles.pickerRow, { borderColor: colors.border }]}>
             <AppText>{label}</AppText>
           </Pressable>
         ))}
-        <Pressable onPress={() => { setScanSource(null); setAttachPickerOpen(false); }} style={[styles.pickerRow, { borderColor: colors.border }]}><AppText>— None</AppText></Pressable>
+        <Pressable onPress={() => { setScanSource(null); setAttachPickerOpen(false); }} style={[styles.pickerRow, { borderColor: colors.border }]}><AppText>{t('— None', '— لا يوجد')}</AppText></Pressable>
       </FormModal>
       <Modal visible={visible && !!confirmUnusedDeleteCategory} transparent animationType="fade" onRequestClose={() => setConfirmUnusedDeleteCategory(null)}>
         <View style={styles.replacementBackdrop}>
           <View style={[styles.replacementCard, { backgroundColor: colors.surface, borderRadius: radius.xl }]}>
-            <AppText variant="h2">Delete category?</AppText>
-            <AppText color="textSecondary">Are you sure you want to delete "{confirmUnusedDeleteCategory?.name}"?</AppText>
+            <AppText variant="h2" color="danger">{t('Delete category?', 'حذف التصنيف؟')}</AppText>
+            <AppText color="textSecondary">{t('Are you sure you want to delete', 'هل أنت متأكد من حذف')} {'"'}{confirmUnusedDeleteCategory?.name}{'"'}؟</AppText>
             <View style={styles.categoryModalActions}>
-              <Pressable style={[styles.categoryActionButton, { backgroundColor: colors.surfaceAlt }]} onPress={() => setConfirmUnusedDeleteCategory(null)}><AppText>Cancel</AppText></Pressable>
+              <Pressable style={[styles.categoryActionButton, { backgroundColor: colors.surfaceAlt }]} onPress={() => setConfirmUnusedDeleteCategory(null)}><AppText>{t('Cancel', 'إلغاء')}</AppText></Pressable>
               <Pressable style={[styles.categoryActionButton, { backgroundColor: colors.danger }]} onPress={() => {
                 const target = confirmUnusedDeleteCategory;
                 if (!target) return;
-                const deleted = deleteCategory(target.id);
-                setConfirmUnusedDeleteCategory(null);
-                if (!deleted) { Alert.alert('Could not delete category', 'Please try again.'); return; }
-                if (categoryId === target.id) setCategoryId('');
-              }}><AppText color="onPrimary">Delete</AppText></Pressable>
+                return submitFinanceForm("src/features/finance/components/AddTransactionModal.tsx:1613",
+                  formPayload('category.delete', target.id, {}), () => deleteCategory(target.id),
+                  () => { setConfirmUnusedDeleteCategory(null); if (categoryId === target.id) setCategoryId(''); },
+                  () => Alert.alert(t('Could not delete category', 'تعذر حذف التصنيف'), t('Please try again.', 'حاول مرة أخرى.')));
+  }}><AppText color="onPrimary">{t('Delete', 'حذف')}</AppText></Pressable>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Replacement category picker */}
-      <Modal
-        visible={visible && !!pendingDeleteCategory}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setPendingDeleteCategory(null);
-          setReplacementCategoryId('');
-        }}
-      >
-        <View style={styles.replacementBackdrop}>
-          <View
-            style={[
-              styles.replacementCard,
-              {
-                backgroundColor: colors.surface,
-                borderRadius: radius.xl,
-              },
-            ]}
-          >
-            <AppText variant="h2">Choose replacement</AppText>
-
-            <AppText color="textSecondary">
-              The category "{pendingDeleteCategory?.name}" is linked to{' '}
-              {transactions.filter(
-                (item) => item.categoryId === pendingDeleteCategory?.id,
-              ).length}{' '}
-              transaction(s). Choose another category of the same type to
-              move those transactions before deleting it.
-            </AppText>
-
-            {replacementCategories.length === 0 ? (
-              <AppText color="danger">
-                There is no other category of this type. Add one first, then
-                try deleting this category again.
-              </AppText>
-            ) : (
-              <ScrollView
-                style={styles.replacementList}
-                keyboardShouldPersistTaps="handled"
-              >
-                {replacementCategories.map((category) => {
-                  const selected = replacementCategoryId === category.id;
-
-                  return (
-                    <Pressable
-                      key={category.id}
-                      onPress={() => setReplacementCategoryId(category.id)}
-                      style={[
-                        styles.replacementRow,
-                        {
-                          borderColor: selected
-                            ? colors.primary
-                            : colors.border,
-                          backgroundColor: selected
-                            ? colors.surfaceAlt
-                            : colors.surface,
-                        },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.categoryManagerIcon,
-                          { backgroundColor: category.color },
-                        ]}
-                      >
-                        <Ionicons
-                          name={category.icon as keyof typeof Ionicons.glyphMap}
-                          size={20}
-                          color="#FFFFFF"
-                        />
-                      </View>
-
-                      <AppText style={{ flex: 1 }}>{category.name}</AppText>
-
-                      {selected ? (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={22}
-                          color={colors.primary}
-                        />
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            )}
-
-            <View style={styles.categoryModalActions}>
-              <Pressable
-                onPress={() => {
-                  setPendingDeleteCategory(null);
-                  setReplacementCategoryId('');
-                }}
-                style={[
-                  styles.categoryActionButton,
-                  { backgroundColor: colors.surfaceAlt },
-                ]}
-              >
-                <AppText>Cancel</AppText>
-              </Pressable>
-
-              <Pressable
-                disabled={
-                  !replacementCategoryId || replacementCategories.length === 0
-                }
-                onPress={confirmDeleteWithReplacement}
-                style={[
-                  styles.categoryActionButton,
-                  {
-                    backgroundColor: replacementCategoryId
-                      ? colors.danger
-                      : colors.surfaceAlt,
-                    opacity: replacementCategoryId ? 1 : 0.5,
-                  },
-                ]}
-              >
-                <AppText
-                  color={replacementCategoryId ? 'onPrimary' : 'textSecondary'}
-                  variant="label"
-                >
-                  Move & Delete
-                </AppText>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </>
   );
 }
@@ -1761,6 +1621,8 @@ interface AddTransactionModalProps {
   onClose: () => void;
   /** Pass a transaction to edit it, or null/undefined to add a new one. */
   transaction?: Transaction | null;
+  fixedKind?: TransactionType;
+  initialRefund?: boolean;
 }
 
 const styles = StyleSheet.create({

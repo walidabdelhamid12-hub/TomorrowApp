@@ -9,14 +9,23 @@ const root = path.resolve(__dirname, '..');
 const load = Module._load;
 let transactions = [];
 let currency = { baseCurrency: 'EGP', rates: { EGP: 1, OMR: 100 }, verifiedCurrencies: ['EGP', 'OMR'], metals: {} };
-const ledger = () => ({ transactions, accounts: [], categories: [], transfers: [] });
+const ledger = () => ({ transactions, accounts: [{id:'egp',currencyCode:'EGP',initialBalance:0},{id:'omr',currencyCode:'OMR',initialBalance:0}], categories: [], transfers: [] });
 Module._load = function(id, parent, main) {
+  // This renderer supplies fake React/store contexts. Supply its explicit English
+  // localization boundary too; localization/provider behavior is tested separately.
+  if (id.endsWith('/LanguageProvider')) return {useAppLanguage: () => ({language:'en',isRTL:false,t:(english)=>english,setLanguage:()=>{}})};
+
   if (id === 'expo-router') return { useRouter: () => ({ back() {} }) };
   if (id === 'react') return { ...React, useMemo: fn => fn(), useState: x => [x, () => {}] };
-  if (id === 'react-native') return { ActivityIndicator: 'ActivityIndicator', Pressable: 'Pressable', View: 'View', StyleSheet: { create: x => x, hairlineWidth: 1 } };
+  if (id === 'react-native') return { useWindowDimensions: () => ({ width: 390, fontScale: 1 }), TextInput: 'TextInput', Alert: { alert() { throw new Error('Unexpected alert during read-only rendering'); } }, ActivityIndicator: 'ActivityIndicator', Pressable: 'Pressable', View: 'View', StyleSheet: { create: x => x, hairlineWidth: 1 } };
   if (id === '@expo/vector-icons') return { Ionicons: 'Icon' };
   if (id === '@/components/ui') return { AppText: 'AppText', Card: 'Card', Screen: 'Screen' };
-  if (id === '@/theme') return { useTheme: () => ({ colors: {}, spacing: { md: 12 } }), moduleColors: {} };
+  if (id === '@/theme') return { useTheme: () => ({ colors: { finance: { balance: { accent: '#176849' } } }, spacing: { md: 12 } }), moduleColors: {} };
+  if (id === '@/features/finance/components/reporting/ReportPrimitives') return { ReportPicker: 'ReportPicker' };
+  if (id === '@/features/finance/components/useFinanceConfirmation') return { useFinanceConfirmation: () => ({ confirm() { throw new Error('Unexpected confirmation'); }, confirmation: null }) };
+  if (id === '@/features/finance/components/FinanceDetailsModal') return { FinanceDetailsModal: 'FinanceDetailsModal' };
+  if (id === '@/features/finance/components/FinanceActionButtons') return { FinanceActionButtons: 'FinanceActionButtons' };
+  if (id === '@/features/finance/components/acknowledgedFinanceHandler') return { acknowledgedFinanceHandler: () => { throw new Error('Unexpected mutation during read-only rendering'); } };
   if (id === '@/features/finance/components/AddTransactionModal') return { AddTransactionModal: 'AddTransactionModal' };
   if (id === '@/features/finance/store/useLedgerStore') return { useLedgerStore: fn => fn(ledger()), useLedgerHydrated: () => true };
   if (id === '@/features/finance/store/useCurrencyStore') return { useCurrencyStore: fn => fn(currency) };
@@ -67,7 +76,8 @@ test('missing, invalid and unverified rates flag incomplete totals including ref
   assert.deepEqual(summarize([tx('income', 2, 'OMR')], 'OMR', {}, []), { income: 2, expense: 0, missing: 0 });
 });
 test('real screen shares Finance Home totals, labels base/month and retains original history', () => {
-  transactions = [tx('income', 100), tx('income', 2, 'OMR'), tx('expense', 4, 'OMR'), tx('expense', 50, 'EGP', undefined, 'refund'), tx('income', 999, 'OMR', '2000-01-01')];
+  transactions = [tx('income', 100), tx('income', 2, 'OMR'), tx('expense', 4, 'OMR'), tx('expense', 50, 'EGP', undefined, 'refund'), tx('income', 999, 'OMR', '2000-01-01')].map(row=>({...row,accountId:row.currencyCode.toLowerCase()}));
+  transactions[3].relatedTransactionId=transactions[2].id;
   const original = JSON.stringify(transactions);
   for (const baseCurrency of ['EGP', 'OMR']) {
     currency = { ...currency, baseCurrency };
@@ -83,14 +93,14 @@ test('real screen shares Finance Home totals, labels base/month and retains orig
     assert.ok(expenseText.includes(formatAmount(home.expense, baseCurrency) + ' ' + baseCurrency));
     assert.ok(incomeText.includes('This month (' + month + ')'));
     assert.ok(incomeText.includes('2000-01-01'));
-    assert.ok(incomeText.includes('999.00 OMR'));
-    assert.ok(incomeText.includes('2.00 OMR'));
+    assert.ok(incomeText.includes('999.000 OMR'));
+    assert.ok(incomeText.includes('2.000 OMR'));
   }
   assert.equal(JSON.stringify(transactions), original);
 });
 test('screen warns and labels partial totals when conversion unavailable', () => {
   currency = { ...currency, baseCurrency: 'EGP', verifiedCurrencies: ['EGP'] };
-  transactions = [tx('income', 10), tx('expense', 1, 'OMR')];
+  transactions = [tx('income', 10), tx('expense', 1, 'OMR')].map(row=>({...row,accountId:row.currencyCode.toLowerCase()}));
   for (const kind of ['income', 'expense']) {
     const rendered = text(IncomeExpensesScreen({ kind }));
     assert.ok(rendered.includes('Partial total'));

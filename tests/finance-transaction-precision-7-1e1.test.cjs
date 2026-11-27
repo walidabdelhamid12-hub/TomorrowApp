@@ -22,14 +22,15 @@ test('7.1E-1 income and expense distinguish transaction and account currencies',
   assert.match(body, /const isCross = amountCurrency !== activeAccount\.currencyCode/);
   assert.ok(resolution >= 0 && guard > resolution);
   assert.ok(guard < body.indexOf('updateTransaction(current.id'));
-  assert.ok(guard < body.indexOf('addTransaction({'));
+  assert.equal((body.match(/operationId => addTransaction\(input, operationId\)/g) || []).length, 2);
+  assert.ok(guard < body.indexOf('operationId => addTransaction(input, operationId)'));
   assert.match(modal, /const amountToRecord = manualDirectSelected \? manualAccountAmount : crossCurrencyPreview\?\.accountAmount/);
   assert.match(body, /const accountAmount = isCross \? amountToRecord! : value/);
 });
 
 test('7.1E-1 refund uses original transaction currency', () => {
   assert.match(body, /entryMode === 'refund'/);
-  assert.match(body, /selectedOriginal\?\.transaction.currencyCode/);
+  assert.match(body, /selectedOriginal\?\.transaction.originalCurrencyCode \?\? selectedOriginal\?\.transaction.currencyCode/);
   const refundSave = body.indexOf("if (entryMode === 'refund')", guard);
   assert.ok(refundSave > guard);
   assert.match(body, /value > selectedOriginal.remainingAmount/);
@@ -37,8 +38,9 @@ test('7.1E-1 refund uses original transaction currency', () => {
 
 test('7.1E-1 resolver rejects invalid amounts and precision', () => {
   assert.match(resolver, /hasValidCurrencyPrecision/);
-  assert.match(resolver, /if \(!text\) return null/);
-  assert.match(resolver, /value <= 0/);
+  assert.match(resolver, /if \(!text \|\| text\.length > 256 \|\| !isSupportedCurrency\(currencyCode\)\) return null/);
+  assert.match(resolver, /exactAmountToNumber\(exact, getCurrencyDecimals\(currencyCode\)\)/);
+  assert.match(read('src/features/finance/utils/exactAmountArithmetic.ts'), /value\.numerator <= 0n/);
   assert.match(resolver, /return null/);
 });
 
@@ -49,10 +51,11 @@ test('7.1E-1 protected transactions remain blocked', () => {
 });
 
 test('7.1E-1 save paths use validated transaction or account amount', () => {
-  const originalAmountSaves = body.match(/amount:\s*value\b/g) || [];
+  const refundCreditSaves = body.match(/amount:\s*credit\b/g) || [];
   const accountAmountSaves = body.match(/amount:\s*accountAmount\b/g) || [];
 
-  assert.equal(originalAmountSaves.length, 1, 'Refund must retain original currency amount');
+  assert.equal(refundCreditSaves.length, 1, 'Ledger stores the actual bank credit');
+  assert.match(body, /originalAmount: value/);
   assert.equal(accountAmountSaves.length, 2, 'Create and edit must save account currency amount');
   assert.ok(resolution < body.indexOf('amount: accountAmount'));
   assert.match(body, /const accountAmount = isCross/);

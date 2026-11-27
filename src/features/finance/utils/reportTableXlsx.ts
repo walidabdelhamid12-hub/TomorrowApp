@@ -24,10 +24,12 @@ function numeric(value: string | number): string {
 }
 
 /** One sheet per currency or quantity unit; no cross-currency sums or invented values. */
-export function buildReportTableXlsx(table: ReportTable): Uint8Array {
+export function buildReportTableXlsx(table: ReportTable, language: 'en' | 'ar' = 'en'): Uint8Array {
   validateReportTable(table);
   if (table.columns.length > 16384 || table.rows.length > 1048570) throw new Error('Report exceeds Excel worksheet limits.');
-  const currencyIndex = table.columns.findIndex(label => /^(currency|unit)$/i.test(label));
+  const ar = language === 'ar';
+  const tr = (en: string, arabic: string) => ar ? arabic : en;
+  const currencyIndex = table.columns.findIndex(label => /^(currency|unit|العملة|الوحدة)$/i.test(label));
   const groups = new Map<string, typeof table.rows[number][]>();
   for (const row of table.rows) {
     const key = currencyIndex < 0 ? 'Report' : String(row[currencyIndex]);
@@ -50,15 +52,15 @@ export function buildReportTableXlsx(table: ReportTable): Uint8Array {
       return cell(column(i), r, isNumeric ? numeric(typeof value === 'number' ? reportTableNumber(table, values, i, value) : value!) : String(value ?? ''), !!isNumeric, style);
     }).join('')}</row>`;
     const data = [
-      rowXml(1, ['TOMORROW FINANCE', 'FINANCIAL STATEMENT']),
+      rowXml(1, ['TOMORROW FINANCE', tr('FINANCIAL STATEMENT', 'تقرير مالي')]),
       rowXml(2, [table.title]),
-      rowXml(3, ['From', table.period.from, 'To', table.period.to]),
-      rowXml(4, ['Currency / unit', currency]),
-      rowXml(5, ['Verified records', rows.length]),
+      rowXml(3, [tr('From', 'من'), table.period.from, tr('To', 'إلى'), table.period.to]),
+      rowXml(4, [tr('Currency / unit', 'العملة / الوحدة'), currency]),
+      rowXml(5, [tr('Verified records', 'السجلات المتحقق منها'), rows.length]),
       rowXml(6, [table.notice]),
       rowXml(8, table.columns),
       ...rows.map((row, i) => rowXml(i + 9, row, true)),
-      rowXml(rows.length + 10, ['TOMORROW FINANCE · Verified report export']),
+      rowXml(rows.length + 10, ['TOMORROW FINANCE · ' + tr('Verified report export', 'تصدير تقرير متحقق منه')]),
     ].join('');
     const last = column(table.columns.length - 1);
     // Chart the first numeric measure against a text label, within one verified unit only.

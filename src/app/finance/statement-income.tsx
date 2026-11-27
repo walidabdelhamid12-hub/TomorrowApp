@@ -1,3 +1,4 @@
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { StatementExportActions } from '@/features/finance/components/reporting/StatementExportActions';
 import { buildReportTableXlsx } from '@/features/finance/utils/reportTableXlsx';
 import { shareStatementXlsx } from '@/features/finance/utils/shareStatementXlsx';
@@ -32,6 +33,7 @@ function validDate(value: string | undefined): value is string {
 /** Read-only ordinary-income statement. No ledger writes or posting. */
 export default function IncomeStatementScreen() {
   const router = useRouter();
+  const { t, language } = useAppLanguage();
   const [exporting, setExporting] = useState(false);
   const { colors, spacing } = useTheme();
   const params = useLocalSearchParams<{
@@ -77,12 +79,12 @@ export default function IncomeStatementScreen() {
         categories.find(c => c.id === row.categoryId)?.name ?? 'Uncategorized',
         [row.note, accounts.find(a => a.id === row.accountId)?.name].filter(Boolean).join(' · '),
         row.currencyCode, row.amount] as const);
-      const bytes = buildReportTableXlsx({ title: 'Income Statement', period: { from, to },
-        columns: ['Date', 'Category', 'Description', 'Currency', 'Amount'], rows,
-        numericColumns: [4], verified: true, notice: 'Verified ordinary income only.' });
-      await shareStatementXlsx(bytes, { title: 'Income Statement', filePrefix: 'income-statement' });
+      const bytes = buildReportTableXlsx({ title: t('Income Statement', 'كشف الدخل'), period: { from, to },
+        columns: [t('Date', 'التاريخ'), t('Category', 'التصنيف'), t('Description', 'الوصف'), t('Currency', 'العملة'), t('Amount', 'المبلغ')], rows,
+        numericColumns: [4], verified: true, notice: t('Verified ordinary income only.', 'الدخل العادي المتحقق منه فقط.') });
+      await shareStatementXlsx(bytes, { title: t('Income Statement', 'كشف الدخل'), filePrefix: 'income-statement' });
     } catch (error) {
-      Alert.alert('Excel export failed', error instanceof Error ? error.message : 'Unable to create Excel workbook.');
+      Alert.alert(t('Excel export failed', 'فشل تصدير Excel'), error instanceof Error ? error.message : t('Unable to create Excel workbook.', 'تعذر إنشاء ملف Excel.'));
     } finally { setExporting(false); }
   };
   const exportPdf = async () => {
@@ -92,32 +94,32 @@ export default function IncomeStatementScreen() {
       const html = buildOperatingStatementPrintHtml(statement, 'income', { from, to }, {
         accounts: new Map(accounts.map(account => [account.id, account.name])),
         categories: new Map(categories.map(category => [category.id, category.name])),
-      });
+      }, language === 'ar' ? 'ar' : 'en');
       await shareStatementPdf(html);
     } catch (error) {
-      Alert.alert('Export failed', error instanceof Error ? error.message : 'Unable to create PDF.');
+      Alert.alert(t('Export failed', 'فشل التصدير'), error instanceof Error ? error.message : t('Unable to create PDF.', 'تعذر إنشاء ملف PDF.'));
     } finally {
       setExporting(false);
     }
   };
   return (
     <Screen scroll>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to Income Report"
+      <Pressable accessibilityRole="button" accessibilityLabel={t("Back to Income Report", "العودة إلى تقرير الدخل")}
         onPress={() => router.back()}
         style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }}>
         <Ionicons name="arrow-back" size={23} color={colors.text} />
-        <AppText style={{ marginLeft: spacing.sm }}>Income Report</AppText>
+        <AppText style={{ marginLeft: spacing.sm }}>{t("Income Report", "تقرير الدخل")}</AppText>
       </Pressable>
       {!valid ? (
         <AppText color="textSecondary" style={{ marginTop: spacing.md }}>
-          Invalid or missing statement filters. Return to the Income Report.
+          {t("Invalid or missing statement filters. Return to the Income Report.", "فلاتر كشف الحساب غير صالحة أو ناقصة. ارجع إلى تقرير الدخل.")}
         </AppText>
       ) : !ledgerReady || !financeReady || !statement ? (
         <ActivityIndicator color={moduleColors.finance} />
       ) : (
         <View style={{ marginTop: spacing.md }}>
           <StatementUnifiedChrome kind="Income" from={from!} to={to!}
-            account={accountId ? accounts.find(a => a.id === accountId)?.name ?? 'Unknown account' : 'All accounts'}
+            account={accountId ? accounts.find(a => a.id === accountId)?.name ?? t('Unknown account', 'حساب غير معروف') : t('All accounts', 'كل الحسابات')}
             category={categoryId ? categories.find(c => c.id === categoryId)?.name ?? 'Unknown category' : 'All income categories'}
             currency={currencyCode || undefined}
             totals={statement.report.currencies.map(total => ({ currencyCode: total.currencyCode, amount: formatAmount(total.income, total.currencyCode) }))} />
@@ -136,7 +138,7 @@ export default function IncomeStatementScreen() {
               <AppText variant="bodyStrong" style={{ marginTop: spacing.sm, marginBottom: spacing.xs }}>Transactions ({statement.rows.length})</AppText>
               {statement.rows.length === 0 && (
                 <AppText color="textSecondary" style={{ marginTop: spacing.sm }}>
-                  No income transactions for this period.
+                  {t("No income transactions for this period.", "لا توجد معاملات دخل لهذه الفترة.")}
                 </AppText>
               )}
               <StatementMobileRows rows={statement.rows.map(row => ({
@@ -155,7 +157,7 @@ export default function IncomeStatementScreen() {
             disabled={!statement.reconciled || statement.report.unknown.length > 0}
             pdf={exportPdf}
             excel={exportExcel}
-            share={() => Alert.alert('Share Income Statement', 'Choose a format', [
+            share={() => Alert.alert(t('Share Income Statement', 'مشاركة كشف الدخل'), t('Choose a format', 'اختر صيغة الملف'), [
               { text: 'PDF', onPress: () => { void exportPdf(); } },
               { text: 'Excel XLSX', onPress: () => { void exportExcel(); } },
               { text: 'Cancel', style: 'cancel' },

@@ -65,3 +65,17 @@ test('frozen source data remains untouched', () => {
   const rows = aggregateSavedInstallmentsReport(Object.freeze([item]), '2026-11-01','2026-11-30');
   assert.equal(summarizeSavedInstallmentsByCurrency(Object.freeze(rows))[0].dueInPeriod, '1.00');
 });
+
+const { monthlyScheduledInstallmentTotal: monthly } = require('../src/features/finance/utils/reportSavedInstallments.ts');
+test('dashboard schedule uses only current month and verified rates', () => {
+  const data = [record('a','OMR','30.000',[['2026-10-31','10.000'],['2026-11-30','10.000'],['2026-12-01','10.000']]), record('b','USD','2.00',[['2026-11-01','2.00']])];
+  assert.equal(monthly(data,'2026-11','OMR',{OMR:100,USD:40},['OMR','USD']),10.8);
+  assert.equal(monthly(data,'2026-11','OMR',{OMR:100,USD:40},['OMR']),null);
+  assert.equal(monthly(data,'2026-09','OMR',{},[]),0);
+});
+test('dashboard schedule handles leap years, duplicates and invalid month safely', () => {
+  const data = record('a','OMR','1.001',[['2028-02-29','1.001']]);
+  assert.equal(monthly([data],'2028-02','OMR',{},[]),1.001);
+  assert.equal(monthly([data,data],'2028-02','OMR',{},[]),null);
+  assert.equal(monthly([data],'2028-13','OMR',{},[]),null);
+});

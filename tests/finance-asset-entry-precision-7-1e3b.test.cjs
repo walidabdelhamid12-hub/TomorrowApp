@@ -24,9 +24,9 @@ test('7.1E-3B currency precision excludes metal weights', () => {
 
 test('7.1E-3B validation blocks invalid precision before saving', () => {
   const guard = body.indexOf('if (!isMetal && !hasValidCurrencyPrecision');
-  const save = body.indexOf('onSave(asset.id, entryId, {');
+  const save = body.indexOf('onSave(asset.id, entryId, patch);');
   assert.ok(guard >= 0 && save > guard);
-  assert.match(body.slice(guard, save), /Alert\.alert\('Invalid amount precision'/);
+  assert.match(body.slice(guard, save), /Alert\.alert\(t\('Invalid amount precision',/);
   assert.match(body.slice(guard, save), /return;/);
   assert.match(body.slice(guard, save), /Invalid date/);
 });

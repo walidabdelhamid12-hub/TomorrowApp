@@ -34,9 +34,9 @@ test('report contract cards open details and label both monetary and count metri
   assert.match(source, /accessibilityLabel=\{"Open installment contract " \+ row\.name\}/);
   assert.match(source, /pathname: '\/finance\/installment-contract'/);
   assert.match(source, /mode: 'details'/);
-  assert.match(source, /label: 'Contract total \(all scheduled\)', value: row\.totalScheduled/);
-  assert.match(source, /label: 'Due in period', value: row\.dueInPeriod/);
-  assert.match(source, /label: 'Installments scheduled in period', value: row\.dueCount/);
+  assert.match(source, /label: t\("Contract total \(all scheduled\)", "[^"]+"\), value: row\.totalScheduled \+ \' \' \+ row\.currencyCode/);
+  assert.match(source, /label: t\("Due in period", "[^"]+"\), value: row\.dueInPeriod \+ \' \' \+ row\.currencyCode/);
+  assert.match(source, /label: t\("Installments scheduled in period", "[^"]+"\), value: row\.dueCount \+ \' of \' \+ row\.scheduledCount/);
   assert.match(source, /<ReportDates period=\{dates\} onChange=\{setPeriod\}/);
 
   assert.doesNotMatch(source, /\\\\n\s*<Pressable/);
@@ -51,8 +51,8 @@ test('currency summary remains read-only and never combines currencies', () => {
   assert.match(utility, /current\.total \+= units\(row\.totalScheduled, decimals\)/);
   assert.match(utility, /current\.due \+= units\(row\.dueInPeriod, decimals\)/);
   assert.match(screen, /summarizeSavedInstallmentsByCurrency\(rows\)/);
-  assert.match(screen, /<ReportPicker label="Currency" value=\{activeCurrency\} onSelect=\{setCurrency\} options=\{summary\.map/);
+  assert.match(screen, /<ReportPicker label=\{t\("Currency", "[^"]+"\)\} value=\{activeCurrency\} onSelect=\{setCurrency\} options=\{summary\.map/);
   assert.doesNotMatch(screen, /<ReportCurrencyTiles\b/);
-  assert.match(screen, /label: 'All scheduled contracts', value: total\.totalScheduled/);
+  assert.match(screen, /label: t\("All scheduled contracts", "[^"]+"\), value: total\.totalScheduled/);
   assert.doesNotMatch(utility, /setState|createContract\(|updateContract\(|deleteContract\(/);
 });

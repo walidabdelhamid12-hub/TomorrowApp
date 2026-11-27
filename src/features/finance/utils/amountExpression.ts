@@ -1,68 +1,25 @@
-import { getCurrencyDecimals } from '../constants/currencies';
-import { evaluateExpression } from './calculator';
+import { getCurrencyDecimals, isSupportedCurrency } from '../constants/currencies';
+import { evaluateExactAmountExpression, exactAmountToNumber } from './exactAmountArithmetic';
 import { parseAmount } from './money';
 import { hasValidCurrencyPrecision } from './amountPrecision';
+import { normalizeDigits } from '@/utils/input';
 
-export function resolveAmountExpression(
-  input: string,
-  currencyCode: string
-): number | null {
+export function resolveAmountExpression(input: string, currencyCode: string): number | null {
   const text = input.trim();
+  if (!text || text.length > 256 || !isSupportedCurrency(currencyCode)) return null;
 
-  if (!text) return null;
-
-  // Preserve ordinary numeric input and existing parser behavior.
+  // Preserve the existing plain-input grammar and typed precision policy.
+  // Its floating-point value is only a grammar check, never the amount authority.
   const plain = parseAmount(text);
   if (plain !== null) {
-    return plain > 0 &&
-      hasValidCurrencyPrecision(text, currencyCode)
-      ? plain
-      : null;
+    if (!hasValidCurrencyPrecision(text, currencyCode)) return null;
+    const normalized = normalizeDigits(text).replace(/\u066B/g, '.').replace(/[,\u066C]/g, '');
+    const exact = evaluateExactAmountExpression(normalized);
+    return exact === null ? null : exactAmountToNumber(exact, getCurrencyDecimals(currencyCode));
   }
 
-  // Normalize keyboard arithmetic symbols.
-  const expression = text
-    .replace(/\*/g, '×')
-    .replace(/\//g, '÷');
-
-  // Never accept incomplete expressions.
+  const expression = text.replace(/\*/g, '×').replace(/\//g, '÷');
   if (/[+\-×÷]$/.test(expression)) return null;
-
-  const value = evaluateExpression(expression);
-
-  if (value === null || !Number.isFinite(value) || value <= 0) {
-    return null;
-  }
-
-  const result = String(value);
-
-  if (hasValidCurrencyPrecision(result, currencyCode)) {
-    return value;
-  }
-
-  // Remove only negligible floating-point representation noise.
-  // Never silently round a genuinely over-precise amount.
-  const decimals = getCurrencyDecimals(currencyCode);
-  const scale = 10 ** decimals;
-  const scaled = value * scale;
-  const nearest = Math.round(scaled);
-
-  const tolerance =
-    Number.EPSILON * Math.max(1, Math.abs(scaled)) * 2;
-
-  if (
-    !Number.isSafeInteger(nearest) ||
-    Math.abs(scaled - nearest) > tolerance
-  ) {
-    return null;
-  }
-
-  const normalized = nearest / scale;
-
-  return hasValidCurrencyPrecision(
-    String(normalized),
-    currencyCode
-  )
-    ? normalized
-    : null;
+  const exact = evaluateExactAmountExpression(expression);
+  return exact === null ? null : exactAmountToNumber(exact, getCurrencyDecimals(currencyCode));
 }

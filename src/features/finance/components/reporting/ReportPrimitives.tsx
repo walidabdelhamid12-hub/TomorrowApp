@@ -4,6 +4,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
 import { AppText } from '@/components/ui';
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { MetalTypeLabel } from '@/features/finance/components/MetalTypeLabel';
 import { useTheme, moduleColors } from '@/theme';
 import { CURRENCIES } from '@/features/finance/constants/currencies';
@@ -25,29 +26,29 @@ export function currencyLabel(code: string) {
   return `${currency?.flag ?? ''} ${code}`.trim();
 }
 export function ReportNavigation({ active }: { active: string }) {
-  const router = useRouter(); const { colors } = useTheme();
+  const router = useRouter(); const { colors } = useTheme(); const { t } = useAppLanguage();
   return <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-    {REPORT_ITEMS.map(item => <Pressable key={item.path} accessibilityRole="button" accessibilityLabel={`Open ${item.label} report`}
+    {REPORT_ITEMS.map(item => <Pressable key={item.path} accessibilityRole="button" accessibilityLabel={t(`Open ${item.label} report`, `فتح تقرير ${({ Income: 'الدخل', Expenses: 'المصروفات', Accounts: 'الحسابات', Assets: 'الأصول', Installments: 'الأقساط', Loans: 'القروض', Receivable: 'المستحقات لنا', Payable: 'المستحقات علينا' } as Record<string, string>)[item.label] ?? item.label}`)}
       accessibilityState={{ selected: active === item.path }} onPress={() => { if (active !== item.path) router.push(`/finance/report-${item.path}` as Href); }}
       style={{ minHeight: 48, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center', borderBottomWidth: 2,
         borderColor: active === item.path ? moduleColors.finance : 'transparent' }}>
       <Ionicons name={item.icon} size={19} color={active === item.path ? moduleColors.finance : colors.text} />
-      <AppText variant="caption">{item.label}</AppText>
+      <AppText variant="caption">{t(item.label, ({ Income: 'الدخل', Expenses: 'المصروفات', Accounts: 'الحسابات', Assets: 'الأصول', Installments: 'الأقساط', Loans: 'القروض', Receivable: 'المستحقات لنا', Payable: 'المستحقات علينا' } as Record<string, string>)[item.label] ?? item.label)}</AppText>
     </Pressable>)}
   </ScrollView>;
 }
 export function ReportHeader({ title, period, previous, next, previousDisabled, nextDisabled, icon, compact = false }: {
   title: string; period: string; icon?: Icon; compact?: boolean; previous?: () => void; next?: () => void; previousDisabled?: boolean; nextDisabled?: boolean;
 }) {
-  const { colors } = useTheme();
+  const { colors } = useTheme(); const { t } = useAppLanguage();
   return <View style={{ flexDirection: 'row', flexWrap: compact ? 'nowrap' : 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 1 }}>{icon && <Ionicons name={icon} size={compact ? 18 : 23} color={moduleColors.finance} />}<AppText variant={compact ? 'bodyStrong' : 'h3'} style={{ flexShrink: 1, fontSize: compact ? 16 : undefined, fontWeight: '800', color: '#0F172A' }}>{title}</AppText></View>
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      {previous && <Pressable accessibilityRole="button" accessibilityLabel="Previous month" disabled={previousDisabled} onPress={previous}
+      {previous && <Pressable accessibilityRole="button" accessibilityLabel={t('Previous month', 'الشهر السابق')} disabled={previousDisabled} onPress={previous}
         style={{ minHeight: 44, minWidth: compact ? 25 : 36, alignItems: 'center', justifyContent: 'center', opacity: previousDisabled ? 0.35 : 1 }}>
         <Ionicons name="chevron-back" size={compact ? 16 : 20} color={colors.text} /></Pressable>}
       <AppText variant="bodyStrong" style={compact ? { fontSize: 12 } : undefined}>{period}</AppText>
-      {next && <Pressable accessibilityRole="button" accessibilityLabel="Next month" disabled={nextDisabled} onPress={next}
+      {next && <Pressable accessibilityRole="button" accessibilityLabel={t('Next month', 'الشهر التالي')} disabled={nextDisabled} onPress={next}
         style={{ minHeight: 44, minWidth: 36, alignItems: 'center', justifyContent: 'center', opacity: nextDisabled ? 0.35 : 1 }}>
         <Ionicons name="chevron-forward" size={20} color={colors.text} /></Pressable>}
     </View>
@@ -56,13 +57,13 @@ export function ReportHeader({ title, period, previous, next, previousDisabled, 
 export function ReportPicker({ label, value, options, onSelect, inline = true, selectedIcon, selectedIconColor }: {
   label: string; value: string; options: { id: string; label: string; icon?: keyof typeof Ionicons.glyphMap; color?: string; metalType?: 'gold' | 'silver'; metalPrefix?: string; metalSuffix?: string }[]; onSelect: (id: string) => void; inline?: boolean; selectedIcon?: keyof typeof Ionicons.glyphMap; selectedIconColor?: string;
 }) {
-  const [open, setOpen] = useState(false); const { colors } = useTheme();
+  const [open, setOpen] = useState(false); const { colors } = useTheme(); const { t } = useAppLanguage();
   const selected = options.find(item => item.id === value);
   return <View style={{ flex: 1, minWidth: 0 }}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${selected?.label ?? 'Unavailable selection'}`}
+    <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${selected?.label ?? t('Unavailable selection', 'اختيار غير متاح')}`}
       accessibilityState={{ expanded: open }} onPress={() => setOpen(current => !current)}
-      style={{ minHeight: inline ? 40 : 44, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 8, paddingVertical: inline ? 4 : 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-      <View style={{ flex: 1, flexDirection: inline ? 'row' : 'column', flexWrap: 'wrap', alignItems: inline ? 'center' : 'stretch', gap: inline ? 5 : 0 }}><AppText variant="caption" numberOfLines={1} style={{ fontWeight: '700', color: '#0F172A' }}>{label}</AppText><View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1, gap: 4 }}>{(selectedIcon || selected?.icon) && <Ionicons name={(selectedIcon || selected?.icon)!} size={14} color={selectedIconColor || selected?.color || colors.text} />}<AppText variant="caption" style={{ flexShrink: 1 }}>{selected?.metalType ? <>{selected.metalPrefix ?? ''}<MetalTypeLabel type={selected.metalType} suffix={selected.metalSuffix ?? ''} /></> : selected?.label ?? 'Unavailable selection'}</AppText></View></View>
+      style={{ minHeight: inline ? 40 : 44, borderWidth: 1, borderColor: '#D6B777', borderRadius: 8, paddingHorizontal: 8, paddingVertical: inline ? 4 : 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <View style={{ flex: 1, flexDirection: inline ? 'row' : 'column', flexWrap: 'wrap', alignItems: inline ? 'center' : 'stretch', gap: inline ? 5 : 0 }}><AppText variant="caption" numberOfLines={1} style={{ fontWeight: '700', color: '#0F172A' }}>{label}</AppText><View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1, gap: 4 }}>{(selectedIcon || selected?.icon) && <Ionicons name={(selectedIcon || selected?.icon)!} size={14} color={selectedIconColor || selected?.color || colors.text} />}<AppText variant="caption" style={{ flexShrink: 1 }}>{selected?.metalType ? <>{selected.metalPrefix ?? ''}<MetalTypeLabel type={selected.metalType} suffix={selected.metalSuffix ?? ''} /></> : selected?.label ?? t('Unavailable selection', 'اختيار غير متاح')}</AppText></View></View>
       <Ionicons name="chevron-down" size={16} color={colors.text} />
     </Pressable>
     {open && options.map((item, index) => <Pressable key={`${item.id}-${index}`} accessibilityRole="button" accessibilityLabel={item.label}
@@ -74,25 +75,25 @@ export function ReportPicker({ label, value, options, onSelect, inline = true, s
   </View>;
 }
 export function ReportSummaryCards({ cards, currency, compact = true, denseCentered = true }: { cards: { label: string; value: number | null; detail?: string }[]; currency: string; compact?: boolean; denseCentered?: boolean }) {
-  const { colors } = useTheme();
+  const { colors } = useTheme(); const { t } = useAppLanguage();
   return <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'stretch', gap: 6, marginVertical: 6 }}>
     {cards.map(card => <View key={card.label} style={{ flexGrow: 1, flexBasis: 100, minWidth: 0, borderRadius: 10,
       borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: denseCentered ? 5 : 8, paddingVertical: denseCentered ? 3 : 5, gap: denseCentered ? 0 : 2 }}>
       <AppText variant="caption" color="textSecondary" numberOfLines={compact ? 2 : undefined} style={{ fontWeight: '600', minHeight: 0, fontSize: compact ? 11 : undefined, textAlign: denseCentered ? 'center' : 'left' }}>{card.label}</AppText>
-      <AppText variant="bodyStrong" style={{ fontSize: denseCentered ? 14 : 16, lineHeight: denseCentered ? 18 : 20, fontVariant: ['tabular-nums'], textAlign: denseCentered ? 'center' : 'left' }}>{card.value !== null && Number.isFinite(card.value) ? formatAmount(card.value, currency) : 'Unavailable'}</AppText>
+      <AppText variant="bodyStrong" style={{ fontSize: denseCentered ? 14 : 16, lineHeight: denseCentered ? 18 : 20, fontVariant: ['tabular-nums'], textAlign: denseCentered ? 'center' : 'left' }}>{card.value !== null && Number.isFinite(card.value) ? formatAmount(card.value, currency) : t('Unavailable', 'غير متاح')}</AppText>
       <AppText variant="caption" color="textSecondary" style={{ fontSize: 10, textAlign: denseCentered ? 'center' : 'left' }}>{currencyLabel(currency)}</AppText>
       {card.detail && <AppText variant="caption" color="textSecondary" style={{ fontSize: 10, lineHeight: 12, textAlign: denseCentered ? 'center' : 'left' }}>{card.detail}</AppText>}
     </View>)}
   </View>;
 }
 export function ReportTransactionRows({ rows, compact = true }: { rows: { id: string; date: string; category: string; description: string; amount: number; currency: string; categoryIcon?: keyof typeof Ionicons.glyphMap; categoryColor?: string; formattedAmount?: string; percent?: number | null }[]; compact?: boolean }) {
-  const { colors } = useTheme();
+  const { colors } = useTheme(); const { t } = useAppLanguage();
   if (compact) return <View style={{ width: '100%' }}>
     <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: colors.border, paddingVertical: 6 }}>
-      <AppText variant="caption" style={{ width: '19%', fontSize: 10 }}>Date</AppText>
-      <AppText variant="caption" style={{ width: '24%', fontSize: 10 }}>Category</AppText>
-      <AppText variant="caption" style={{ width: '20%', fontSize: 10 }}>Destination</AppText><AppText variant="caption" style={{ width: '13%', fontSize: 10, textAlign: 'right' }}>%</AppText>
-      <AppText variant="caption" style={{ width: '24%', textAlign: 'right', fontSize: 10 }}>Amount</AppText>
+      <AppText variant="caption" style={{ width: '19%', fontSize: 10 }}>{t('Date', 'التاريخ')}</AppText>
+      <AppText variant="caption" style={{ width: '24%', fontSize: 10 }}>{t('Category', 'التصنيف')}</AppText>
+      <AppText variant="caption" style={{ width: '20%', fontSize: 10 }}>{t('Destination', 'الوجهة')}</AppText><AppText variant="caption" style={{ width: '13%', fontSize: 10, textAlign: 'right' }}>%</AppText>
+      <AppText variant="caption" style={{ width: '24%', textAlign: 'right', fontSize: 10 }}>{t('Amount', 'المبلغ')}</AppText>
     </View>
     {rows.map(row => <View key={row.id} testID={`report-transaction-${row.id}`} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderColor: colors.border }}>
       <AppText variant="caption" numberOfLines={1} style={{ width: '19%', fontSize: 10 }}>{/^\d{4}-\d{2}-\d{2}$/.test(row.date) ? `${row.date.slice(8, 10)} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(row.date.slice(5, 7)) - 1]}` : row.date}</AppText>
@@ -107,8 +108,8 @@ export function ReportTransactionRows({ rows, compact = true }: { rows: { id: st
   return <ScrollView horizontal contentContainerStyle={{ flexGrow: 1 }}>
     <View style={{ minWidth: 490, flex: 1 }}>
       <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: colors.border, paddingVertical: 6 }}>
-        <AppText variant="caption" style={{ width: 84 }}>Date</AppText><AppText variant="caption" style={{ width: 110 }}>Category</AppText>
-        <AppText variant="caption" style={{ flex: 1, minWidth: 160 }}>Description</AppText><AppText variant="caption" style={{ width: 132, textAlign: 'right' }}>Amount</AppText>
+        <AppText variant="caption" style={{ width: 84 }}>{t('Date', 'التاريخ')}</AppText><AppText variant="caption" style={{ width: 110 }}>{t('Category', 'التصنيف')}</AppText>
+        <AppText variant="caption" style={{ flex: 1, minWidth: 160 }}>{t('Description', 'الوصف')}</AppText><AppText variant="caption" style={{ width: 132, textAlign: 'right' }}>{t('Amount', 'المبلغ')}</AppText>
       </View>
       {rows.map(row => <View key={row.id} testID={`report-transaction-${row.id}`} style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 9, borderBottomWidth: 1, borderColor: colors.border }}>
         <AppText variant="caption" style={{ width: 84 }}>{row.date}</AppText>
@@ -123,13 +124,14 @@ export function ReportExportActions({ busy, disabled, pdf, excel, share, excelLa
   busy: boolean; disabled: boolean; pdf: () => void; excel: () => void; share: () => void; excelLabel?: string;
 }) {
   const { colors } = useTheme();
+  const { t } = useAppLanguage();
   return <View style={{ flexDirection: 'row', gap: 8, marginVertical: 12 }}>
     {([{ label: 'PDF', icon: 'document-text-outline', action: pdf }, { label: excelLabel, icon: 'grid-outline', action: excel },
       { label: 'Share', icon: 'share-outline', action: share }] as const).map(item => <Pressable key={item.label}
       accessibilityRole="button" accessibilityLabel={`Export ${item.label}`} disabled={disabled || busy} onPress={item.action}
       style={{ flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: 8,
         borderWidth: 1, borderColor: colors.border, opacity: disabled || busy ? 0.4 : 1 }}>
-      <Ionicons name={item.icon} size={18} color={colors.text} /><AppText variant="caption">{item.label}</AppText>
+      <Ionicons name={item.icon} size={18} color={colors.text} /><AppText variant="caption">{t(item.label, item.label === 'Share' ? 'مشاركة' : item.label === 'PDF' ? 'PDF' : item.label === 'Excel CSV' ? 'Excel CSV' : item.label)}</AppText>
     </Pressable>)}
   </View>;
 }

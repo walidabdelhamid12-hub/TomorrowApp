@@ -9,10 +9,12 @@ export function buildOperatingStatementPrintHtml(
   kind: 'income' | 'expenses',
   period: { from: string; to: string },
   names: StatementExportNames,
+  language: 'en' | 'ar' = 'en',
 ): string {
   const rows = buildVerifiedOperatingStatementRows(statement, names);
   return buildStatementPrintHtml(rows, {
     ...period,
-    title: kind === 'income' ? 'Income Statement' : 'Expenses Statement',
+    title: kind === 'income' ? (language === 'ar' ? 'كشف الدخل' : 'Income Statement') : (language === 'ar' ? 'كشف المصروفات' : 'Expenses Statement'),
+    language,
   });
 }

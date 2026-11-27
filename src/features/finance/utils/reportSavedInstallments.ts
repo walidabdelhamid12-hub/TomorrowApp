@@ -1,5 +1,6 @@
+import { convertAmountUnrounded } from './money';
 import type { StoredInstallmentContract } from '../store/installmentsStorage';
-import { getCurrencyDecimals } from '../constants/currencies';
+import { getCurrencyDecimals, isSupportedCurrency } from '../constants/currencies';
 import { validateInstallmentContract } from './installments';
 
 export interface SavedInstallmentReportRow {
@@ -78,4 +79,30 @@ export function summarizeSavedInstallmentsByCurrency(
       dueCount: values.dueCount,
     };
   });
+}
+
+/** Dashboard projection only: saved schedules contain no verified payment ledger. */
+export function monthlyScheduledInstallmentTotal(
+  records: readonly StoredInstallmentContract[], month: string, baseCurrency: string,
+  rates: Record<string, number>, verifiedCurrencies: readonly string[],
+): number | null {
+  try {
+    if (!isSupportedCurrency(baseCurrency) || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return null;
+    const [year, monthNumber] = month.split('-').map(Number);
+    if (year < 100) return null;
+    const last = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+    const rows = summarizeSavedInstallmentsByCurrency(aggregateSavedInstallmentsReport(records, month + '-01', month + '-' + last));
+    let total = 0;
+    for (const row of rows) {
+      const decimals = getCurrencyDecimals(row.currencyCode);
+      const exact = units(row.dueInPeriod, decimals);
+      if (exact === 0n) continue;
+      if (exact > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+      const converted = convertAmountUnrounded(Number(row.dueInPeriod), row.currencyCode, baseCurrency, rates, verifiedCurrencies);
+      if (converted === null || !Number.isFinite(converted) || converted < 0) return null;
+      total += converted;
+      if (!Number.isSafeInteger(Math.round(total * 10 ** getCurrencyDecimals(baseCurrency)))) return null;
+    }
+    return total;
+  } catch { return null; }
 }

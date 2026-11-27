@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAppLanguage } from '@/localization/LanguageProvider';
 import { useTheme } from '@/theme';
 import { financeLayoutTokens, getFinanceDesignTokens } from '@/features/finance/constants/financeDesignTokens';
 
@@ -19,11 +20,14 @@ interface FormModalProps {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  onBack?: () => void;
+  compactTitle?: boolean;
 }
 
 /** Bottom-sheet style modal shared by all finance forms. */
-export function FormModal({ visible, title, onClose, children }: FormModalProps) {
+export function FormModal({ visible, title, onClose, children, onBack, compactTitle }: FormModalProps) {
   const { colors, spacing, scheme } = useTheme();
+  const { t } = useAppLanguage();
   const finance = getFinanceDesignTokens(scheme);
   const insets = useSafeAreaInsets();
 
@@ -34,16 +38,16 @@ export function FormModal({ visible, title, onClose, children }: FormModalProps)
       animationType="slide"
       onRequestClose={onClose}
       statusBarTranslucent
-      navigationBarTranslucent
+      navigationBarTranslucent={false}
     >
       <KeyboardAvoidingView
-        style={[styles.root, { paddingTop: insets.top + 8 }]}
+        style={[styles.root, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 24 : 0) }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <Pressable
           style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]}
           onPress={onClose}
-          accessibilityLabel="Close"
+          accessibilityLabel={t('Close', 'إغلاق')}
         />
 
         <View
@@ -57,7 +61,7 @@ export function FormModal({ visible, title, onClose, children }: FormModalProps)
             },
           ]}
         >
-          <FinanceModalHeader title={title} onClose={onClose} />
+          <FinanceModalHeader title={title} onClose={onClose} onBack={onBack} compactTitle={compactTitle} />
 
           <ScrollView
             style={styles.scroll}

@@ -16,7 +16,7 @@ function loadTS(file, mocks) {
   return module.exports;
 }
 const currencyModule = loadTS(currenciesPath, {});
-const precision = loadTS(helperPath, { "@/features/finance/constants/currencies": currencyModule });
+const precision = loadTS(helperPath, { "@/features/finance/constants/currencies": currencyModule, "@/utils/input": loadTS(path.join(root, "src/utils/input.ts"), {}), "./exactAmountArithmetic": loadTS(path.join(root, "src/features/finance/utils/exactAmountArithmetic.ts"), {}) });
 test("7.1A actual precision helper uses real currency metadata", () => {
   assert.equal(precision.hasValidCurrencyPrecision("10.12", "EGP"), true);
   assert.equal(precision.hasValidCurrencyPrecision("10.123", "EGP"), false);

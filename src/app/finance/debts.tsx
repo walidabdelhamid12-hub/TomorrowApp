@@ -1,4 +1,12 @@
-import { FinanceModalHeader } from '@/features/finance/components/FinanceModalHeader';
+import { allowsLegacyDebtFx, buildDebtPaymentFx } from '@/features/finance/utils/debtPaymentFx';
+import { DirectHistoricalFxField } from '@/features/finance/components/DirectHistoricalFxField';
+import { AccountDropdown } from '@/features/finance/components/AccountDropdown';
+import { FormModal } from '@/features/finance/components/FormModal';
+import { shouldStackFinanceFields } from '@/features/finance/utils/formLayout';
+import { formPayload, submitFinanceForm } from "@/features/finance/components/explicitFinanceForm";
+import { acknowledgedFinanceHandler, afterFinanceSave } from '@/features/finance/components/acknowledgedFinanceHandler';
+import { useAppLanguage } from '@/localization/LanguageProvider';
+import { FinanceDateField } from '@/features/finance/components/FinanceDateField';
 import { FinanceButton as AppButton } from '@/features/finance/components/FinanceButton';
 import { financeChrome } from '@/features/finance/components/financeChrome';
 import { useFinanceConfirmation } from '@/features/finance/components/useFinanceConfirmation';
@@ -8,16 +16,15 @@ import { editLinkedPayment, postLinkedPayment, reverseLinkedPayment } from '@/fe
 
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Modal,
     PanResponder,
     Pressable,
-    ScrollView,
     StyleSheet,
     TextInput,
+    useWindowDimensions,
     View,
 } from 'react-native';
 
@@ -72,38 +79,6 @@ const isValidDate = (value: string): boolean => {
   return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
 };
 
-const parseDate = (value: string): Date | null => {
-  if (!isValidDate(value)) return null;
-
-  const [year, month, day] = value.split('-').map(Number);
-
-  return new Date(year, month - 1, day, 12, 0, 0);
-};
-
-const toDateString = (date: Date): string =>
-  [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-');
-
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
 const getPaidAmount = getDebtPaid;
 const getRemainingAmount = getDebtRemaining;
 
@@ -125,6 +100,7 @@ const formatDate = (value?: string) => {
 
 export default function DebtsScreen() {
   const router = useRouter();
+  const { t } = useAppLanguage();
   const params = useLocalSearchParams<{ direction?: string; debtId?: string }>();
   const { colors } = useTheme();
   const { confirm, confirmation } = useFinanceConfirmation();
@@ -154,6 +130,8 @@ export default function DebtsScreen() {
   const [paymentNote, setPaymentNote] = useState('');
   const [paymentDate, setPaymentDate] = useState(getTodayDate());
   const [paymentAccountId, setPaymentAccountId] = useState('');
+  const [paymentFxRate, setPaymentFxRate] = useState('');
+  const [paymentActual, setPaymentActual] = useState('');
 
   const [editingPayment, setEditingPayment] = useState<{
     debt: Debt;
@@ -170,11 +148,13 @@ export default function DebtsScreen() {
   const linkedDebt = params.debtId === undefined ? undefined : focusLinkedRecords(debts, params.debtId)[0];
   const linkedDebtId = linkedDebt?.id;
   const linkedDebtDirection = linkedDebt?.direction;
-  useEffect(() => {
-    if (linkedDebtId && linkedDebtDirection) {
-      setActiveTab(linkedDebtDirection);
-    }
-  }, [linkedDebtId, linkedDebtDirection]);
+  const linkedDebtContext = linkedDebtId && linkedDebtDirection
+    ? JSON.stringify([linkedDebtId, linkedDebtDirection]) : null;
+  const [loadedLinkedDebtContext, setLoadedLinkedDebtContext] = useState<string | null>(null);
+  if (loadedLinkedDebtContext !== linkedDebtContext) {
+    setLoadedLinkedDebtContext(linkedDebtContext);
+    if (linkedDebtId && linkedDebtDirection) setActiveTab(linkedDebtDirection);
+  }
 
   const visibleDebts = useMemo(
     () =>
@@ -235,29 +215,19 @@ export default function DebtsScreen() {
   };
 
   const handleSaveDebt = (data: NewDebtInput) => {
-    if (editingDebt) {
-      const alreadyPaid = getPaidAmount(editingDebt);
-
-      if (data.amount < alreadyPaid) {
-        Alert.alert(
-          'Invalid amount',
-          `The debt amount cannot be less than the amount already paid (${formatAmount(alreadyPaid, editingDebt.currencyCode)}).`,
-        );
-        return;
-      }
-
-      if (!updateDebt(editingDebt.id, data)) {
-        Alert.alert('Cannot update debt', 'Currency cannot change while payment history or linked account transactions exist, or accounting data is not ready. The amount must also cover all recorded payments.');
-        return;
-      }
-    } else {
-      if (!addDebt(data)) {
-        Alert.alert('Cannot add debt', 'The debt was not saved. Check the details and try again.');
-        return;
-      }
-    }
-
-    closeDebtModal();
+    const targetId = editingDebt?.id ?? null;
+    const expectedUpdatedAt = editingDebt?.updatedAt;
+    return submitFinanceForm("src/app/finance/debts.tsx:239", formPayload(targetId ? 'debt.edit' : 'debt.create', targetId, data, { expectedUpdatedAt }),
+      () => {
+        if (!targetId) return addDebt(data) || null;
+        const matches = useFinanceStore.getState().debts.filter(item => item.id === targetId);
+        if (matches.length !== 1 || matches[0].updatedAt !== expectedUpdatedAt || data.amount < getPaidAmount(matches[0])) return false;
+        return updateDebt(targetId, data);
+      }, result => {
+        const id = targetId ?? (typeof result === 'string' ? result : null);
+        if (id && useFinanceStore.getState().debts.filter(item => item.id === id).length === 1) closeDebtModal();
+        else Alert.alert(t('Previously saved debt is no longer present', 'الدين المحفوظ سابقًا غير موجود'), t('Prepare a new independent operation in this form to create a new debt. Nothing was created by this attempt.', 'جهز عملية مستقلة جديدة في هذا النموذج لإنشاء دين جديد. لم يتم إنشاء دين بهذه المحاولة.'));
+      }, () => Alert.alert(t('Debt not saved', 'لم يُحفظ الدين'), t('Review the debt and existing payments.', 'راجع الدين والدفعات المسجلة.')));
   };
 
   const confirmDeleteDebt = (debt: Debt) => {
@@ -268,15 +238,15 @@ export default function DebtsScreen() {
       : 'Are you sure you want to delete this debt?';
 
     if (hasPayments) {
-      Alert.alert('Cannot delete debt', message);
+      Alert.alert(t('Cannot delete debt', 'تعذر حذف الدين'), message);
       return;
     }
 
-    const performDelete = () => {
-      if (!deleteDebt(debt.id)) {
-        Alert.alert('Cannot delete debt', 'The debt may have payment history or linked account transactions, or its accounting data is not ready. Keep it to preserve its history.');
-      }
-    };
+    const performDelete = () => acknowledgedFinanceHandler("src/app/finance/debts.tsx:277", () => undefined, {
+      payload: { operation: 'deleteDebt', targetId: debt.id },
+      mutate: () => deleteDebt(debt.id),
+      onCommitted: result => { if (result !== true) Alert.alert(t('Cannot delete debt', 'تعذر حذف الدين'), t('The debt may have payment history or linked account transactions, or its accounting data is not ready. Keep it to preserve its history.', 'قد يحتوي الدين على دفعات أو معاملات مرتبطة، أو تكون البيانات المحاسبية غير جاهزة. احتفظ به للحفاظ على السجل.')); },
+    })();
 
     confirm('Delete debt?', message, performDelete, 'Delete');
   };
@@ -285,7 +255,7 @@ export default function DebtsScreen() {
     const remaining = getRemainingAmount(debt);
 
     if (remaining <= 0) {
-      Alert.alert('Settled', 'This debt has already been fully settled.');
+      Alert.alert(t('Settled', 'تم السداد'), t('This debt has already been fully settled.', 'تم سداد هذا الدين بالكامل بالفعل.'));
       return;
     }
 
@@ -293,9 +263,10 @@ export default function DebtsScreen() {
       (account) => account.currencyCode === debt.currencyCode,
     );
 
-    if (matchingAccounts.length === 0) {
+    const crossAllowed = allowsLegacyDebtFx(useFinanceStore.getState(), useLedgerStore.getState());
+    if (activeAccounts.length === 0 || (!crossAllowed && matchingAccounts.length === 0)) {
       Alert.alert(
-        'No matching account',
+        t('No matching account', 'لا يوجد حساب مطابق'),
         `You need an active account in ${debt.currencyCode} to record this ${debt.direction === 'receivable' ? 'collection' : 'payment'}.`,
       );
       return;
@@ -305,7 +276,8 @@ export default function DebtsScreen() {
     setPaymentAmount(String(remaining));
     setPaymentNote('');
     setPaymentDate(getTodayDate());
-    setPaymentAccountId(matchingAccounts[0].id);
+    setPaymentAccountId(matchingAccounts[0]?.id ?? '');
+    setPaymentFxRate(''); setPaymentActual('');
   };
 
   const closePayment = () => {
@@ -313,41 +285,41 @@ export default function DebtsScreen() {
     setPaymentAmount('');
     setPaymentNote('');
     setPaymentDate(getTodayDate());
-    setPaymentAccountId('');
+    setPaymentAccountId(''); setPaymentFxRate(''); setPaymentActual('');
   };
 
   const handleConfirmPayment = () => {
     if (!paymentDebt) return;
 
     if (!hasValidCurrencyPrecision(paymentAmount, paymentDebt.currencyCode)) {
-      Alert.alert('Invalid amount precision', paymentDebt.currencyCode + ' allows up to ' + getCurrencyDecimals(paymentDebt.currencyCode) + ' decimal places. Please correct the amount before saving.');
+      afterFinanceSave(() => Alert.alert(t('Invalid amount precision', 'دقة المبلغ غير صحيحة'), paymentDebt.currencyCode + t(' allows up to ', ' تسمح حتى ') + getCurrencyDecimals(paymentDebt.currencyCode) + t(' decimal places. Please correct the amount before saving.', ' منازل عشرية. صحح المبلغ قبل الحفظ.')));
       return;
     }
     const parsedAmount = parseAmount(paymentAmount);
     const amount = parsedAmount === null ? null : roundMoney(parsedAmount);
 
     if (amount === null || amount <= 0) {
-      Alert.alert('Invalid amount', 'Enter an amount greater than zero.');
+      afterFinanceSave(() => Alert.alert(t(t('Invalid amount', 'مبلغ غير صالح'), 'مبلغ غير صحيح'), t('Enter an amount greater than zero.', 'أدخل مبلغًا أكبر من صفر.')));
       return;
     }
 
     const cleanPaymentDate = paymentDate.trim();
 
     if (!isValidDate(cleanPaymentDate)) {
-      Alert.alert(
-        'Invalid date',
+      afterFinanceSave(() => Alert.alert(
+        t('Invalid date', 'تاريخ غير صالح'),
         'Please select a valid date using the calendar.',
-      );
+      ));
       return;
     }
 
     const remaining = getRemainingAmount(paymentDebt);
 
     if (amount > remaining) {
-      Alert.alert(
-        'Amount too large',
+      afterFinanceSave(() => Alert.alert(
+        t('Amount too large', 'المبلغ كبير جدًا'),
         `The remaining amount is ${formatAmount(remaining, paymentDebt.currencyCode)} ${paymentDebt.currencyCode}.`,
-      );
+      ));
       return;
     }
 
@@ -356,15 +328,17 @@ export default function DebtsScreen() {
     );
 
     if (!account) {
-      Alert.alert('Select account', 'Choose an active account.');
+      afterFinanceSave(() => Alert.alert(t('Select account', 'اختر حسابًا'), t('Choose an active account.', 'اختر حسابًا نشطًا.')));
       return;
     }
 
-    if (account.currencyCode !== paymentDebt.currencyCode) {
-      Alert.alert(
-        'Currency mismatch',
-        'The selected account must use the same currency as this debt.',
-      );
+    const crossDebt = account.currencyCode !== paymentDebt.currencyCode;
+    const actual = parseAmount(paymentActual), quotedRate = parseAmount(paymentFxRate);
+    const debtFx = crossDebt && actual !== null && quotedRate !== null ? { actualAmount: actual, quotedRate } : undefined;
+    if (crossDebt && (!allowsLegacyDebtFx(useFinanceStore.getState(), useLedgerStore.getState()) || !debtFx
+      || !hasValidCurrencyPrecision(paymentActual, account.currencyCode)
+      || !buildDebtPaymentFx(amount, paymentDebt.currencyCode, account.currencyCode, cleanPaymentDate, debtFx))) {
+      afterFinanceSave(() => Alert.alert(t('Invalid exchange details', 'بيانات الصرف غير صحيحة'), t('Enter the quoted rate and confirm the actual account amount.', 'أدخل سعر الصرف وأكد المبلغ الفعلي للحساب.')));
       return;
     }
 
@@ -390,26 +364,23 @@ export default function DebtsScreen() {
       );
 
     if (!category) {
-      Alert.alert(
-        'Missing category',
+      afterFinanceSave(() => Alert.alert(
+        t('Missing category', 'التصنيف مطلوب'),
         `No ${categoryKind} category is available. Please add one before recording this operation.`,
-      );
+      ));
       return;
     }
 
-    const result = postLinkedPayment({ entityType: 'debt', entityId: paymentDebt.id,
+    const input = { entityType: 'debt' as const, entityId: paymentDebt.id,
       amount, date: cleanPaymentDate, note: paymentNote.trim() || undefined,
-      accountId: account.id, categoryId: category.id });
-    if (!result.ok) { Alert.alert('Payment not saved', result.reason); return; }
-
-    closePayment();
-
-    Alert.alert(
-      'Saved',
-      paymentDebt.direction === 'receivable'
-        ? 'The collection was recorded and added to the selected account.'
-        : 'The payment was recorded and deducted from the selected account.',
-    );
+      accountId: account.id, categoryId: category.id, ...(debtFx ? { debtFx } : {}) };
+    return submitFinanceForm("src/app/finance/debts.tsx:321", formPayload('debt.payment.create', paymentDebt.id, input, { currencyCode: paymentDebt.currencyCode }),
+      () => {
+        const result = postLinkedPayment(input);
+        if (!result.ok) { afterFinanceSave(() => Alert.alert(t('Payment not saved', 'لم يُحفظ السداد'), result.reason)); return false; }
+        return true;
+      }, () => { closePayment(); Alert.alert(t('Saved', 'تم الحفظ'), paymentDebt.direction === 'receivable'
+        ? 'The collection was recorded and added to the selected account.' : 'The payment was recorded and deducted from the selected account.'); }, () => {});
   };
 
   const openEditPayment = (
@@ -420,11 +391,16 @@ export default function DebtsScreen() {
   };
 
   const confirmDeletePayment = (debt: Debt, payment: DebtPayment) => {
-    const performDelete = () => {
-      const result = reverseLinkedPayment({ entityType: 'debt', entityId: debt.id, paymentId: payment.id });
-      if (!result.ok) { Alert.alert('Cannot delete payment', result.reason); return; }
-      Alert.alert('Deleted', 'The payment and its linked account transaction were deleted.');
-    };
+    const ref = { entityType: 'debt' as const, entityId: debt.id, paymentId: payment.id };
+    const performDelete = () => acknowledgedFinanceHandler("src/app/finance/debts.tsx:425", () => undefined, {
+      payload: { operation: 'reverseLinkedPayment', ...ref },
+      mutate: () => reverseLinkedPayment(ref),
+      onCommitted: value => {
+        const result = value as ReturnType<typeof reverseLinkedPayment>;
+        if (!result.ok) { Alert.alert(t('Cannot delete payment', 'تعذر حذف السداد'), result.reason); return; }
+        Alert.alert(t('Deleted', 'تم الحذف'), t('The payment and its linked account transaction were deleted.', 'تم حذف الدفعة ومعاملة الحساب المرتبطة بها.'));
+      },
+    })();
 
     const message =
       `Delete this ${debt.direction === 'receivable' ? 'collection' : 'payment'} of ` +
@@ -441,12 +417,13 @@ export default function DebtsScreen() {
     amountText: string,
     date: string,
     note: string,
+    fxRate?: string, fxActual?: string,
   ) => {
     if (!editingPayment) return;
 
     const { debt, payment } = editingPayment;
     if (!hasValidCurrencyPrecision(amountText, debt.currencyCode)) {
-      Alert.alert('Invalid amount precision', debt.currencyCode + ' allows up to ' + getCurrencyDecimals(debt.currencyCode) + ' decimal places. Please correct the amount before saving.');
+      afterFinanceSave(() => Alert.alert(t('Invalid amount precision', 'دقة المبلغ غير صحيحة'), debt.currencyCode + t(' allows up to ', ' تسمح حتى ') + getCurrencyDecimals(debt.currencyCode) + t(' decimal places. Please correct the amount before saving.', ' منازل عشرية. صحح المبلغ قبل الحفظ.')));
       return;
     }
     const parsedAmount = parseAmount(amountText);
@@ -454,12 +431,12 @@ export default function DebtsScreen() {
     const cleanDate = date.trim();
 
     if (amount === null || amount <= 0) {
-      Alert.alert('Invalid amount', 'Enter an amount greater than zero.');
+      afterFinanceSave(() => Alert.alert(t(t('Invalid amount', 'مبلغ غير صالح'), 'مبلغ غير صحيح'), t('Enter an amount greater than zero.', 'أدخل مبلغًا أكبر من صفر.')));
       return;
     }
 
     if (!isValidDate(cleanDate)) {
-      Alert.alert('Invalid date', 'Please enter a valid date in YYYY-MM-DD format.');
+      afterFinanceSave(() => Alert.alert(t(t('Invalid date', 'تاريخ غير صالح'), 'تاريخ غير صحيح'), t('Please enter a valid date in YYYY-MM-DD format.', 'أدخل تاريخًا صحيحًا بصيغة YYYY-MM-DD.')));
       return;
     }
 
@@ -468,23 +445,28 @@ export default function DebtsScreen() {
     const maximumAllowed = getRemainingExcludingPayment(debt, payment.id);
 
     if (amount > maximumAllowed) {
-      Alert.alert(
-        'Amount too large',
+      afterFinanceSave(() => Alert.alert(
+        t('Amount too large', 'المبلغ كبير جدًا'),
         `The maximum allowed for this payment is ${formatAmount(maximumAllowed, debt.currencyCode)} ${debt.currencyCode}.`,
-      );
+      ));
       return;
     }
 
-    const result = editLinkedPayment({ entityType: 'debt', entityId: debt.id, paymentId: payment.id },
-      { amount, date: cleanDate, note: note.trim() || undefined });
-    if (!result.ok) { Alert.alert('Update failed', result.reason); return; }
-
-    setEditingPayment(null);
-
-    Alert.alert(
-      'Updated',
-      'The payment and its linked account transaction were updated.',
-    );
+    const ref = { entityType: 'debt' as const, entityId: debt.id, paymentId: payment.id };
+    const chosen = useLedgerStore.getState().accounts.find(a => a.id === payment.accountId);
+    const crossDebt = chosen && chosen.currencyCode !== debt.currencyCode;
+    const quote = fxRate === undefined ? null : parseAmount(fxRate), actual = fxActual === undefined ? null : parseAmount(fxActual);
+    const debtFx = crossDebt && quote !== null && actual !== null ? {actualAmount: actual, quotedRate: quote} : undefined;
+    if (crossDebt && (!debtFx || !buildDebtPaymentFx(amount, debt.currencyCode, chosen.currencyCode, cleanDate, debtFx))) {
+      afterFinanceSave(() => Alert.alert(t('Invalid exchange details', 'بيانات الصرف غير صحيحة'), t('Confirm the actual amount and rate.', 'أكد المبلغ الفعلي وسعر الصرف.'))); return;
+    }
+    const patch = { amount, date: cleanDate, note: note.trim() || undefined, ...(debtFx ? {debtFx} : {}) };
+    return submitFinanceForm("src/app/finance/debts.tsx:442", formPayload('debt.payment.edit', debt.id, patch, { paymentId: payment.id, currencyCode: debt.currencyCode }),
+      () => {
+        const result = editLinkedPayment(ref, patch);
+        if (!result.ok) { afterFinanceSave(() => Alert.alert(t('Update failed', 'فشل التحديث'), result.reason)); return false; }
+        return true;
+      }, () => { setEditingPayment(null); Alert.alert(t('Updated', 'تم التحديث'), 'The payment and its linked account transaction were updated.'); }, () => {});
   };
 
   const getStatus = (debt: Debt) => {
@@ -531,24 +513,24 @@ export default function DebtsScreen() {
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t("Go back", "رجوع")}
           style={financeChrome.back}
         >
           <Ionicons name="arrow-back" size={23} color="#D6B777" />
         </Pressable>
 
         <View style={styles.headerText}>
-          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>Debts</AppText>
+          <AppText variant="h2" style={{ color: '#FFFFFF', fontSize: 20 }}>{t("Debts", "الديون")}</AppText>
           <AppText variant="caption" style={{ color: '#CBD5E1' }}>
-            Manage money owed to you and money you owe
+            {t("Manage money owed to you and money you owe", "إدارة الأموال المستحقة لك والأموال المستحقة عليك")}
           </AppText>
         </View>
       </View>
 
       {params.debtId !== undefined && (
         <Card variant="filled">
-          <AppText>{visibleDebts.length ? 'Showing the debt linked to your transaction.' : 'The linked debt is unavailable in this tab. No other debt has been selected.'}</AppText>
-          <AppButton title="View all debts" variant="ghost" onPress={() => router.replace('/finance/debts')} />
+          <AppText>{visibleDebts.length ? t('Showing the debt linked to your transaction.', 'يعرض الدين المرتبط بمعاملتك.') : t('The linked debt is unavailable in this tab. No other debt has been selected.', 'الدين المرتبط غير متاح في هذا التبويب. لم يتم اختيار أي دين آخر.')}</AppText>
+          <AppButton title={t("View all debts", "عرض كل الديون")} variant="ghost" onPress={() => router.replace('/finance/debts')} />
         </Card>
       )}
       <View style={styles.tabs}>
@@ -570,7 +552,7 @@ export default function DebtsScreen() {
               activeTab === 'receivable' && { color: '#059669' },
             ]}
           >
-            Receivable
+            {t("Receivable", "مستحق لي")}
           </AppText>
         </Pressable>
 
@@ -592,16 +574,16 @@ export default function DebtsScreen() {
               activeTab === 'payable' && { color: '#DC2626' },
             ]}
           >
-            Payable
+            {t("Payable", "مستحق عليّ")}
           </AppText>
         </Pressable>
       </View>
 
       <View style={styles.summaryGrid}>
         {([
-          { label: 'Total', key: 'total' as const, color: colors.text },
-          { label: activeTab === 'receivable' ? 'Collected' : 'Paid', key: 'paid' as const, color: activeTab === 'receivable' ? '#059669' : '#DC2626' },
-          { label: 'Remaining', key: 'remaining' as const, color: activeTab === 'receivable' ? '#059669' : '#DC2626' },
+          { label: t('Total', 'الإجمالي'), key: 'total' as const, color: colors.text },
+          { label: activeTab === 'receivable' ? t('Collected', 'المحصّل') : t('Paid', 'المدفوع'), key: 'paid' as const, color: activeTab === 'receivable' ? '#059669' : '#DC2626' },
+          { label: t('Remaining', 'المتبقي'), key: 'remaining' as const, color: activeTab === 'receivable' ? '#059669' : '#DC2626' },
         ]).map(metric => (
           <Card key={metric.key} style={styles.summaryCard}>
             <AppText variant="caption" color="textSecondary" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{metric.label}</AppText>
@@ -618,19 +600,19 @@ export default function DebtsScreen() {
       </View>
 
       <AppButton
-        title={activeTab === 'receivable' ? 'Add receivable' : 'Add payable'}
+        title={activeTab === 'receivable' ? t('Add receivable', 'إضافة مستحق لنا') : t('Add payable', 'إضافة مستحق علينا')}
         leftIcon={<Ionicons name="add" size={20} color="#fff" />}
         onPress={openAddDebt}
       />
 
       <View style={styles.sectionHeader}>
         <AppText variant="h2">
-          {activeTab === 'receivable' ? 'Money owed to you' : 'Money you owe'}
+          {activeTab === 'receivable' ? t('Money owed to you', 'أموال مستحقة لك') : t('Money you owe', 'أموال مستحقة عليك')}
         </AppText>
 
         <AppText variant="caption" color="textSecondary">
           {visibleDebts.length}{' '}
-          {visibleDebts.length === 1 ? 'record' : 'records'}
+          {visibleDebts.length === 1 ? t('record', 'سجل') : t('records', 'سجلات')}
         </AppText>
       </View>
 
@@ -644,8 +626,8 @@ export default function DebtsScreen() {
             />
             <AppText color="textSecondary" align="center">
               {activeTab === 'receivable'
-                ? 'No receivables yet. Add money someone owes you.'
-                : 'No payables yet. Add money you owe someone.'}
+                ? t('No receivables yet. Add money someone owes you.', 'لا توجد مستحقات لك بعد. أضف مبلغًا مستحقًا لك.')
+                : t('No payables yet. Add money you owe someone.', 'لا توجد مستحقات عليك بعد. أضف مبلغًا مستحقًا عليك.')}
             </AppText>
           </View>
         </Card>
@@ -662,7 +644,7 @@ export default function DebtsScreen() {
                 onPress={() =>
                   setDetailDebtId(debt.id)
                 }
-                accessibilityRole="button" accessibilityLabel={'Details for ' + debt.personName}
+                accessibilityRole="button" accessibilityLabel={t('Details for', 'تفاصيل') + ' ' + debt.personName}
                 style={styles.debtMain}
               >
                 <View style={styles.debtTopRow}>
@@ -672,7 +654,7 @@ export default function DebtsScreen() {
                     </AppText>
                     <AppText variant="caption" color="textSecondary">
                       {formatDate(debt.date)}
-                      {debt.dueDate ? ` · Due ${formatDate(debt.dueDate)}` : ''}
+                      {debt.dueDate ? ` · ${t('Due', 'الاستحقاق')} ${formatDate(debt.dueDate)}` : ''}
                     </AppText>
                   </View>
 
@@ -685,7 +667,7 @@ export default function DebtsScreen() {
                     <AppText
                       style={[styles.statusText, { color: status.color }]}
                     >
-                      {status.label}
+                      {status.label === 'Settled' ? t('Settled', 'تمت التسوية') : status.label === 'Partial' ? t('Partial', 'جزئي') : t('Open', 'مفتوح')}
                     </AppText>
                   </View>
                 </View>
@@ -693,7 +675,7 @@ export default function DebtsScreen() {
                 <View style={styles.amountRow}>
                   <View style={styles.amountColumn}>
                     <AppText variant="caption" color="textSecondary">
-                      Remaining
+                      {t("Remaining", "المتبقي")}
                     </AppText>
                     <AppText style={styles.remainingAmount}>
                       {formatAmount(remaining, debt.currencyCode)} {debt.currencyCode}
@@ -702,7 +684,7 @@ export default function DebtsScreen() {
 
                   <View style={styles.amountColumnRight}>
                     <AppText variant="caption" color="textSecondary">
-                      Original
+                      {t("Original", "الأصلي")}
                     </AppText>
                     <AppText style={styles.originalAmount}>
                       {formatAmount(debt.amount, debt.currencyCode)} {debt.currencyCode}
@@ -729,27 +711,27 @@ export default function DebtsScreen() {
 
                 <View style={styles.progressLabels}>
                   <AppText variant="caption" color="textSecondary">
-                    Paid / collected: {formatAmount(paid, debt.currencyCode)}
+                    {t('Paid / collected', 'المدفوع / المحصّل')}: {formatAmount(paid, debt.currencyCode)}
                   </AppText>
-                  <AppText variant="caption" color="textSecondary">Details</AppText>
+                  <AppText variant="caption" color="textSecondary">{t("Details", "التفاصيل")}</AppText>
                 </View>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={(expanded ? 'Hide' : 'Show') + ' payment history for ' + debt.personName}
+                accessibilityLabel={(expanded ? t('Hide', 'إخفاء') : t('Show', 'إظهار')) + ' ' + t('payment history for', 'سجل الدفعات لـ') + ' ' + debt.personName}
                 accessibilityState={{ expanded }}
                 onPress={() => setExpandedDebtId(expanded ? null : debt.id)}
                 style={styles.historyToggle}
               >
                 <AppText variant="caption" color="textSecondary">
-                  Payment history ({debt.payments.length})
+                  {t('Payment history', 'سجل الدفعات')} ({debt.payments.length})
                 </AppText>
                 <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={19} color={colors.textSecondary} />
               </Pressable>
               {expanded && (
                 <View style={styles.quickHistory}>
                   {debt.payments.length === 0 ? (
-                    <AppText variant="caption" color="textSecondary">No payments recorded yet.</AppText>
+                    <AppText variant="caption" color="textSecondary">{t("No payments recorded yet.", "لا توجد دفعات مسجلة بعد.")}</AppText>
                   ) : debt.payments.map(payment => (
                     <View key={payment.id} style={styles.quickPayment}>
                       <View style={styles.quickPaymentRow}>
@@ -788,14 +770,12 @@ export default function DebtsScreen() {
         note={paymentNote}
         date={paymentDate}
         accountId={paymentAccountId}
-        accounts={activeAccounts.filter(
-          (account) =>
-            account.currencyCode === paymentDebt?.currencyCode,
-        )}
-        onAmountChange={setPaymentAmount}
+        accounts={activeAccounts.filter(account => account.currencyCode === paymentDebt?.currencyCode || allowsLegacyDebtFx(useFinanceStore.getState(), useLedgerStore.getState()))}
+        rate={paymentFxRate} actual={paymentActual} onRateChange={setPaymentFxRate} onActualChange={setPaymentActual}
+        onAmountChange={value => { setPaymentAmount(value); setPaymentActual(''); }}
         onNoteChange={setPaymentNote}
-        onDateChange={setPaymentDate}
-        onAccountChange={setPaymentAccountId}
+        onDateChange={value => { setPaymentDate(value); setPaymentFxRate(''); setPaymentActual(''); }}
+        onAccountChange={value => { setPaymentAccountId(value); setPaymentFxRate(''); setPaymentActual(''); }}
         onClose={closePayment}
         onConfirm={handleConfirmPayment}
       />
@@ -809,8 +789,8 @@ export default function DebtsScreen() {
       />
       <FinanceDetailsModal
         compact
-        title={detailDebtId === null ? undefined : detailDebt?.personName ?? 'Debt unavailable'}
-        subtitle={detailDebt ? 'Debt recorded on ' + formatDate(detailDebt.date) : undefined}
+        title={detailDebtId === null ? undefined : detailDebt?.personName ?? t('Debt unavailable', 'الدين غير متاح')}
+        subtitle={detailDebt ? t('Debt recorded on ', 'تاريخ تسجيل الدين: ') + formatDate(detailDebt.date) : undefined}
         onClose={() => setDetailDebtId(null)}
         metrics={detailDebt ? [
           { label: 'Remaining', value: formatAmount(getRemainingAmount(detailDebt), detailDebt.currencyCode) + ' ' + detailDebt.currencyCode },
@@ -824,7 +804,7 @@ export default function DebtsScreen() {
           <View style={{ gap: 12, paddingTop: 8 }}>
             {detailDebt.payments.length > 0 && (
               <View style={styles.paymentHistory}>
-                <AppText style={styles.historyTitle}>Payment history</AppText>
+                <AppText style={styles.historyTitle}>{t("Payment history", "سجل الدفعات")}</AppText>
                 {detailDebt.payments.map(payment => (
                   <View key={payment.id} style={styles.paymentRow}>
                     <View style={styles.paymentInfo}>
@@ -846,7 +826,7 @@ export default function DebtsScreen() {
                 onPress={() => { setDetailDebtId(null); openPayment(detailDebt); }}
                 style={[styles.primaryAction, { backgroundColor: detailDebt.direction === 'receivable' ? '#059669' : '#DC2626' }]}>
                 <Ionicons name={detailDebt.direction === 'receivable' ? 'download-outline' : 'card-outline'} size={17} color="#fff" />
-                <AppText style={styles.primaryActionText}>{detailDebt.direction === 'receivable' ? 'Record collection' : 'Record payment'}</AppText>
+                <AppText style={styles.primaryActionText}>{detailDebt.direction === 'receivable' ? t('Record collection', 'تسجيل التحصيل') : t('Record payment', 'تسجيل السداد')}</AppText>
               </Pressable>
             )}
             <FinanceActionButtons label={detailDebt.personName}
@@ -871,6 +851,7 @@ interface ModalPaymentProps {
   note: string;
   date: string;
   accountId: string;
+  rate: string; actual: string; onRateChange: (value:string)=>void; onActualChange: (value:string)=>void;
   accounts: ReturnType<typeof useLedgerStore.getState>['accounts'];
   onAmountChange: (value: string) => void;
   onNoteChange: (value: string) => void;
@@ -887,7 +868,7 @@ function ModalPayment({
   note,
   date,
   accountId,
-  accounts,
+  accounts, rate, actual, onRateChange, onActualChange,
   onAmountChange,
   onNoteChange,
   onDateChange,
@@ -895,334 +876,62 @@ function ModalPayment({
   onClose,
   onConfirm,
 }: ModalPaymentProps) {
-
-  const [calendarVisible, setCalendarVisible] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState(() => {
-    const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth(), 1, 12);
-  });
-
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth(),
-      1,
-      12,
-    );
-
-    const firstCell = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth(),
-      1 - firstDay.getDay(),
-      12,
-    );
-
-    return Array.from({ length: 42 }, (_, index) =>
-      new Date(
-        firstCell.getFullYear(),
-        firstCell.getMonth(),
-        firstCell.getDate() + index,
-        12,
-      ),
-    );
-  }, [calendarMonth]);
-
+  const { t } = useAppLanguage();
+  const { width, fontScale } = useWindowDimensions();
+  const stack = shouldStackFinanceFields(width, fontScale);
+  const { colors } = useTheme();
   if (!debt) return null;
-
   const isReceivable = debt.direction === 'receivable';
+  const title = isReceivable ? t('Record collection', 'تسجيل التحصيل') : t('Record payment', 'تسجيل السداد');
+  const account = accounts.find(a => a.id === accountId);
+  const crossDebt = account && account.currencyCode !== debt.currencyCode;
+  return <FormModal visible={visible} title={title} onClose={onClose} onBack={onClose} compactTitle>
+    <Card style={{ borderWidth: 1, borderColor: colors.finance.neutral.border, gap: 4, padding: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <View style={{ flex: 1, minWidth: 0 }}><AppText variant="bodyStrong">{debt.personName}</AppText>
+          <AppText variant="caption" color="textSecondary">{t('Remaining amount', 'المبلغ المتبقي')}</AppText></View>
+        <AppText style={[styles.modalRemaining, { flexShrink: 1, textAlign: 'right' }]}>{formatAmount(getRemainingAmount(debt), debt.currencyCode)} {debt.currencyCode}</AppText>
+      </View>
+    </Card>
+    <View style={{ flexDirection: stack ? 'column' : 'row', alignItems: 'stretch', gap: 8 }}>
+      <View style={{ flex: stack ? 0 : 1, minWidth: 0, gap: 4 }}>
+        <AppText variant="label" style={{ fontWeight: '700' }}>{t('Amount', 'المبلغ')} ({debt.currencyCode})</AppText>
+        <TextInput style={[styles.modalInput, { minHeight: 52 }]} value={amount} onChangeText={onAmountChange} keyboardType="decimal-pad" placeholder={t('Enter amount', 'أدخل المبلغ')} placeholderTextColor="#999" />
+      </View>
+      <AccountDropdown containerStyle={{ flex: stack ? 0 : 1 }} label={t('Account', 'الحساب')} options={accounts} value={accountId} onChange={onAccountChange} emptyMessage={t('No matching account', 'لا يوجد حساب مطابق')} />
+    </View>
+    {crossDebt && <DebtFxForm currency={debt.currencyCode} accountCurrency={account.currencyCode} amount={amount} date={date} rate={rate} actual={actual} onRateChange={onRateChange} onActualChange={onActualChange} />}
+    {visible && <FinanceDateField key={debt.id} label={isReceivable ? t('Collection date', 'تاريخ التحصيل') : t('Payment date', 'تاريخ الدفع')} value={date} onChange={onDateChange} pickerOnly />}
+    <AppText style={styles.fieldLabel}>{t('Note (optional)', 'ملاحظة (اختياري)')}</AppText>
+    <TextInput style={styles.modalInput} value={note} onChangeText={onNoteChange} placeholder={t('Add a note', 'أضف ملاحظة')} placeholderTextColor="#999" />
+    <AppText variant="caption" color="textSecondary">{t('The selected account balance will change.', 'سيتغير رصيد الحساب المختار.')}</AppText>
+    <View style={styles.modalButtons}>
+      <AppButton title={t('Cancel', 'إلغاء')} variant="outline" onPress={onClose} style={{ flex: 1 }} />
+      <AppButton title={t('Confirm', 'تأكيد')} onPress={onConfirm} disabled={!account || (!!crossDebt && (!rate.trim() || !actual.trim()))} style={{ flex: 1 }} />
+    </View>
+  </FormModal>;
+}
 
-  const openCalendar = () => {
-    const parsed = parseDate(date);
-    const initialDate = parsed ?? new Date();
-
-    setCalendarMonth(
-      new Date(
-        initialDate.getFullYear(),
-        initialDate.getMonth(),
-        1,
-        12,
-      ),
-    );
-
-    setCalendarVisible(true);
-  };
-
-  const selectCalendarDate = (selectedDate: Date) => {
-    onDateChange(toDateString(selectedDate));
-    setCalendarVisible(false);
-  };
-
-  const changeCalendarMonth = (amount: number) => {
-    setCalendarMonth(
-      (current) =>
-        new Date(
-          current.getFullYear(),
-          current.getMonth() + amount,
-          1,
-          12,
-        ),
-    );
-  };
-
-  return (
-    <>
-      <Modal
-        visible={visible}
-        transparent
-        animationType="slide"
-        onRequestClose={onClose}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.paymentModal}>
-            <ScrollView
-              style={styles.paymentScroll}
-              contentContainerStyle={styles.paymentScrollContent}
-              showsVerticalScrollIndicator
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={{ marginHorizontal: -18, marginTop: -18, marginBottom: 16 }}><FinanceModalHeader title={isReceivable ? 'Record collection' : 'Record payment'} onClose={onClose} /></View><AppText>{debt.personName}</AppText>
-
-              <AppText variant="caption" color="textSecondary">
-                Remaining amount
-              </AppText>
-              <AppText style={styles.modalRemaining}>
-                {formatAmount(getRemainingAmount(debt), debt.currencyCode)} {debt.currencyCode}
-              </AppText>
-
-              <AppText style={styles.fieldLabel}>Amount</AppText>
-              <TextInput
-                style={styles.modalInput}
-                value={amount}
-                onChangeText={onAmountChange}
-                keyboardType="decimal-pad"
-                placeholder="Enter amount"
-                placeholderTextColor="#999"
-              />
-
-              <AppText style={styles.fieldLabel}>
-                {isReceivable ? 'Collection date' : 'Payment date'}
-              </AppText>
-
-              <View style={styles.dateInputContainer}>
-                <Ionicons
-                  name="calendar-outline"
-                  size={18}
-                  color="#D6B777"
-                />
-
-                <TextInput
-                  style={styles.dateInput}
-                  value={date}
-                  onChangeText={onDateChange}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#999"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  maxLength={10}
-                />
-
-                <Pressable
-                  onPress={openCalendar}
-                  style={styles.calendarButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Choose date from calendar"
-                >
-                  <Ionicons name="calendar" size={20} color="#D6B777" />
-                </Pressable>
-              </View>
-
-              <AppText style={styles.helperText}>
-                Format: YYYY-MM-DD
-              </AppText>
-
-              <AppText style={styles.fieldLabel}>Select account</AppText>
-
-              {accounts.length === 0 ? (
-                <AppText color="textSecondary">
-                  No active account in {debt.currencyCode}.
-                </AppText>
-              ) : (
-                <View style={styles.accountChoices}>
-                  {accounts.map((account) => {
-                    const selected = accountId === account.id;
-
-                    return (
-                      <Pressable
-                        key={account.id}
-                        onPress={() => onAccountChange(account.id)}
-                        style={[
-                          styles.accountChoice,
-                          selected && styles.accountChoiceActive,
-                        ]}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <AppText style={styles.accountChoiceName}>
-                            {account.name}
-                          </AppText>
-                          <AppText variant="caption" color="textSecondary">
-                            {account.currencyCode}
-                          </AppText>
-                        </View>
-
-                        {selected && (
-                          <Ionicons
-                            name="checkmark-circle"
-                            size={16}
-                            color={moduleColors.finance}
-                          />
-                        )}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              )}
-
-              <AppText style={styles.fieldLabel}>Note (optional)</AppText>
-              <TextInput
-                style={styles.modalInput}
-                value={note}
-                onChangeText={onNoteChange}
-                placeholder="Add a note"
-                placeholderTextColor="#999"
-              />
-
-              <View style={styles.warningBox}>
-                <Ionicons
-                  name="information-circle-outline"
-                  size={18}
-                  color="#2563EB"
-                />
-                <AppText style={styles.warningText}>
-                  This action records an actual{' '}
-                  {isReceivable ? 'collection' : 'payment'}. The selected
-                  account balance will change.
-                </AppText>
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalButtons}>
-              <Pressable onPress={onClose} style={styles.cancelButton}>
-                <AppText>Cancel</AppText>
-              </Pressable>
-
-              <Pressable
-                onPress={onConfirm}
-                disabled={accounts.length === 0}
-                style={[
-                  styles.confirmButton,
-                  {
-                    backgroundColor: '#1E293B',
-                    opacity: accounts.length === 0 ? 0.5 : 1,
-                  },
-                ]}
-              >
-                <AppText style={styles.confirmButtonText}>Confirm</AppText>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={calendarVisible && visible && debt !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCalendarVisible(false)}
-      >
-        <View style={styles.calendarOverlay}>
-          <View style={styles.calendarModal}>
-            <View style={styles.calendarHeader}>
-              <AppText style={styles.calendarTitle}>
-                {isReceivable ? 'Collection date' : 'Payment date'}
-              </AppText>
-
-              <Pressable
-                onPress={() => setCalendarVisible(false)}
-                hitSlop={10}
-              >
-                <Ionicons name="close" size={23} color="#333" />
-              </Pressable>
-            </View>
-
-            <View style={styles.monthHeader}>
-              <Pressable
-                onPress={() => changeCalendarMonth(-1)}
-                style={styles.monthArrow}
-              >
-                <Ionicons name="chevron-back" size={22} color="#334155" />
-              </Pressable>
-
-              <AppText style={styles.monthTitle}>
-                {MONTH_NAMES[calendarMonth.getMonth()]}{' '}
-                {calendarMonth.getFullYear()}
-              </AppText>
-
-              <Pressable
-                onPress={() => changeCalendarMonth(1)}
-                style={styles.monthArrow}
-              >
-                <Ionicons name="chevron-forward" size={22} color="#334155" />
-              </Pressable>
-            </View>
-
-            <View style={styles.calendarGrid}>
-              {WEEK_DAYS.map((day) => (
-                <View key={day} style={styles.calendarDayHeader}>
-                  <AppText style={styles.calendarDayHeaderText}>
-                    {day}
-                  </AppText>
-                </View>
-              ))}
-
-              {calendarDays.map((day) => {
-                const value = toDateString(day);
-                const selected = date === value;
-                const inCurrentMonth =
-                  day.getMonth() === calendarMonth.getMonth();
-
-                return (
-                  <Pressable
-                    key={value}
-                    onPress={() => selectCalendarDate(day)}
-                    style={[
-                      styles.calendarDay,
-                      selected && styles.calendarDaySelected,
-                    ]}
-                  >
-                    <AppText
-                      style={[
-                        styles.calendarDayText,
-                        !inCurrentMonth && styles.calendarDayOutside,
-                        selected && styles.calendarDayTextSelected,
-                      ]}
-                    >
-                      {day.getDate()}
-                    </AppText>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <View style={styles.calendarFooter}>
-              <Pressable
-                onPress={() => selectCalendarDate(new Date())}
-                style={styles.todayButton}
-              >
-                <AppText style={styles.todayButtonText}>Today</AppText>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setCalendarVisible(false)}
-                style={styles.calendarDoneButton}
-              >
-                <AppText style={styles.calendarDoneText}>Done</AppText>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </>
-  );
+function DebtFxForm({currency,accountCurrency,amount,date,rate,actual,onRateChange,onActualChange}: {currency:string;accountCurrency:string;amount:string;date:string;rate:string;actual:string;onRateChange:(v:string)=>void;onActualChange:(v:string)=>void}) {
+  const {t}=useAppLanguage();
+  const {colors}=useTheme();
+  const quote=parseAmount(rate), obligation=parseAmount(amount), confirmed=parseAmount(actual);
+  const estimated=quote && quote>0 && obligation && obligation>0 ? obligation/quote : null;
+  const display = (value: number | null) => value === null || !Number.isFinite(value) || value <= 0 ? '—' : formatAmount(value,accountCurrency)+' '+accountCurrency;
+  return <View style={{gap:8}}>
+    <DirectHistoricalFxField accountCurrencyCode={accountCurrency} transactionCurrencyCode={currency}
+      transactionDate={date} rate={quote} manualMode manualOnly compact loading={false} manualRate={rate}
+      onManualRateChange={onRateChange} />
+    <View style={{flexDirection:'row',gap:6,alignItems:'flex-start'}}>
+      <View style={{flex:1,minWidth:0,alignItems:'center'}}><AppText variant="label" style={{fontWeight:'700'}}>{t('Estimated','تقديري')}</AppText><View style={{minHeight:52,justifyContent:'center'}}><AppText variant="bodyStrong" align="center" numberOfLines={1} adjustsFontSizeToFit>{display(estimated)}</AppText></View></View>
+      <View style={{flex:1,minWidth:0}}><AppText variant="label" align="center" style={{fontWeight:'700'}}>{t('Actual','فعلي')}</AppText>
+        <View style={{minHeight:52,flexDirection:'row',alignItems:'center',borderWidth:1,borderColor:'#D6B777',borderRadius:12,paddingHorizontal:5,gap:3,backgroundColor:colors.surface}}>
+          <TextInput accessibilityLabel={t('Actual account amount','المبلغ الفعلي للحساب')} style={{flex:1,minWidth:0,color:colors.text,fontWeight:'700',padding:0,textAlign:'center'}} value={actual} onChangeText={onActualChange} keyboardType="decimal-pad" />
+          <AppText variant="label">{accountCurrency}</AppText>
+        </View></View>
+      <View style={{flex:1,minWidth:0,alignItems:'center'}}><AppText variant="label" style={{fontWeight:'700'}}>{t('Recorded','المسجل')}</AppText><View style={{minHeight:52,justifyContent:'center'}}><AppText variant="bodyStrong" align="center" numberOfLines={1} adjustsFontSizeToFit>{display(confirmed)}</AppText></View></View>
+    </View>
+  </View>;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1234,7 +943,7 @@ interface ModalEditPaymentProps {
   debt: Debt | null;
   payment: DebtPayment | null;
   onClose: () => void;
-  onSave: (amount: string, date: string, note: string) => void;
+  onSave: (amount: string, date: string, note: string, fxRate?: string, fxActual?: string) => void;
 }
 
 function ModalEditPayment({
@@ -1244,172 +953,72 @@ function ModalEditPayment({
   onClose,
   onSave,
 }: ModalEditPaymentProps) {
+  const { t } = useAppLanguage();
 
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
   const [note, setNote] = useState('');
+  const [fxRate, setFxRate] = useState(''); const [fxActual, setFxActual] = useState('');
+  const ledger = useLedgerStore.getState();
+  const account = ledger.accounts.find(a => a.id === payment?.accountId);
+  const linked = ledger.transactions.find(tx => tx.id === payment?.ledgerTransactionId);
+  const crossDebt = debt && account && account.currencyCode !== debt.currencyCode;
 
-  const [calendarVisible, setCalendarVisible] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState(() => {
-    const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth(), 1, 12);
-  });
-
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth(),
-      1,
-      12,
-    );
-
-    const firstCell = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth(),
-      1 - firstDay.getDay(),
-      12,
-    );
-
-    return Array.from({ length: 42 }, (_, index) =>
-      new Date(
-        firstCell.getFullYear(),
-        firstCell.getMonth(),
-        firstCell.getDate() + index,
-        12,
-      ),
-    );
-  }, [calendarMonth]);
-
-  // Refresh the modal fields whenever a different payment is opened.
-  const paymentId = payment?.id;
-
-  useMemo(() => {
-    if (visible && payment) {
-      setAmount(String(payment.amount));
-      setDate(payment.date);
-      setNote(payment.note ?? '');
-    }
-  }, [visible, paymentId]);
+  // Reset on a new editing session, never inside useMemo. Include the debt ID
+  // because payment IDs are not sufficient to identify the parent record.
+  const paymentContext = visible && debt && payment
+    ? JSON.stringify([debt.id, payment.id]) : null;
+  const [loadedPaymentContext, setLoadedPaymentContext] = useState<string | null>(null);
+  if (loadedPaymentContext !== paymentContext) {
+    setLoadedPaymentContext(paymentContext);
+    setAmount(paymentContext && payment ? String(payment.amount) : '');
+    setDate(paymentContext && payment ? payment.date : '');
+    setNote(paymentContext && payment ? payment.note ?? '' : '');
+    setFxRate(paymentContext && crossDebt && linked?.directHistoricalFx ? String(linked.directHistoricalFx.rate) : '');
+    setFxActual(paymentContext && crossDebt && linked ? String(linked.amount) : '');
+  }
 
   if (!debt || !payment) return null;
 
   const maximumAllowed = getRemainingExcludingPayment(debt, payment.id);
 
-  const openCalendar = () => {
-    const parsed = parseDate(date);
-    const initialDate = parsed ?? new Date();
-
-    setCalendarMonth(
-      new Date(
-        initialDate.getFullYear(),
-        initialDate.getMonth(),
-        1,
-        12,
-      ),
-    );
-
-    setCalendarVisible(true);
-  };
-
-  const selectCalendarDate = (selectedDate: Date) => {
-    setDate(toDateString(selectedDate));
-    setCalendarVisible(false);
-  };
-
-  const changeCalendarMonth = (amountToChange: number) => {
-    setCalendarMonth(
-      (current) =>
-        new Date(
-          current.getFullYear(),
-          current.getMonth() + amountToChange,
-          1,
-          12,
-        ),
-    );
-  };
-
   const handleSave = () => {
-    onSave(amount, date, note);
+    onSave(amount, date, note, crossDebt ? fxRate : undefined, crossDebt ? fxActual : undefined);
   };
 
   return (
-    <>
-      <Modal
-        visible={visible}
-        transparent
-        animationType="slide"
-        onRequestClose={onClose}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.paymentModal}>
-            <ScrollView
-              style={styles.paymentScroll}
-              contentContainerStyle={styles.paymentScrollContent}
-              showsVerticalScrollIndicator
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={{ marginHorizontal: -18, marginTop: -18, marginBottom: 16 }}><FinanceModalHeader title="Edit payment" onClose={onClose} /></View><AppText>{debt.personName}</AppText>
-
+    <FormModal visible={visible} title={debt.direction === 'receivable' ? t('Edit collection', 'تعديل التحصيل') : t('Edit payment', 'تعديل الدفعة')} onClose={onClose} onBack={onClose} compactTitle>
+      <Card style={{ gap: 4, padding: 10 }}><AppText variant="bodyStrong">{debt.personName}</AppText>
               <AppText variant="caption" color="textSecondary">
-                Maximum allowed for this payment
+                {t("Maximum allowed for this payment", "الحد الأقصى المسموح لهذه الدفعة")}
               </AppText>
 
               <AppText style={styles.modalRemaining}>
                 {formatAmount(maximumAllowed, debt.currencyCode)} {debt.currencyCode}
               </AppText>
 
-              <AppText style={styles.fieldLabel}>Amount</AppText>
+      </Card>
+              <AppText style={styles.fieldLabel}>{t("Amount", "المبلغ")}</AppText>
 
               <TextInput
                 style={styles.modalInput}
                 value={amount}
-                onChangeText={setAmount}
+                onChangeText={value=>{setAmount(value); if(crossDebt) setFxActual('');}}
                 keyboardType="decimal-pad"
-                placeholder="Enter amount"
+                placeholder={t("Enter amount", "أدخل المبلغ")}
                 placeholderTextColor="#999"
               />
 
-              <AppText style={styles.fieldLabel}>Payment date</AppText>
+              {crossDebt && account && <DebtFxForm currency={debt.currencyCode} accountCurrency={account.currencyCode} amount={amount} date={date} rate={fxRate} actual={fxActual} onRateChange={setFxRate} onActualChange={setFxActual} />}
+              {visible && <FinanceDateField key={paymentContext ?? undefined} label={debt.direction === 'receivable' ? t('Collection date', 'تاريخ التحصيل') : t('Payment date', 'تاريخ الدفع')} value={date} onChange={value=>{setDate(value); if(crossDebt){setFxActual('');setFxRate('');}}} pickerOnly />}
 
-              <View style={styles.dateInputContainer}>
-                <Ionicons
-                  name="calendar-outline"
-                  size={18}
-                  color="#D6B777"
-                />
-
-                <TextInput
-                  style={styles.dateInput}
-                  value={date}
-                  onChangeText={setDate}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#999"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  maxLength={10}
-                />
-
-                <Pressable
-                  onPress={openCalendar}
-                  style={styles.calendarButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Choose payment date"
-                >
-                  <Ionicons name="calendar" size={20} color="#D6B777" />
-                </Pressable>
-              </View>
-
-              <AppText style={styles.helperText}>
-                Format: YYYY-MM-DD
-              </AppText>
-
-              <AppText style={styles.fieldLabel}>Note (optional)</AppText>
+              <AppText style={styles.fieldLabel}>{t("Note (optional)", "ملاحظة (اختياري)")}</AppText>
 
               <TextInput
                 style={styles.modalInput}
                 value={note}
                 onChangeText={setNote}
-                placeholder="Add a note"
+                placeholder={t("Add a note", "أضف ملاحظة")}
                 placeholderTextColor="#999"
               />
 
@@ -1424,128 +1033,11 @@ function ModalEditPayment({
                   transaction. It does not create a new account transaction.
                 </AppText>
               </View>
-            </ScrollView>
-
-            <View style={styles.modalButtons}>
-              <Pressable onPress={onClose} style={styles.cancelButton}>
-                <AppText>Cancel</AppText>
-              </Pressable>
-
-              <Pressable
-                onPress={handleSave}
-                style={[
-                  styles.confirmButton,
-                  { backgroundColor: '#1E293B' },
-                ]}
-              >
-                <AppText style={styles.confirmButtonText}>
-                  Save changes
-                </AppText>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={calendarVisible && visible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCalendarVisible(false)}
-      >
-        <View style={styles.calendarOverlay}>
-          <View style={styles.calendarModal}>
-            <View style={styles.calendarHeader}>
-              <AppText style={styles.calendarTitle}>
-                Payment date
-              </AppText>
-
-              <Pressable
-                onPress={() => setCalendarVisible(false)}
-                hitSlop={10}
-              >
-                <Ionicons name="close" size={23} color="#333" />
-              </Pressable>
-            </View>
-
-            <View style={styles.monthHeader}>
-              <Pressable
-                onPress={() => changeCalendarMonth(-1)}
-                style={styles.monthArrow}
-              >
-                <Ionicons name="chevron-back" size={22} color="#334155" />
-              </Pressable>
-
-              <AppText style={styles.monthTitle}>
-                {MONTH_NAMES[calendarMonth.getMonth()]}{' '}
-                {calendarMonth.getFullYear()}
-              </AppText>
-
-              <Pressable
-                onPress={() => changeCalendarMonth(1)}
-                style={styles.monthArrow}
-              >
-                <Ionicons name="chevron-forward" size={22} color="#334155" />
-              </Pressable>
-            </View>
-
-            <View style={styles.calendarGrid}>
-              {WEEK_DAYS.map((day) => (
-                <View key={day} style={styles.calendarDayHeader}>
-                  <AppText style={styles.calendarDayHeaderText}>
-                    {day}
-                  </AppText>
-                </View>
-              ))}
-
-              {calendarDays.map((day) => {
-                const value = toDateString(day);
-                const selected = date === value;
-                const inCurrentMonth =
-                  day.getMonth() === calendarMonth.getMonth();
-
-                return (
-                  <Pressable
-                    key={value}
-                    onPress={() => selectCalendarDate(day)}
-                    style={[
-                      styles.calendarDay,
-                      selected && styles.calendarDaySelected,
-                    ]}
-                  >
-                    <AppText
-                      style={[
-                        styles.calendarDayText,
-                        !inCurrentMonth && styles.calendarDayOutside,
-                        selected && styles.calendarDayTextSelected,
-                      ]}
-                    >
-                      {day.getDate()}
-                    </AppText>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <View style={styles.calendarFooter}>
-              <Pressable
-                onPress={() => selectCalendarDate(new Date())}
-                style={styles.todayButton}
-              >
-                <AppText style={styles.todayButtonText}>Today</AppText>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setCalendarVisible(false)}
-                style={styles.calendarDoneButton}
-              >
-                <AppText style={styles.calendarDoneText}>Done</AppText>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </>
+      <View style={styles.modalButtons}>
+        <AppButton title={t('Cancel', 'إلغاء')} variant="outline" onPress={onClose} style={{ flex: 1 }} />
+        <AppButton title={t('Save changes', 'حفظ التغييرات')} onPress={handleSave} style={{ flex: 1 }} />
+      </View>
+    </FormModal>
   );
 }
 
@@ -1814,32 +1306,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     backgroundColor: '#fafafa',
   },
-  dateInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 10,
-    backgroundColor: '#fafafa',
-    paddingHorizontal: 12,
-    minHeight: 52,
-    gap: 9,
-  },
-  dateInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#111',
-    paddingVertical: 9,
-  },
-  calendarButton: {
-    minWidth: 44, minHeight: 52, alignItems: 'center', justifyContent: 'center',
-    padding: 5,
-  },
-  helperText: {
-    fontSize: 11,
-    color: '#888',
-    marginTop: 5,
-  },
   accountChoices: {
     gap: 5,
   },
@@ -1900,118 +1366,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '700',
-  },
-  calendarOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 18,
-  },
-  calendarModal: {
-    width: '100%',
-    maxWidth: 380,
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 17,
-  },
-  calendarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-  calendarTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111',
-  },
-  monthHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 13,
-  },
-  monthArrow: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: '#f1f5f9',
-  },
-  monthTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111',
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  calendarDayHeader: {
-    width: '14.2857%',
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarDayHeaderText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748b',
-  },
-  calendarDay: {
-    width: '14.2857%',
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-  },
-  calendarDaySelected: {
-    backgroundColor: '#1E293B',
-  },
-  calendarDayText: {
-    fontSize: 13,
-    color: '#1e293b',
-  },
-  calendarDayOutside: {
-    color: '#cbd5e1',
-  },
-  calendarDayTextSelected: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  calendarFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-    gap: 10,
-  },
-  todayButton: {
-    flex: 1,
-    minHeight: 42,
-    borderWidth: 1,
-    borderColor: '#D6B777',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  todayButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  calendarDoneButton: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 10,
-    backgroundColor: '#1E293B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarDoneText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#fff',
   },
 });

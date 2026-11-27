@@ -54,9 +54,10 @@ export interface Category {
   color: string;
   /** Seeded categories. They can be edited but not deleted. */
   isDefault: boolean;
+  archived?: boolean;
 }
 
-export type NewCategoryInput = Omit<Category, 'id' | 'isDefault'>;
+export type NewCategoryInput = Omit<Category, 'id' | 'isDefault' | 'archived'>;
 export type CategoryPatch = Partial<Omit<NewCategoryInput, 'kind'>>;
 
 /* ------------------------------ Transactions ----------------------------- */
@@ -74,7 +75,8 @@ export type TransactionPurpose =
   | 'loan_payment'
   | 'loan_principal_payment'
   | 'loan_interest_payment'
-  | 'property_installment_payment';
+  | 'property_installment_payment'
+  | 'transfer_fee';
 
 /**
  * Historical FX evidence captured for a transaction.
@@ -141,7 +143,7 @@ export interface Transaction extends Timestamps {
    * Optional link to the debt or loan settled by this transaction.
    * These fields allow the app to prevent duplicate ledger posting.
    */
-  linkedEntityType?: 'debt' | 'loan' | 'property';
+  linkedEntityType?: 'debt' | 'loan' | 'property' | 'transfer';
   linkedEntityId?: EntityId;
   linkedPaymentId?: EntityId;
 
@@ -188,6 +190,13 @@ export interface Transfer extends Timestamps {
 
   /** Destination currency units received per one source currency unit. */
   exchangeRate?: number;
+  /** Explicit bank-confirmed destination credit. Old quote-only records omit this. */
+  actualReceivedConfirmed?: true;
+  /** The quoted rate is evidence, distinct from the effective received/principal rate. */
+  quotedExchangeRate?: number;
+  /** Fee is a separate, atomically owned expense; never subtract it again as a transfer leg. */
+  feeAmount?: number;
+  feeTransactionId?: EntityId;
 
   date: ISODate;
   type: TransferType;
@@ -203,6 +212,10 @@ export interface NewTransferInput {
   toAmount: number;
   toCurrencyCode: CurrencyCode;
   exchangeRate: number;
+  actualReceivedConfirmed?: true;
+  /** Additional fee in the source currency. Explicit zero removes an existing fee. */
+  feeAmount?: number;
+  feeCategoryId?: EntityId;
   date: ISODate;
   type: TransferType;
   note?: string;

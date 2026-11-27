@@ -1,55 +1,19 @@
-import { FinanceModalHeader } from './FinanceModalHeader';
-
-import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-
+import { FinanceSubmissionReceipt } from './FinanceSubmissionReceipt';
+import { useAppLanguage } from '@/localization/LanguageProvider';
+import React, { useState } from 'react';
+import { Alert, View, Text, TextInput, StyleSheet, useWindowDimensions } from 'react-native';
+import { FormModal } from './FormModal';
+import { FinanceChoiceDropdown, FINANCE_CURRENCY_CHOICES } from './FinanceChoiceDropdown';
+import { FinanceDateField } from './FinanceDateField';
+import { FinanceInput } from './FinanceInput';
+import { FinanceButton } from './FinanceButton';
+import { shouldStackFinanceFields } from '../utils/formLayout';
 import { useCurrencyStore } from '@/features/finance/store/useCurrencyStore';
 import { parseAmount } from '@/features/finance/utils/money';
 import { hasValidCurrencyPrecision } from '@/features/finance/utils/amountPrecision';
 import { getCurrencyDecimals } from '@/features/finance/constants/currencies';
 import { roundMoney } from '@/features/finance/utils/finance';
-import type {
-    CurrencyCode,
-    Debt,
-    DebtDirection,
-    NewDebtInput,
-} from '@/features/finance/types/finance';
-
-const CURRENCY_OPTIONS = [
-  { code: 'EGP', flag: '🇪🇬', symbol: 'E£' },
-  { code: 'OMR', flag: '🇴🇲', symbol: 'ر.ع.' },
-  { code: 'SAR', flag: '🇸🇦', symbol: 'ر.س' },
-  { code: 'AED', flag: '🇦🇪', symbol: 'د.إ' },
-  { code: 'USD', flag: '🇺🇸', symbol: '$' },
-  { code: 'EUR', flag: '🇪🇺', symbol: '€' },
-  { code: 'GBP', flag: '🇬🇧', symbol: '£' },
-  { code: 'JOD', flag: '🇯🇴', symbol: 'د.أ' },
-  { code: 'QAR', flag: '🇶🇦', symbol: 'ر.ق' },
-  { code: 'KWD', flag: '🇰🇼', symbol: 'د.ك' },
-];
-
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  EGP: 'E£',
-  OMR: 'ر.ع.',
-  SAR: 'ر.س',
-  AED: 'د.إ',
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  JOD: 'د.أ',
-  QAR: 'ر.ق',
-  KWD: 'د.ك',
-};
+import type { CurrencyCode, Debt, DebtDirection, NewDebtInput } from '@/features/finance/types/finance';
 
 interface AddDebtModalProps {
   visible: boolean;
@@ -59,8 +23,6 @@ interface AddDebtModalProps {
   onClose: () => void;
   onSave: (data: NewDebtInput) => void;
 }
-
-type DateField = 'debt' | 'due';
 
 const getTodayDate = (): string => {
   const today = new Date();
@@ -90,47 +52,8 @@ const isValidDate = (value: string): boolean => {
   return day <= daysInMonth;
 };
 
-const parseDate = (value: string): Date | null => {
-  if (!isValidDate(value)) return null;
-
-  const [year, month, day] = value.split('-').map(Number);
-
-  return new Date(year, month - 1, day, 12, 0, 0);
-};
-
-const toDateString = (date: Date): string => {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-');
-};
-
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-export const AddDebtModal: React.FC<AddDebtModalProps> = ({
-  visible,
-  direction,
-  debt = null,
-  currencyLocked = false,
-  onClose,
-  onSave,
-}) => {
+export const AddDebtModal: React.FC<AddDebtModalProps> = ({ visible, direction, debt = null, currencyLocked = false, onClose, onSave }) => {
+  const { t } = useAppLanguage();
   const baseCurrency = useCurrencyStore(
     (state) => state.baseCurrency,
   );
@@ -143,114 +66,21 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
 
-  const [calendarVisible, setCalendarVisible] = useState(false);
-  const [calendarTarget, setCalendarTarget] = useState<DateField>('debt');
-  const [calendarMonth, setCalendarMonth] = useState(() => {
-    const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth(), 1, 12);
-  });
-
   const isReceivable = direction === 'receivable';
 
-  useEffect(() => {
-    if (!visible) return;
-
-    if (debt) {
-      setPersonName(debt.personName);
-      setAmount(String(debt.amount));
-      setSelectedCurrency(debt.currencyCode);
-      setDate(debt.date);
-      setDueDate(debt.dueDate ?? '');
-      setNotes(debt.notes ?? '');
-      return;
+  const formContext = { visible, debt, baseCurrency };
+  const [loadedFormContext, setLoadedFormContext] = useState<typeof formContext | null>(null);
+  if (!loadedFormContext || loadedFormContext.visible !== visible || loadedFormContext.debt !== debt || loadedFormContext.baseCurrency !== baseCurrency) {
+    setLoadedFormContext(formContext);
+    if (visible) {
+      setPersonName(debt?.personName ?? '');
+      setAmount(debt ? String(debt.amount) : '');
+      setSelectedCurrency(debt?.currencyCode ?? baseCurrency);
+      setDate(debt?.date ?? getTodayDate());
+      setDueDate(debt?.dueDate ?? '');
+      setNotes(debt?.notes ?? '');
     }
-
-    setPersonName('');
-    setAmount('');
-    setSelectedCurrency(baseCurrency);
-    setDate(getTodayDate());
-    setDueDate('');
-    setNotes('');
-  }, [visible, debt, baseCurrency]);
-
-  const currencyOption = CURRENCY_OPTIONS.find(
-    (currency) => currency.code === selectedCurrency,
-  );
-
-  const currencySymbol =
-    currencyOption?.symbol ??
-    CURRENCY_SYMBOLS[selectedCurrency] ??
-    selectedCurrency;
-
-  const openCalendar = (target: DateField) => {
-    setCalendarTarget(target);
-
-    const currentValue = target === 'debt' ? date : dueDate;
-    const parsed = parseDate(currentValue);
-    const initialDate = parsed ?? new Date();
-
-    setCalendarMonth(
-      new Date(
-        initialDate.getFullYear(),
-        initialDate.getMonth(),
-        1,
-        12,
-      ),
-    );
-
-    setCalendarVisible(true);
-  };
-
-  const selectCalendarDate = (selectedDate: Date) => {
-    const value = toDateString(selectedDate);
-
-    if (calendarTarget === 'debt') {
-      setDate(value);
-    } else {
-      setDueDate(value);
-    }
-
-    setCalendarVisible(false);
-  };
-
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth(),
-      1,
-      12,
-    );
-
-    const startOffset = firstDay.getDay();
-
-    const firstCell = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth(),
-      1 - startOffset,
-      12,
-    );
-
-    return Array.from({ length: 42 }, (_, index) => {
-      return new Date(
-        firstCell.getFullYear(),
-        firstCell.getMonth(),
-        firstCell.getDate() + index,
-        12,
-      );
-    });
-  }, [calendarMonth]);
-
-  const changeCalendarMonth = (amount: number) => {
-    setCalendarMonth(
-      (current) =>
-        new Date(
-          current.getFullYear(),
-          current.getMonth() + amount,
-          1,
-          12,
-        ),
-    );
-  };
+  }
 
   const handleSave = () => {
     const cleanName = personName.trim();
@@ -260,7 +90,7 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
     const cleanDueDate = dueDate.trim();
 
     if (!cleanName) {
-      Alert.alert('Missing name', 'Please enter the person or company name.');
+      Alert.alert(t('Missing name', 'الاسم مطلوب'), t('Please enter the person or company name.', 'أدخل اسم الشخص أو الشركة.'));
       return;
     }
 
@@ -268,12 +98,12 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
       numericAmount === null ||
       numericAmount <= 0
     ) {
-      Alert.alert('Invalid amount', 'Please enter an amount greater than zero.');
+      Alert.alert(t('Invalid amount', 'مبلغ غير صالح'), t('Please enter an amount greater than zero.', 'أدخل مبلغًا أكبر من صفر.'));
       return;
     }
 
     if (!hasValidCurrencyPrecision(amount, selectedCurrency)) {
-      Alert.alert('Invalid amount precision', `${selectedCurrency} allows up to ${getCurrencyDecimals(selectedCurrency)} decimal places. Please correct the amount before saving.`);
+      Alert.alert(t('Invalid amount precision', 'دقة المبلغ غير صالحة'), `${selectedCurrency} allows up to ${getCurrencyDecimals(selectedCurrency)} decimal places. Please correct the amount before saving.`);
       return;
     }
     if (!isValidDate(cleanDate)) {
@@ -309,685 +139,46 @@ export const AddDebtModal: React.FC<AddDebtModalProps> = ({
       dueDate: cleanDueDate || undefined,
       notes: notes.trim() || undefined,
     });
+  
   };
 
-  const renderDateField = (
-    label: string,
-    value: string,
-    target: DateField,
-    placeholder: string,
-    optional = false,
-  ) => (
-    <>
-      <Text style={styles.label}>{label}</Text>
 
-      <View style={styles.dateInputContainer}>
-        <Ionicons
-          name={target === 'debt' ? 'calendar-outline' : 'time-outline'}
-          size={18}
-          color="#D6B777"
-        />
-
-        <TextInput
-          style={styles.dateInput}
-          value={value}
-          onChangeText={
-            target === 'debt' ? setDate : setDueDate
-          }
-          placeholder={placeholder}
-          placeholderTextColor="#999"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-
-        <TouchableOpacity
-          onPress={() => openCalendar(target)}
-          style={styles.calendarButton}
-          accessibilityRole="button"
-          accessibilityLabel={`Choose ${target === 'debt' ? 'debt date' : 'due date'} from calendar`}
-        >
-          <Ionicons name="calendar" size={20} color="#D6B777" />
-        </TouchableOpacity>
-
-        {optional && value.length > 0 && (
-          <TouchableOpacity
-            onPress={() => setDueDate('')}
-            accessibilityRole="button"
-            accessibilityLabel="Clear due date"
-          >
-            <Ionicons
-              name="close-circle"
-              size={18}
-              color="#94a3b8"
-            />
-          </TouchableOpacity>
-        )}
-      </View>
-    </>
-  );
-
+  const { width, fontScale } = useWindowDimensions();
+  const stack = shouldStackFinanceFields(width, fontScale);
+  const dirty = personName !== (debt?.personName ?? '') || amount !== (debt ? String(debt.amount) : '') || selectedCurrency !== (debt?.currencyCode ?? baseCurrency) || date !== (debt?.date ?? getTodayDate()) || dueDate !== (debt?.dueDate ?? '') || notes !== (debt?.notes ?? '');
+  const requestClose = () => {
+    if (!dirty) { onClose(); return; }
+    Alert.alert(t('Discard changes?', 'إلغاء التعديلات؟'), t('Unsaved changes will be lost.', 'ستفقد التعديلات غير المحفوظة.'), [
+      { text: t('Keep editing', 'متابعة التعديل'), style: 'cancel' },
+      { text: t('Discard', 'إلغاء التعديلات'), style: 'destructive', onPress: onClose },
+    ]);
+  };
+  const title = isReceivable
+    ? (debt ? t('Edit Receivable Debt', 'تعديل دين مستحق لك') : t('Add Receivable Debt', 'إضافة دين مستحق لك'))
+    : (debt ? t('Edit Payable Debt', 'تعديل دين مستحق عليك') : t('Add Payable Debt', 'إضافة دين مستحق عليك'));
   return (
-    <>
-      <Modal
-        visible={visible}
-        animationType="slide"
-        transparent
-        onRequestClose={onClose}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <FinanceModalHeader title={debt ? 'Edit debt' : 'Add debt'} onClose={onClose} />
-          <ScrollView
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Text style={{ color: isReceivable ? '#059669' : '#DC2626', marginTop: 16 }}>{isReceivable ? 'Money owed to you' : 'Money you owe'}</Text>
-              <Text style={styles.label}>PERSON / COMPANY NAME</Text>
-
-              <TextInput
-                style={styles.input}
-                placeholder="Enter name"
-                placeholderTextColor="#999"
-                value={personName}
-                onChangeText={setPersonName}
-              />
-
-              <Text style={styles.label}>DEBT TYPE</Text>
-
-              <View style={styles.directionCard}>
-                <View
-                  style={[
-                    styles.directionIcon,
-                    {
-                      backgroundColor: isReceivable
-                        ? '#D1FAE5'
-                        : '#FEE2E2',
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name={
-                      isReceivable
-                        ? 'arrow-down-circle-outline'
-                        : 'arrow-up-circle-outline'
-                    }
-                    size={23}
-                    color={isReceivable ? '#059669' : '#DC2626'}
-                  />
-                </View>
-
-                <View style={styles.directionTextContainer}>
-                  <Text style={styles.directionTitle}>
-                    {isReceivable ? 'Receivable' : 'Payable'}
-                  </Text>
-
-                  <Text style={styles.directionDescription}>
-                    {isReceivable
-                      ? 'Someone owes you this money.'
-                      : 'You owe this money to someone.'}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.label}>AMOUNT</Text>
-
-              <View style={styles.balanceContainer}>
-                <Text style={styles.currencyLabelSymbol}>
-                  {currencySymbol}
-                </Text>
-
-                <TextInput
-                  style={styles.balanceInput}
-                  keyboardType="decimal-pad"
-                  value={amount}
-                  onChangeText={setAmount}
-                  placeholder="0.00"
-                  placeholderTextColor="#999"
-                />
-              </View>
-
-              <Text style={styles.label}>CURRENCY</Text>
-              {currencyLocked && <Text>Currency is locked to preserve payment history and linked account transactions.</Text>}
-
-              <View style={styles.currenciesGrid}>
-                {CURRENCY_OPTIONS.map((currency) => {
-                  const active = selectedCurrency === currency.code;
-
-                  return (
-                    <TouchableOpacity
-                      key={currency.code}
-                      style={[
-                        styles.currencyCard,
-                        active && styles.currencyCardActive,
-                      ]}
-                      onPress={() => setSelectedCurrency(currency.code)}
-                      disabled={currencyLocked}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active, disabled: currencyLocked }}
-                    >
-                      <Text style={styles.currencyFlag}>
-                        {currency.flag}
-                      </Text>
-
-                      <Text
-                        style={[
-                          styles.currencyCode,
-                          active && styles.currencyCodeActive,
-                        ]}
-                      >
-                        {currency.code}
-                      </Text>
-
-                      <Text
-                        style={[
-                          styles.currencySymbol,
-                          active && styles.currencySymbolActive,
-                        ]}
-                      >
-                        {currency.symbol}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {renderDateField(
-                'DEBT DATE',
-                date,
-                'debt',
-                'YYYY-MM-DD',
-              )}
-
-              <Text style={styles.helperText}>
-                The date when this debt was created.
-              </Text>
-
-              {renderDateField(
-                'DUE DATE (OPTIONAL)',
-                dueDate,
-                'due',
-                'YYYY-MM-DD',
-                true,
-              )}
-
-              <Text style={styles.helperText}>
-                Leave empty if there is no specific due date.
-              </Text>
-
-              <Text style={styles.label}>NOTES (OPTIONAL)</Text>
-
-              <TextInput
-                style={[styles.input, styles.notesInput]}
-                placeholder="Add any details about this debt..."
-                placeholderTextColor="#999"
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                textAlignVertical="top"
-              />
-
-              <View style={styles.infoBox}>
-                <Ionicons
-                  name="information-circle-outline"
-                  size={19}
-                  color="#2563EB"
-                />
-
-                <Text style={styles.infoText}>
-                  Saving this debt will not change any account balance.
-                  Account balances are updated only when you confirm an
-                  actual payment or collection.
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.saveButton,
-                  {
-                    backgroundColor: '#1E293B',
-                  },
-                ]}
-                onPress={handleSave}
-                accessibilityRole="button"
-              >
-                <Text style={styles.saveButtonText}>
-                  {debt ? 'Save changes' : 'Add debt'}
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
+    <FormModal visible={visible} title={title} onClose={requestClose} onBack={requestClose}>
+      <FinanceSubmissionReceipt scope="src/app/finance/debts.tsx:239" onCommitted={() => { /* receipt review is not a new debt; keep draft visible */ }} />
+      <FinanceInput label={t('Person / Company Name', 'اسم الشخص / الشركة')} value={personName} onChangeText={setPersonName} placeholder={t('Enter name', 'أدخل الاسم')} />
+      <View style={{ flexDirection: stack ? 'column' : 'row', gap: 10 }}>
+        <View style={{ flex: stack ? 0 : 1, minWidth: 0 }}>
+          <Text style={styles.label}>{t('Amount', 'المبلغ')}</Text>
+          <TextInput style={styles.input} keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
         </View>
-      </Modal>
-
-      <Modal
-        visible={calendarVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCalendarVisible(false)}
-      >
-        <View style={styles.calendarOverlay}>
-          <View style={styles.calendarModal}>
-            <View style={styles.calendarHeader}>
-              <Text style={styles.calendarTitle}>
-                {calendarTarget === 'debt' ? 'Debt date' : 'Due date'}
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => setCalendarVisible(false)}
-                hitSlop={10}
-              >
-                <Ionicons name="close" size={23} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.monthHeader}>
-              <TouchableOpacity
-                onPress={() => changeCalendarMonth(-1)}
-                style={styles.monthArrow}
-              >
-                <Ionicons name="chevron-back" size={22} color="#334155" />
-              </TouchableOpacity>
-
-              <Text style={styles.monthTitle}>
-                {MONTH_NAMES[calendarMonth.getMonth()]}{' '}
-                {calendarMonth.getFullYear()}
-              </Text>
-
-              <TouchableOpacity
-                onPress={() => changeCalendarMonth(1)}
-                style={styles.monthArrow}
-              >
-                <Ionicons name="chevron-forward" size={22} color="#334155" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.calendarGrid}>
-              {WEEK_DAYS.map((day) => (
-                <View key={day} style={styles.calendarDayHeader}>
-                  <Text style={styles.calendarDayHeaderText}>{day}</Text>
-                </View>
-              ))}
-
-              {calendarDays.map((day) => {
-                const value = toDateString(day);
-                const selectedValue =
-                  calendarTarget === 'debt' ? date : dueDate;
-                const selected = selectedValue === value;
-                const inCurrentMonth =
-                  day.getMonth() === calendarMonth.getMonth();
-
-                return (
-                  <TouchableOpacity
-                    key={value}
-                    onPress={() => selectCalendarDate(day)}
-                    style={[
-                      styles.calendarDay,
-                      selected && styles.calendarDaySelected,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.calendarDayText,
-                        !inCurrentMonth && styles.calendarDayOutside,
-                        selected && styles.calendarDayTextSelected,
-                      ]}
-                    >
-                      {day.getDate()}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={styles.calendarFooter}>
-              <TouchableOpacity
-                onPress={() => {
-                  const today = new Date();
-                  selectCalendarDate(today);
-                }}
-                style={styles.todayButton}
-              >
-                <Text style={styles.todayButtonText}>Today</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setCalendarVisible(false)}
-                style={styles.calendarDoneButton}
-              >
-                <Text style={styles.calendarDoneText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+        <View style={{ flex: stack ? 0 : 1, minWidth: 0 }}>
+          <FinanceChoiceDropdown label={t('Currency', 'العملة')} value={selectedCurrency} options={FINANCE_CURRENCY_CHOICES} onChange={setSelectedCurrency} disabled={currencyLocked} />
         </View>
-      </Modal>
-    </>
+      </View>
+      {currencyLocked && <Text>{t('Currency is locked to preserve payment history and linked account transactions.', 'العملة ثابتة للحفاظ على سجل الدفعات والمعاملات المرتبطة بالحساب.')}</Text>}
+      <FinanceDateField label={t('Debt date', 'تاريخ الدين')} value={date} onChange={setDate} pickerOnly />
+      <FinanceDateField label={t('Due date (optional)', 'تاريخ الاستحقاق (اختياري)')} value={dueDate} onChange={setDueDate} pickerOnly onClear={() => setDueDate('')} />
+      <FinanceInput label={t('Notes (optional)', 'ملاحظات (اختياري)')} value={notes} onChangeText={setNotes} multiline textAlignVertical="top" style={{ minHeight: 64 }} />
+      <Text>{t('Saving this debt does not change account balances. Balances change only on actual payment or collection.', 'حفظ الدين لا يغير أرصدة الحسابات. تتغير الأرصدة فقط عند السداد أو التحصيل الفعلي.')}</Text>
+      <FinanceButton title={debt ? t('Save changes', 'حفظ التعديلات') : t('Save', 'حفظ')} onPress={handleSave} />
+    </FormModal>
   );
 };
-
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
-    paddingTop: 0,
-    paddingHorizontal: 0,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  titleContainer: {
-    minWidth: 0,
-    flex: 1,
-  },
-  modalTitle: {
-    fontSize: 19,
-    fontWeight: 'bold',
-    color: '#111',
-  },
-  subtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 3,
-  },
-  closeButton: {
-    padding: 4,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 26,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748b',
-    marginTop: 13,
-    marginBottom: 7,
-    letterSpacing: 0.5,
-  },
-  input: {
-    minHeight: 52,
-    borderWidth: 1,
-    borderColor: '#D6B777',
-    borderRadius: 11,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    backgroundColor: '#fafafa',
-    color: '#111',
-  },
-  directionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D6B777',
-    borderRadius: 11,
-    padding: 11,
-    backgroundColor: '#fafafa',
-    gap: 11,
-  },
-  directionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  directionTextContainer: {
-    flex: 1,
-  },
-  directionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111',
-  },
-  directionDescription: {
-    fontSize: 11,
-    color: '#64748b',
-    marginTop: 3,
-  },
-  balanceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D6B777',
-    borderRadius: 11,
-    backgroundColor: '#fafafa',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  currencyLabelSymbol: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111',
-    marginRight: 9,
-  },
-  balanceInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#111',
-    padding: 0,
-  },
-  currenciesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 7,
-    columnGap: 5,
-  },
-  currencyCard: {
-    width: '18.5%', minWidth: 64, flexGrow: 1,
-    minHeight: 70,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 2,
-    paddingVertical: 6,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: '#D6B777',
-    backgroundColor: '#fafafa',
-    gap: 2,
-  },
-  currencyCardActive: {
-    borderColor: '#059669',
-    backgroundColor: '#ecfdf5',
-  },
-  currencyFlag: {
-    fontSize: 14,
-  },
-  currencyCode: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  currencyCodeActive: {
-    color: '#047857',
-  },
-  currencySymbol: {
-    fontSize: 9,
-    color: '#64748b',
-    textAlign: 'center',
-  },
-  currencySymbolActive: {
-    color: '#047857',
-  },
-  dateInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 11,
-    backgroundColor: '#fafafa',
-    paddingHorizontal: 12,
-    minHeight: 52,
-    gap: 9,
-  },
-  dateInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#111',
-    paddingVertical: 9,
-  },
-  calendarButton: {
-    minWidth: 44, minHeight: 52, alignItems: 'center', justifyContent: 'center',
-    padding: 5,
-  },
-  helperText: {
-    fontSize: 11,
-    color: '#888',
-    marginTop: 5,
-  },
-  notesInput: {
-    minHeight: 85,
-    paddingTop: 10,
-  },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#EFF6FF',
-    borderRadius: 10,
-    padding: 11,
-    marginTop: 15,
-    gap: 8,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 11,
-    lineHeight: 17,
-    color: '#1E40AF',
-  },
-  saveButton: {
-    minHeight: 52, justifyContent: 'center',
-    borderRadius: 12,
-    paddingVertical: 13,
-    alignItems: 'center',
-    marginTop: 17,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  calendarOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 18,
-  },
-  calendarModal: {
-    width: '100%',
-    maxWidth: 380,
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 17,
-  },
-  calendarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-  calendarTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111',
-  },
-  monthHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 13,
-  },
-  monthArrow: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: '#f1f5f9',
-  },
-  monthTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111',
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  calendarDayHeader: {
-    width: '14.2857%',
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarDayHeaderText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748b',
-  },
-  calendarDay: {
-    width: '14.2857%',
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-  },
-  calendarDaySelected: {
-    backgroundColor: '#1E293B',
-  },
-  calendarDayText: {
-    fontSize: 13,
-    color: '#1e293b',
-  },
-  calendarDayOutside: {
-    color: '#cbd5e1',
-  },
-  calendarDayTextSelected: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  calendarFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-    gap: 10,
-  },
-  todayButton: {
-    flex: 1,
-    minHeight: 42,
-    borderWidth: 1,
-    borderColor: '#D6B777',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  todayButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  calendarDoneButton: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 10,
-    backgroundColor: '#1E293B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarDoneText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#fff',
-  },
+  label: { color: '#334155', fontWeight: '700', fontSize: 12, marginBottom: 5 },
+  input: { minHeight: 48, borderWidth: 1, borderColor: '#D6B777', backgroundColor: '#FFFFFF', borderRadius: 10, paddingHorizontal: 10, color: '#1E293B', fontWeight: '700' },
 });

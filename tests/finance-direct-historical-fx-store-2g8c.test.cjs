@@ -215,3 +215,8 @@ test('transitions manual direct evidence to API evidence', () => {
   assert.deepEqual(saved.accountFxSnapshot, anchor('EUR', 50));
   assert.deepEqual(saved.historicalFx, anchor('OMR', 130));
 });
+test('R4 manual FX note edit accepts explicit removal of unused API evidence', () => {
+  const id=add(manualInput());
+  assert.equal(ledger.getState().updateTransaction(id,{...manualInput(),note:'Edited',accountFxSnapshot:undefined,historicalFx:undefined}),true);
+  const saved=ledger.getState().transactions[0];assert.equal(saved.note,'Edited');assert.deepEqual(saved.directHistoricalFx,manualEvidence());
+});

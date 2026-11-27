@@ -18,8 +18,8 @@ test('7.2C modal imports validated amount resolver', () => {
 });
 
 test('7.2C resolver delegates to safe calculator', () => {
-  assert.match(helper, /import\s*\{\s*evaluateExpression\s*\}/);
-  assert.match(helper, /evaluateExpression\(expression\)/);
+  assert.match(helper, /import\s*\{\s*evaluateExactAmountExpression,\s*exactAmountToNumber\s*\}/);
+  assert.match(helper, /evaluateExactAmountExpression\(expression\)/);
 });
 
 test('7.2C blur and keyboard confirmation resolve expressions', () => {
@@ -39,7 +39,8 @@ test('7.2C save resolves and rejects invalid amounts', () => {
 test('7.2C resolver enforces currency precision', () => {
   assert.match(helper, /hasValidCurrencyPrecision/);
   assert.match(helper, /getCurrencyDecimals/);
-  assert.match(helper, /value <= 0/);
+  assert.match(helper, /isSupportedCurrency/);
+  assert.match(helper, /exactAmountToNumber\(exact, getCurrencyDecimals\(currencyCode\)\)/);
 });
 
 test('7.2C preserves protected transaction checks', () => {
